@@ -1,0 +1,87 @@
+.home {
+    position: fixed;
+    inset: 60px 0 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin-top: env(safe-area-inset-top);
+    margin-bottom: env(safe-area-inset-bottom);
+    margin-left: env(safe-area-inset-left);
+    user-select: none;
+}
+
+.home-tip {
+    max-width: 45%;
+    margin: 16px;
+    padding: 16px;
+    color: var(--white);
+    background-color: var(--semi-black-color);
+    border-radius: var(--border-radius);
+}
+
+.home-tip-top-left {
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.home-tip-top-right {
+    position: absolute;
+    top: 0;
+    right: 0;
+}
+
+.home-tip-bottom-left {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+}
+
+.home-tip-bottom-right {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+}
+
+.home-tip::after {
+    position: absolute;
+    left: 50%;
+    margin-left: -8px;
+    border-style: solid;
+    border-width: 8px;
+    content: "";
+}
+
+.home-tip-top-left::after, .home-tip-bottom-left::after {
+    left: 32px;
+}
+
+.home-tip-top-left::after, .home-tip-top-right::after {
+    bottom: 100%;
+    border-color: transparent transparent var(--semi-black-color) transparent;
+}
+
+.home-tip-bottom-left::after, .home-tip-bottom-right::after {
+    top: 100%;
+    border-color: var(--semi-black-color) transparent transparent transparent;
+}
+
+.home-tip-section {
+    font-size: 1.2rem;
+    line-height: 1.5;
+}
+
+.home-tip-item {
+    margin: 8px;
+    padding: 0;
+    cursor: default;
+}
+
+.home-tip-item > svg {
+    margin-right: 8px;
+}
+
+.home-tip-text, .home-tip-item > svg {
+    vertical-align: middle;
+}

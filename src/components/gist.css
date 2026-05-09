@@ -1,0 +1,172 @@
+.gist {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.new-token, .get-gist-id {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 768px;
+    margin: 0 auto;
+}
+
+.new-token-tip, .create-new-gist {
+    flex: 1 0 auto;
+    width: 100%;
+    max-width: 500px;
+    margin: 1rem;
+    padding: 1rem;
+    text-align: center;
+}
+
+@media (width <= 500px) {
+    .new-token-tip {
+        border-radius: 0;
+    }
+}
+
+.new-token-tip-text, .gist-id-tip-text {
+    max-width: 500px;
+    margin: 1rem;
+    font-size: 1.2rem;
+    text-align: center;
+}
+
+.github-svg {
+    width: 100px;
+    height: 100px;
+    margin: 1rem;
+}
+
+.new-token-input, .gist-id-input {
+    flex: 1 0 auto;
+    margin: 0 0.5rem;
+    background: 0;
+    border: 0;
+    border-bottom: 1px solid var(--theme-color);
+    border-radius: 0;
+}
+
+.new-token-form, .gist-id-form {
+    display: flex;
+    flex: 1 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 500px;
+    margin: 1rem 0;
+    padding: 1rem 0;
+}
+
+.file-list {
+    display: grid;
+    flex: 1 0 auto;
+    grid-gap: 1rem;
+    grid-template-rows: min-content;
+    grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+    width: 100%;
+}
+
+.file-item {
+    padding: 0.5rem;
+    border-radius: var(--border-radius);
+    box-shadow: 0 0 2px var(--font-color);
+    transition: box-shadow var(--transition-duration) ease-in-out;
+    user-select: none;
+}
+
+.file-item:hover {
+    box-shadow: 0 0 1rem var(--theme-color);
+}
+
+.file-content {
+    height: 15rem;
+    overflow: hidden;
+    line-height: 1.6;
+    white-space: pre;
+}
+
+.file-bar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.file-title {
+    padding: 0.5rem;
+}
+
+.file-action {
+    flex: 0 0 auto;
+}
+
+.file-load {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    transition: color 250ms ease-in-out;
+}
+
+.file-load > svg {
+    pointer-events: none;
+}
+
+.file-load:hover {
+    color: var(--theme-color);
+}
+
+.gist-details {
+    width: 100%;
+    padding: 1rem;
+    user-select: none;
+}
+
+@media (width >= 1024px) {
+    .gist-details {
+        padding: 1rem 0;
+    }
+}
+
+.gist-bar {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+
+@media (width <= 768px) {
+    .gist-bar {
+        flex-direction: column;
+    }
+}
+
+.gist-info, .ratelimit {
+    flex: 1 1 auto;
+    padding: 0.5rem;
+}
+
+.ratelimit > p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.gist-loading {
+    display: flex;
+    flex: 1 0 auto;
+    align-items: center;
+    justify-content: center;
+}
+
+.gist-no-data {
+    display: flex;
+    flex: 1 1 auto;
+}

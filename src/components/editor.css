@@ -1,0 +1,121 @@
+.app-editor {
+    position: relative;
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    margin: 16px;
+    padding: 8px;
+    font-size: 1.2rem;
+    background-color: transparent;
+    border: 1px solid var(--theme-color);
+    border-radius: var(--border-radius);
+    transition: box-shadow var(--transition-duration) ease-in-out;
+}
+
+.app-editor:hover, .app-editor:focus-within {
+    box-shadow: 0 0 10px var(--theme-color);
+}
+
+@media (width <= 768px) {
+    .app-editor {
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+    }
+
+    .app-editor:hover, .app-editor:focus-within {
+        box-shadow: none;
+    }
+}
+
+.app-editor-infobox {
+    display: none;
+}
+
+@supports (display: grid) {
+    .app-editor-infobox {
+        grid-template-rows: 1fr 1fr 1fr;
+        grid-template-columns: auto 1fr auto;
+    }
+
+    [open] > .app-editor-infobox {
+        display: grid;
+    }
+}
+
+@supports not (display: grid) {
+    .app-editor-infobox {
+        flex-wrap: wrap;
+    }
+
+    [open] > .app-editor-infobox {
+        display: flex;
+    }
+
+    .app-editor-infobox > input {
+        flex: 1 1 calc(100% - 38px);
+    }
+
+    .app-editor-infobox > label:nth-child(3n+1) {
+        flex: 0 0 30px;
+    }
+
+    .app-editor-infobox > label:nth-child(3n+3) {
+        flex: 0 0 8px;
+        text-align: right;
+    }
+}
+
+.app-textarea {
+    flex: 1 0 auto;
+    border: none;
+    overscroll-behavior-y: contain;
+}
+
+.app-editor input, .app-editor textarea {
+    padding: 0;
+    background-color: transparent;
+    border: none;
+    resize: none;
+}
+
+.app-editor > details {
+    padding-bottom: 4px;
+    opacity: 0.6;
+}
+
+.app-editor summary {
+    user-select: none;
+}
+
+.editor-tools {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: flex;
+    padding: 8px;
+}
+
+.editor-tools-item {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    color: var(--font-color);
+    border-radius: 50%;
+}
+
+.editor-tools-item:active {
+    color: currentColor;
+}
+
+.editor-tools-item > svg {
+    width: 24px;
+    height: 24px;
+    color: currentColor;
+}
+
+.editor-tools-item:hover > svg {
+    filter: drop-shadow(0 0 2px var(--theme-color));
+}

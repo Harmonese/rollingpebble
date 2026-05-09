@@ -1,0 +1,118 @@
+.lyric-list {
+    position: relative;
+    width: 100%;
+    line-height: 1.4;
+    user-select: none;
+}
+
+.lyric-list.on-screen-button {
+    margin-bottom: 40px;
+}
+
+.space-button {
+    touch-action: none;
+    position: fixed;
+    bottom: 50px;
+    right: 32px;
+    width: 100px;
+    height: 100px;
+    margin-bottom: env(safe-area-inset-bottom);
+    color: var(--white);
+    background-color: var(--theme-color);
+    border: none;
+    border-radius: 50%;
+    font-size: 0;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    user-select: none;
+}
+
+@media (width <= 768px) {
+    .space-button {
+        bottom: 80px;
+    }
+}
+
+.space-button:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.space-button:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.line {
+    align-items: baseline;
+    padding: 8px 0 8px 8rem;
+    font-size: 1.2rem;
+    white-space: pre-wrap;
+    border-top: solid 2px transparent;
+    border-bottom: solid 2px transparent;
+}
+
+.line::after {
+    display: inline-block;
+    content: "";
+}
+
+.line:nth-child(even) {
+    background-color: #00000022;
+}
+
+.line:nth-child(odd) {
+    background-color: #ffffff22;
+}
+
+.line > .line-time, .line > .line-text {
+    pointer-events: none;
+}
+
+.select {
+    border-color: var(--theme-color);
+}
+
+.curser {
+    position: absolute;
+    left: 0;
+    contain: content;
+}
+
+.curser::after {
+    content: "\27A4";
+}
+
+.line.highlight {
+    color: var(--theme-contrast-color);
+    background-color: var(--theme-color);
+}
+
+.error::before {
+    position: absolute;
+    left: -2rem;
+    content: "\26A0\FE0F";
+}
+
+@media (width <= 1080px) {
+    .error::before {
+        left: 6rem;
+    }
+
+    .select.error::before {
+        visibility: hidden;
+    }
+}
+
+@media (width <= 768px) {
+    .line {
+        padding-left: 6rem;
+        font-size: 1rem;
+        border-width: 1px;
+    }
+
+    .error::before {
+        left: 4rem;
+    }
+}

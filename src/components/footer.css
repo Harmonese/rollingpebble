@@ -1,0 +1,7 @@
+.app-footer {
+    position: fixed;
+    bottom: 0;
+    z-index: 233;
+    width: 100%;
+    animation: slide-in-up var(--animation-duration) ease forwards;
+}
