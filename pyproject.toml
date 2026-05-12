@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lrc-roller"
+version = "0.3.4"
+description = "Local WebUI frontend for py-roller and pylrclib."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Harmonese" }]
+license = "MIT"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "python-multipart>=0.0.9",
+  "pylrclib-cli>=0.4.4",
+]
+
+[project.optional-dependencies]
+roller = ["py-roller>=0.5.0"]
+full = ["py-roller>=0.5.0"]
+dev = ["ruff>=0.6", "pytest>=8", "build>=1.2"]
+
+[project.scripts]
+lrc-roller = "lrc_roller.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "backend"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["backend"]
+include = ["lrc_roller*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

@@ -1,0 +1,11 @@
+.app-footer {
+    position: fixed;
+    bottom: 0;
+    z-index: 300;
+    width: 100%;
+    min-height: var(--app-footer-height);
+    background: linear-gradient(180deg, #171a1d 0%, #101214 100%);
+    border-top: 1px solid var(--roller-border);
+    box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.32);
+    animation: none;
+}
