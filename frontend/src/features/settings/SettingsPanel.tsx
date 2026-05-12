@@ -60,6 +60,24 @@ function optionalPositiveInt(value: string): number | null {
     return Math.max(1, Math.round(parsed));
 }
 
+function preferRemoteDnsProxy(proxy: string): string {
+    const text = proxy.trim();
+    if (!text) return "socks5h://127.0.0.1:9909";
+    if (text.startsWith("socks5://")) return `socks5h://${text.slice("socks5://".length)}`;
+    return text;
+}
+
+function proxyHint(proxy: string): string | null {
+    const text = proxy.trim();
+    if (text.startsWith("socks5://")) {
+        return "This is socks5://. For Hugging Face behind restricted networks, socks5h:// is usually required so DNS also goes through the proxy.";
+    }
+    if (text.startsWith("socks5h://")) {
+        return "Using socks5h://: DNS will go through the SOCKS proxy.";
+    }
+    return null;
+}
+
 const optionNodes = (options: { value: string; label: string; disabled?: boolean }[]) =>
     options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>);
 
@@ -261,13 +279,30 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         }
     };
 
-    const applySafeDefaults = () => {
+    const applyCliLikeDownloadDefaults = () => {
         setDefaultLocalOnly(false);
         setHfXet("off");
-        setHfEtagTimeout("120");
-        setHfDownloadTimeout("300");
-        setHfMaxWorkers("1");
-        setMessage("Safer download settings are staged. Click Save Auto Timing settings to apply them.");
+        setHfProxy("");
+        setHfEtagTimeout("");
+        setHfDownloadTimeout("");
+        setHfMaxWorkers("");
+        setMessage("Direct-network model download settings are staged: HF XET off, no proxy, py-roller default timeouts/workers. Click Save Auto Timing settings to apply them.");
+    };
+
+    const applyRestrictedNetworkDownloadDefaults = () => {
+        const proxy = preferRemoteDnsProxy(hfProxy);
+        setDefaultLocalOnly(false);
+        setHfXet("off");
+        setHfProxy(proxy);
+        setHfEtagTimeout("");
+        setHfDownloadTimeout("");
+        setHfMaxWorkers("");
+        setMessage(`Restricted-network download settings are staged: HF XET off, proxy ${proxy}, py-roller default timeouts/workers. Click Save Auto Timing settings to apply them.`);
+    };
+
+    const applyOfflineCacheDefaults = () => {
+        setDefaultLocalOnly(true);
+        setMessage("Offline cache mode is staged. Click Save Auto Timing settings to apply it.");
     };
 
     const browseModelStore = async () => {
@@ -409,13 +444,14 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                             <label>Compute type<select value={transcriberComputeType} onChange={(ev) => setTranscriberComputeType(ev.target.value)} disabled={!transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS)}</select></label>
                             <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
                             <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
-                            <label>Proxy URL<input placeholder="http://127.0.0.1:7890" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+                            <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+                            {proxyHint(hfProxy) && <p className="roller-warning two-col-span">{proxyHint(hfProxy)}</p>}
                             <label>Metadata timeout<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
                             <label>File download timeout<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
                             <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
                             <label className="roller-checkbox">Use local cache only<input type="checkbox" checked={defaultLocalOnly} onChange={(ev) => setDefaultLocalOnly(ev.currentTarget.checked)} /></label>
                         </div>
-                        <div className="roller-actions download-presets"><button type="button" disabled={busy} onClick={applySafeDefaults}>Use safer download settings</button></div>
+                        <div className="roller-actions download-presets"><button type="button" disabled={busy} onClick={applyRestrictedNetworkDownloadDefaults}>Use restricted-network settings</button><button type="button" disabled={busy} onClick={applyCliLikeDownloadDefaults}>Use direct-network settings</button><button type="button" disabled={busy} onClick={applyOfflineCacheDefaults}>Use offline cache</button></div>
 
                         <div className="roller-section-title">Parser</div>
                         <div className="roller-form"><label>Lyrics encoding<select value={parserEncoding} onChange={(ev) => setParserEncoding(ev.target.value)}>{optionNodes(PARSER_ENCODING_OPTIONS)}</select></label></div>

@@ -58,6 +58,24 @@ function formatCommandPreview(commandText?: string | null): string {
   return commandText.replace(/\s--/g, " \\\n  --");
 }
 
+function preferRemoteDnsProxy(proxy: string): string {
+  const text = proxy.trim();
+  if (!text) return "socks5h://127.0.0.1:9909";
+  if (text.startsWith("socks5://")) return `socks5h://${text.slice("socks5://".length)}`;
+  return text;
+}
+
+function proxyHint(proxy: string): string | null {
+  const text = proxy.trim();
+  if (text.startsWith("socks5://")) {
+    return "This is socks5://. For Hugging Face behind restricted networks, socks5h:// is usually required so DNS also goes through the proxy.";
+  }
+  if (text.startsWith("socks5h://")) {
+    return "Using socks5h://: DNS will go through the SOCKS proxy.";
+  }
+  return null;
+}
+
 type InputState = {
   ready: boolean;
   audioReady: boolean;
@@ -99,6 +117,50 @@ function progressStageLabel(stage: string): string {
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
+}
+
+
+function formatBytes(value?: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "unknown";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = Math.max(0, value);
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index += 1;
+  }
+  return index === 0 ? `${Math.round(size)} ${units[index]}` : `${size.toFixed(2)} ${units[index]}`;
+}
+
+function progressMessage(progress: JobModel["progress"]): string {
+  if (!progress) return "Waiting for the automatic timing task to report progress.";
+  if (progress.bytes_downloaded != null || progress.bytes_total != null) {
+    const pieces = [`${formatBytes(progress.bytes_downloaded)} / ${formatBytes(progress.bytes_total)}`];
+    if (progress.bytes_per_second != null) pieces.push(`${formatBytes(progress.bytes_per_second)}/s`);
+    if (progress.repo_id) pieces.push(progress.repo_id);
+    return pieces.join(" · ");
+  }
+  return progress.message || "Working...";
+}
+
+const STAGE_SEQUENCE = [
+  { key: "transcriber-preflight", label: "Model preflight" },
+  { key: "model-download", label: "Model download" },
+  { key: "splitter", label: "Vocal separation" },
+  { key: "filter", label: "Filtering" },
+  { key: "transcriber", label: "Transcription" },
+  { key: "parser", label: "Lyrics parsing" },
+  { key: "aligner", label: "Alignment" },
+  { key: "writer", label: "Writer" },
+];
+
+function stageStatus(stage: string, currentStage: string, jobStatus?: string): "done" | "active" | "idle" | "failed" {
+  const currentIndex = STAGE_SEQUENCE.findIndex((item) => item.key === currentStage);
+  const index = STAGE_SEQUENCE.findIndex((item) => item.key === stage);
+  if (currentStage === stage) return jobStatus === "failed" ? "failed" : "active";
+  if (currentIndex >= 0 && index >= 0 && index < currentIndex) return "done";
+  if (jobStatus === "succeeded") return "done";
+  return "idle";
 }
 
 const optionNodes = (options: { value: string; label: string; disabled?: boolean }[]) =>
@@ -410,13 +472,25 @@ export const RollerPanel: React.FC<{
     }
   };
 
-  const useSaferDownload = () => {
+  const useCliLikeDownload = () => {
     setLocalOnly("off");
     setHfXet("off");
-    setHfEtagTimeout("120");
-    setHfDownloadTimeout("300");
-    setHfMaxWorkers("1");
-    setMessage("Safer download settings are staged for this run.");
+    setHfProxy("");
+    setHfEtagTimeout("");
+    setHfDownloadTimeout("");
+    setHfMaxWorkers("");
+    setMessage("Direct-network model download settings are staged for this run: HF XET off, no proxy, py-roller default timeouts/workers.");
+  };
+
+  const useRestrictedNetworkDownload = () => {
+    const proxy = preferRemoteDnsProxy(hfProxy);
+    setLocalOnly("off");
+    setHfXet("off");
+    setHfProxy(proxy);
+    setHfEtagTimeout("");
+    setHfDownloadTimeout("");
+    setHfMaxWorkers("");
+    setMessage(`Restricted-network download settings are staged for this run: HF XET off, proxy ${proxy}, py-roller default timeouts/workers.`);
   };
 
   const useOfflineCache = () => {
@@ -526,12 +600,13 @@ export const RollerPanel: React.FC<{
             <div className="roller-section-title">Model download</div>
             <div className="roller-form two-col">
               <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
-              <label>Proxy URL<input placeholder="http://127.0.0.1:7890" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+              <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+              {proxyHint(hfProxy) && <p className="roller-warning two-col-span">{proxyHint(hfProxy)}</p>}
               <label>Metadata timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
               <label>File download timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
               <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
             </div>
-            <div className="roller-actions download-presets"><button type="button" onClick={useSaferDownload}>Safer download</button><button type="button" onClick={useOfflineCache}>Offline cache</button></div>
+            <div className="roller-actions download-presets"><button type="button" onClick={useRestrictedNetworkDownload}>Restricted network</button><button type="button" onClick={useCliLikeDownload}>Direct network</button><button type="button" onClick={useOfflineCache}>Offline cache</button></div>
           </>
         )}
 
@@ -564,7 +639,7 @@ export const RollerPanel: React.FC<{
       </details>
 
       {showProgress && (
-        <section className="roller-progress-block" aria-live="polite">
+        <section className="roller-progress-card" aria-live="polite">
           <div className="roller-progress-head">
             <b>{progressStageLabel(progress?.stage || (job?.status === "queued" ? "queued" : "running"))}</b>
             <span>{typeof progressPercent === "number" ? `${Math.round(progressPercent * 100)}%` : job?.status}</span>
@@ -572,8 +647,18 @@ export const RollerPanel: React.FC<{
           <div className={progressWidth ? "roller-progress-bar" : "roller-progress-bar indeterminate"}>
             <span style={progressWidth ? { width: progressWidth } : undefined} />
           </div>
-          {progress?.message && <p className="roller-muted">{progress.message}</p>}
-          {progress && progress.total > 0 && <p className="roller-muted">{progress.completed}/{progress.total} {progress.unit}</p>}
+          <div className="roller-progress-meta">
+            <span>{progressMessage(progress)}</span>
+            {progress && progress.total > 0 && <em>{progress.completed}/{progress.total} {progress.unit}</em>}
+          </div>
+          {progress?.cache_dir && <p className="roller-muted progress-cache">Cache: {progress.cache_dir}</p>}
+          <ol className="roller-stage-list">
+            {STAGE_SEQUENCE.map((item) => (
+              <li key={item.key} className={`stage-${stageStatus(item.key, progress?.stage || "", job?.status)}`}>
+                <span />{item.label}
+              </li>
+            ))}
+          </ol>
         </section>
       )}
 

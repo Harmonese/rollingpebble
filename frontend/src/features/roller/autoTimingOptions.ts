@@ -95,6 +95,7 @@ export const DEVICE_OPTIONS: Option[] = [
   { value: "", label: "Auto / py-roller default" },
   { value: "cpu", label: "CPU" },
   { value: "cuda", label: "CUDA" },
+  { value: "mps", label: "Apple Silicon / MPS (Torch backends)" },
 ];
 
 export const FASTER_WHISPER_MODEL_OPTIONS: Option[] = [

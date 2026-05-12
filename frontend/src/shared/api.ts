@@ -52,6 +52,7 @@ export type HealthResponse = {
 
 export type JobProgress = {
     stage: string;
+    event_type?: string;
     completed: number;
     total: number;
     unit: string;
@@ -60,6 +61,12 @@ export type JobProgress = {
     raw: string;
     done: boolean;
     failed: boolean;
+    bytes_downloaded?: number | null;
+    bytes_total?: number | null;
+    bytes_per_second?: number | null;
+    repo_id?: string | null;
+    cache_dir?: string | null;
+    detail?: Record<string, unknown>;
 };
 
 export type JobModel = {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import threading
@@ -9,6 +10,8 @@ from pathlib import Path
 from typing import Callable, Iterable
 
 from lrc_roller.models import JobModel, JobProgressModel, JobStatus
+
+_PYROLLER_EVENT_PREFIX = "PYROLLER_EVENT "
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -31,6 +34,84 @@ _DOWNLOAD_HINT_RE = re.compile(
 
 def _clean_progress_line(line: str) -> str:
     return _ANSI_RE.sub("", line).replace("\r", "").strip()
+
+
+
+
+def _event_percent(value: object) -> float | None:
+    if not isinstance(value, (int, float)):
+        return None
+    if value > 1.0:
+        value = value / 100.0
+    return max(0.0, min(1.0, float(value)))
+
+
+def _int_or_zero(value: object) -> int:
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, (int, float)):
+        return max(0, int(value))
+    return 0
+
+
+def _optional_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return max(0, int(value))
+    return None
+
+
+def _optional_float(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _parse_pyroller_event_line(line: str) -> JobProgressModel | None:
+    clean = _clean_progress_line(line)
+    if not clean.startswith(_PYROLLER_EVENT_PREFIX):
+        return None
+    try:
+        event = json.loads(clean[len(_PYROLLER_EVENT_PREFIX) :])
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(event, dict):
+        return None
+    event_type = str(event.get("type") or "")
+    stage = str(event.get("stage") or ("model-download" if event_type.startswith("download_") else ""))
+    completed = _int_or_zero(event.get("completed"))
+    total = _int_or_zero(event.get("total"))
+    percent = _event_percent(event.get("percent"))
+    bytes_downloaded = _optional_int(event.get("bytes_downloaded"))
+    bytes_total = _optional_int(event.get("bytes_total"))
+    if percent is None and bytes_downloaded is not None and bytes_total:
+        percent = max(0.0, min(1.0, bytes_downloaded / bytes_total))
+    if event_type == "download_completed":
+        percent = 1.0 if bytes_total else percent
+    if percent is not None and total == 0:
+        completed = int(round(percent * 100))
+        total = 100
+    return JobProgressModel(
+        stage=stage,
+        event_type=event_type,
+        completed=completed,
+        total=total,
+        unit=str(event.get("unit") or ("%" if total == 100 else "")),
+        message=str(event.get("message") or ""),
+        percent=percent,
+        raw=clean,
+        done=bool(event.get("done")) or event_type.endswith("completed"),
+        failed=bool(event.get("failed")) or event_type.endswith("failed"),
+        bytes_downloaded=bytes_downloaded,
+        bytes_total=bytes_total,
+        bytes_per_second=_optional_float(event.get("bytes_per_second")),
+        repo_id=str(event.get("repo_id")) if event.get("repo_id") is not None else None,
+        cache_dir=str(event.get("cache_dir")) if event.get("cache_dir") is not None else None,
+        detail=event,
+    )
 
 
 def _parse_download_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
@@ -170,7 +251,7 @@ def _parse_pyroller_progress_line(line: str, previous: JobProgressModel | None =
 
 
 def _parse_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
-    return _parse_pyroller_progress_line(line, previous) or _parse_download_progress_line(line, previous)
+    return _parse_pyroller_event_line(line) or _parse_pyroller_progress_line(line, previous) or _parse_download_progress_line(line, previous)
 
 
 def _iter_process_output(stream) -> Iterable[tuple[str, str]]:
@@ -252,7 +333,8 @@ class JobManager:
                 for output_line, separator in _iter_process_output(process.stdout):
                     clean_line = _clean_progress_line(output_line)
                     progress = _parse_progress_line(clean_line, managed.model.progress)
-                    should_append_log = separator == "\n"
+                    is_structured_event = clean_line.startswith(_PYROLLER_EVENT_PREFIX)
+                    should_append_log = separator == "\n" and not is_structured_event
                     if separator == "\r" and progress is not None and progress.stage == "model-download":
                         # tqdm refreshes many times per second. Keep the compact
                         # progress bar live, but only add meaningful download

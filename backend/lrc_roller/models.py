@@ -166,6 +166,7 @@ class RollPreviewResponse(BaseModel):
 
 class JobProgressModel(BaseModel):
     stage: str = ""
+    event_type: str = ""
     completed: int = 0
     total: int = 0
     unit: str = ""
@@ -174,6 +175,12 @@ class JobProgressModel(BaseModel):
     raw: str = ""
     done: bool = False
     failed: bool = False
+    bytes_downloaded: int | None = None
+    bytes_total: int | None = None
+    bytes_per_second: float | None = None
+    repo_id: str | None = None
+    cache_dir: str | None = None
+    detail: dict[str, Any] = Field(default_factory=dict)
 
 
 class JobStatus(str, Enum):
@@ -236,7 +243,7 @@ class RuntimeSettingsModel(BaseModel):
     auto_timing_transcriber_compute_type: str = "int8"
     auto_timing_transcriber_batch_size: int | None = 8
     auto_timing_local_files_only_default: bool = False
-    auto_timing_hf_xet: Literal["auto", "on", "off"] = "auto"
+    auto_timing_hf_xet: Literal["auto", "on", "off"] = "off"
     auto_timing_hf_proxy: str = ""
     auto_timing_hf_etag_timeout: int | None = None
     auto_timing_hf_download_timeout: int | None = None

@@ -15,3 +15,4 @@ frontend/.vite/
 # Local data
 .lrc-roller-data/
 .DS_Store
+tests/

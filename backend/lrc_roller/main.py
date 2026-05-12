@@ -53,7 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     paths = ensure_data_dirs(settings.data_dir)
 
-    app = FastAPI(title="lrc-roller", version="0.3.10")
+    app = FastAPI(title="lrc-roller", version="0.3.13")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", f"http://{settings.host}:{settings.port}"],

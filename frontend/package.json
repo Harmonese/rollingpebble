@@ -1,6 +1,6 @@
 {
   "name": "lrc-roller-frontend",
-  "version": "0.3.10",
+  "version": "0.3.12",
   "description": "Local WebUI for pylrclib, py-roller, and lrc-maker workflow",
   "repository": "https://github.com/Harmonese/lrc-roller",
   "author": "Harmonese",

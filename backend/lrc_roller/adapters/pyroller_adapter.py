@@ -123,6 +123,8 @@ def build_pyroller_command(
         str(intermediate_dir),
         "--log-level",
         request.log_level,
+        "--progress-format",
+        "jsonl",
     ]
 
     if stage_set.intersection({"s", "f", "t"}):

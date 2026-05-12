@@ -812,3 +812,73 @@
 .settings-section details .roller-section-title:first-of-type {
     margin-top: 8px;
 }
+
+.roller-form .two-col-span {
+    grid-column: 1 / -1;
+}
+
+.progress-cache {
+    margin: 6px 0 0;
+    overflow-wrap: anywhere;
+    font-size: 0.74rem;
+}
+
+.roller-stage-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 10px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--roller-muted);
+    font-size: 0.76rem;
+}
+
+.roller-stage-list li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.roller-stage-list li span {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.roller-stage-list .stage-done {
+    color: var(--roller-text);
+}
+
+.roller-stage-list .stage-done span {
+    background: var(--theme-color);
+    box-shadow: 0 0 10px rgba(var(--theme-rgb), 0.32);
+}
+
+.roller-stage-list .stage-active {
+    color: var(--theme-color);
+    font-weight: 700;
+}
+
+.roller-stage-list .stage-active span {
+    background: var(--theme-color);
+    animation: roller-stage-pulse 1.1s ease-in-out infinite alternate;
+}
+
+.roller-stage-list .stage-failed {
+    color: var(--roller-danger, #ff6f6f);
+    font-weight: 700;
+}
+
+.roller-stage-list .stage-failed span {
+    background: var(--roller-danger, #ff6f6f);
+}
+
+@keyframes roller-stage-pulse {
+    from { transform: scale(0.85); opacity: 0.62; }
+    to { transform: scale(1.18); opacity: 1; }
+}

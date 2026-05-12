@@ -21,7 +21,7 @@ _ALLOWED_TRANSCRIBERS: dict[str, set[str]] = {
     "en": {"faster_whisper"},
     "mul": {"faster_whisper", "wav2vec2_phoneme"},
 }
-_ALLOWED_TRANSCRIBER_DEVICES = {"", "cpu", "cuda"}
+_ALLOWED_TRANSCRIBER_DEVICES = {"", "cpu", "cuda", "mps"}
 
 _TRANSCRIBER_FIELDS = (
     "transcriber_backend",
@@ -163,8 +163,12 @@ class RollerService:
             if backend not in _ALLOWED_TRANSCRIBERS.get(language, {"faster_whisper"}):
                 backend = "faster_whisper"
                 data["transcriber_backend"] = backend
-            if str(data.get("transcriber_device") or "") not in _ALLOWED_TRANSCRIBER_DEVICES:
-                # faster-whisper/ctranslate2 does not accept PyTorch's mps device.
+            device = str(data.get("transcriber_device") or "")
+            if device not in _ALLOWED_TRANSCRIBER_DEVICES:
+                data["transcriber_device"] = "cpu"
+            elif backend == "faster_whisper" and device == "mps":
+                # faster-whisper/ctranslate2 does not support PyTorch's mps device.
+                # Keep MPS available for Torch-based backends such as wav2vec2/mms.
                 data["transcriber_device"] = "cpu"
             if backend != "faster_whisper":
                 data["transcriber_compute_type"] = None
@@ -227,6 +231,29 @@ class RollerService:
             warnings.append("No lyric lines are saved for this project yet. Metadata-only LRC headers are ignored.")
         elif timing_plain.strip():
             write_text(self.projects_root, project_id, PLAIN_NAME, timing_plain)
+        if "t" in set(normalize_stages(request.stages)):
+            if request.transcriber_hf_proxy:
+                proxy_text = str(request.transcriber_hf_proxy).strip()
+                if proxy_text.startswith("socks5://"):
+                    warnings.append(
+                        "HF proxy is using socks5://. On restricted networks this often fails because DNS is resolved locally; use socks5h://127.0.0.1:PORT instead."
+                    )
+                elif proxy_text.startswith("socks5h://"):
+                    warnings.append(
+                        "HF proxy is using socks5h://, which sends DNS resolution through the SOCKS proxy. This is usually the right choice on restricted networks."
+                    )
+                else:
+                    warnings.append(
+                        "A Hugging Face proxy is configured. If model download fails, verify the proxy scheme and port; SOCKS proxies usually need socks5h:// on restricted networks."
+                    )
+            if request.transcriber_hf_max_workers == 1:
+                warnings.append(
+                    "HF max download workers is set to 1. This is stable for fragile networks but can look stalled on large model files."
+                )
+            if request.transcriber_hf_xet in (None, "auto"):
+                warnings.append(
+                    "HF XET/CAS is Auto. If your network hangs on large model files, set HF XET/CAS to Off."
+                )
         warnings.extend(self._artifact_warnings(str(request.stages), artifacts_dir))
         return RollPreviewResponse(
             command=command,
