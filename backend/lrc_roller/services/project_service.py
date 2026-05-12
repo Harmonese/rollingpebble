@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import UploadFile
 
 from lrc_roller.models import ApplyLyricsRequest, MetaModel, ProjectModel, SaveEditorRequest
+from lrc_roller.lyrics_utils import merge_lrc_metadata_header
 from lrc_roller.storage.files import (
     PLAIN_NAME,
     PYROLLER_NAME,
@@ -95,11 +96,17 @@ class ProjectService:
 
     def write_pyroller_result(self, project_id: str, synced: str) -> ProjectModel:
         project = self.get(project_id)
-        plain = derive_plain_from_synced(synced)
+        # Keep the raw engine output for debugging/reproducibility, but write a
+        # metadata-preserving version back to the project/editor. py-roller may
+        # output only its own header (for example [by: py-roller]); users expect
+        # existing [ti:], [ar:], [al:], [length:], etc. at the top of the editor
+        # to survive an automatic timing pass.
+        merged_synced = merge_lrc_metadata_header(project.synced_lyrics, synced)
+        plain = derive_plain_from_synced(merged_synced)
         write_text(self.projects_root, project_id, PYROLLER_NAME, synced)
-        write_text(self.projects_root, project_id, SYNCED_NAME, synced)
+        write_text(self.projects_root, project_id, SYNCED_NAME, merged_synced)
         write_text(self.projects_root, project_id, PLAIN_NAME, plain)
-        project.synced_lyrics = synced
+        project.synced_lyrics = merged_synced
         project.plain_lyrics = plain
         project.source = "automatic timing"
         write_project(self.projects_root, project)

@@ -44,6 +44,11 @@ class RuntimeService:
                 "auto_timing_hf_etag_timeout",
                 "auto_timing_hf_download_timeout",
                 "auto_timing_hf_max_workers",
+                "auto_timing_splitter_demucs_jobs",
+                "auto_timing_splitter_demucs_overlap",
+                "auto_timing_splitter_demucs_segment",
+                "auto_timing_transcriber_batch_size",
+                "auto_timing_aligner_min_gap",
             }:
                 setattr(settings, field, value)
         return self.settings_store.write(settings)

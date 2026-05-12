@@ -115,21 +115,43 @@ class SaveEditorRequest(BaseModel):
 
 class RollRequest(BaseModel):
     language: Literal["zh", "en", "mul"] = "zh"
-    stages: str = "t,p,a,w"
-    writer_backend: str = "lrc_ms"
-    writer_spacing: Literal["keep", "drop"] = "keep"
-    cleanup: Literal["on-success", "never"] = "never"
-    parser_lyrics_encoding: str | None = None
+    stages: str = "s,f,t,p,a,w"
+
+    splitter_backend: str | None = None
+    splitter_demucs_model: str | None = None
+    splitter_demucs_device: str | None = None
+    splitter_demucs_jobs: int | None = None
+    splitter_demucs_overlap: float | None = None
+    splitter_demucs_segment: float | None = None
+
+    filter_chain: str | None = None
+
     transcriber_backend: str | None = None
     transcriber_device: str | None = None
     transcriber_model_name: str | None = None
     transcriber_model_path: str | None = None
     transcriber_local_files_only: bool | None = None
+    transcriber_compute_type: str | None = None
+    transcriber_batch_size: int | None = None
     transcriber_hf_xet: Literal["auto", "on", "off"] | None = None
     transcriber_hf_proxy: str | None = None
     transcriber_hf_etag_timeout: float | None = None
     transcriber_hf_download_timeout: float | None = None
     transcriber_hf_max_workers: int | None = None
+
+    parser_lyrics_encoding: str | None = None
+
+    aligner_backend: str | None = None
+    aligner_min_gap: float | None = None
+    aligner_repetition: Literal["none", "few", "full"] | None = None
+
+    writer_backend: str = "lrc_ms"
+    writer_spacing: Literal["keep", "drop"] = "keep"
+    writer_by_tag: str | None = None
+    writer_ass_karaoke_tag_type: Literal["k", "K", "kf", "ko"] | None = None
+
+    cleanup: Literal["on-success", "never"] = "never"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
 class RollPreviewResponse(BaseModel):
@@ -188,13 +210,45 @@ class RuntimeSettingsModel(BaseModel):
     auto_fill_lyrics_library_from_project_metadata: bool = True
     auto_cleanup_imported_lyrics: bool = False
     upload_derive_plain_from_synced: bool = True
+
+    auto_timing_default_language: Literal["zh", "en", "mul"] = "zh"
+    auto_timing_default_stages: str = "s,f,t,p,a,w"
+    auto_timing_default_writer_backend: str = "lrc_ms"
+    auto_timing_default_writer_spacing: Literal["keep", "drop"] = "keep"
+    auto_timing_default_cleanup: Literal["on-success", "never"] = "never"
+    auto_timing_default_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+    auto_timing_splitter_backend: str = "demucs"
+    auto_timing_splitter_demucs_model: str = "htdemucs"
+    auto_timing_splitter_demucs_device: str = ""
+    auto_timing_splitter_demucs_jobs: int | None = None
+    auto_timing_splitter_demucs_overlap: float | None = None
+    auto_timing_splitter_demucs_segment: float | None = None
+
+    auto_timing_filter_chain: str = ""
+
+    auto_timing_transcriber_backend: str = "faster_whisper"
+    auto_timing_transcriber_device: str = "cpu"
+    auto_timing_transcriber_model_name: str = "large-v2"
     auto_timing_model_store: str = ""
+    auto_timing_transcriber_compute_type: str = "int8"
+    auto_timing_transcriber_batch_size: int | None = 8
     auto_timing_local_files_only_default: bool = False
     auto_timing_hf_xet: Literal["auto", "on", "off"] = "auto"
     auto_timing_hf_proxy: str = ""
     auto_timing_hf_etag_timeout: float | None = None
     auto_timing_hf_download_timeout: float | None = None
     auto_timing_hf_max_workers: int | None = None
+
+    auto_timing_parser_lyrics_encoding: str = "auto"
+
+    auto_timing_aligner_backend: str = "global_dp_v1"
+    auto_timing_aligner_min_gap: float | None = 0.5
+    auto_timing_aligner_repetition: Literal["none", "few", "full"] = "none"
+
+    auto_timing_writer_by_tag: str = "py-roller"
+    auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] = "kf"
+
     last_doctor_status: str | None = None
     last_doctor_at: str | None = None
     last_install_profile: str | None = None
@@ -224,13 +278,44 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     auto_fill_lyrics_library_from_project_metadata: bool | None = None
     auto_cleanup_imported_lyrics: bool | None = None
     upload_derive_plain_from_synced: bool | None = None
+
+    auto_timing_default_language: Literal["zh", "en", "mul"] | None = None
+    auto_timing_default_stages: str | None = None
+    auto_timing_default_writer_backend: str | None = None
+    auto_timing_default_writer_spacing: Literal["keep", "drop"] | None = None
+    auto_timing_default_cleanup: Literal["on-success", "never"] | None = None
+    auto_timing_default_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] | None = None
+
+    auto_timing_splitter_backend: str | None = None
+    auto_timing_splitter_demucs_model: str | None = None
+    auto_timing_splitter_demucs_device: str | None = None
+    auto_timing_splitter_demucs_jobs: int | None = None
+    auto_timing_splitter_demucs_overlap: float | None = None
+    auto_timing_splitter_demucs_segment: float | None = None
+
+    auto_timing_filter_chain: str | None = None
+
+    auto_timing_transcriber_backend: str | None = None
+    auto_timing_transcriber_device: str | None = None
+    auto_timing_transcriber_model_name: str | None = None
     auto_timing_model_store: str | None = None
+    auto_timing_transcriber_compute_type: str | None = None
+    auto_timing_transcriber_batch_size: int | None = 8
     auto_timing_local_files_only_default: bool | None = None
     auto_timing_hf_xet: Literal["auto", "on", "off"] | None = None
     auto_timing_hf_proxy: str | None = None
     auto_timing_hf_etag_timeout: float | None = None
     auto_timing_hf_download_timeout: float | None = None
     auto_timing_hf_max_workers: int | None = None
+
+    auto_timing_parser_lyrics_encoding: str | None = None
+
+    auto_timing_aligner_backend: str | None = None
+    auto_timing_aligner_min_gap: float | None = 0.5
+    auto_timing_aligner_repetition: Literal["none", "few", "full"] | None = None
+
+    auto_timing_writer_by_tag: str | None = None
+    auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] | None = None
 
 
 class UploadPlanRequest(BaseModel):

@@ -783,3 +783,20 @@
   white-space: nowrap;
   padding-inline: 0.75rem;
 }
+
+.settings-section details {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settings-section details summary {
+    padding: 4px 0 10px;
+    color: var(--roller-text);
+    line-height: 1.45;
+    cursor: pointer;
+}
+
+.settings-section details .roller-section-title:first-of-type {
+    margin-top: 8px;
+}

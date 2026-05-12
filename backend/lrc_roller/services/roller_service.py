@@ -10,6 +10,35 @@ from lrc_roller.models import JobModel, RollPreviewResponse, RollRequest, Runtim
 from lrc_roller.services.project_service import ProjectService
 from lrc_roller.storage.files import PLAIN_NAME, PYROLLER_NAME, write_text
 
+_ALLOWED_TRANSCRIBERS: dict[str, set[str]] = {
+    "zh": {"faster_whisper", "mms_phonetic"},
+    "en": {"faster_whisper"},
+    "mul": {"faster_whisper", "wav2vec2_phoneme"},
+}
+
+_TRANSCRIBER_FIELDS = (
+    "transcriber_backend",
+    "transcriber_device",
+    "transcriber_model_name",
+    "transcriber_model_path",
+    "transcriber_local_files_only",
+    "transcriber_compute_type",
+    "transcriber_batch_size",
+    "transcriber_hf_xet",
+    "transcriber_hf_proxy",
+    "transcriber_hf_etag_timeout",
+    "transcriber_hf_download_timeout",
+    "transcriber_hf_max_workers",
+)
+_SPLITTER_FIELDS = (
+    "splitter_backend",
+    "splitter_demucs_model",
+    "splitter_demucs_device",
+    "splitter_demucs_jobs",
+    "splitter_demucs_overlap",
+    "splitter_demucs_segment",
+)
+
 
 class RollerService:
     def __init__(
@@ -32,20 +61,103 @@ class RollerService:
             return request
         settings = self.settings_provider()
         data = request.model_dump()
-        if not data.get("transcriber_model_path") and settings.auto_timing_model_store.strip():
-            data["transcriber_model_path"] = settings.auto_timing_model_store.strip()
+
+        def use_default(field: str, settings_field: str, *, empty_string: bool = True) -> None:
+            current = data.get(field)
+            missing = current is None or (empty_string and isinstance(current, str) and not current.strip())
+            if missing:
+                value = getattr(settings, settings_field)
+                if value is not None and (not isinstance(value, str) or value.strip()):
+                    data[field] = value
+
+        # Core defaults. These can still be overridden by the task payload.
+        use_default("language", "auto_timing_default_language", empty_string=False)
+        use_default("stages", "auto_timing_default_stages")
+        use_default("writer_backend", "auto_timing_default_writer_backend")
+        use_default("writer_spacing", "auto_timing_default_writer_spacing", empty_string=False)
+        use_default("cleanup", "auto_timing_default_cleanup", empty_string=False)
+        use_default("log_level", "auto_timing_default_log_level", empty_string=False)
+
+        # Splitter / filter
+        use_default("splitter_backend", "auto_timing_splitter_backend")
+        use_default("splitter_demucs_model", "auto_timing_splitter_demucs_model")
+        use_default("splitter_demucs_device", "auto_timing_splitter_demucs_device")
+        use_default("filter_chain", "auto_timing_filter_chain")
+        for field, settings_field in (
+            ("splitter_demucs_jobs", "auto_timing_splitter_demucs_jobs"),
+            ("splitter_demucs_overlap", "auto_timing_splitter_demucs_overlap"),
+            ("splitter_demucs_segment", "auto_timing_splitter_demucs_segment"),
+        ):
+            if data.get(field) is None:
+                data[field] = getattr(settings, settings_field)
+
+        # Transcriber and model download
+        use_default("transcriber_backend", "auto_timing_transcriber_backend")
+        use_default("transcriber_device", "auto_timing_transcriber_device")
+        use_default("transcriber_model_name", "auto_timing_transcriber_model_name")
+        use_default("transcriber_model_path", "auto_timing_model_store")
+        use_default("transcriber_compute_type", "auto_timing_transcriber_compute_type")
+        if data.get("transcriber_batch_size") is None:
+            data["transcriber_batch_size"] = settings.auto_timing_transcriber_batch_size
         if data.get("transcriber_local_files_only") is None:
             data["transcriber_local_files_only"] = settings.auto_timing_local_files_only_default
         if data.get("transcriber_hf_xet") is None:
             data["transcriber_hf_xet"] = settings.auto_timing_hf_xet
-        if not data.get("transcriber_hf_proxy") and settings.auto_timing_hf_proxy.strip():
-            data["transcriber_hf_proxy"] = settings.auto_timing_hf_proxy.strip()
+        use_default("transcriber_hf_proxy", "auto_timing_hf_proxy")
         if data.get("transcriber_hf_etag_timeout") is None:
             data["transcriber_hf_etag_timeout"] = settings.auto_timing_hf_etag_timeout
         if data.get("transcriber_hf_download_timeout") is None:
             data["transcriber_hf_download_timeout"] = settings.auto_timing_hf_download_timeout
         if data.get("transcriber_hf_max_workers") is None:
             data["transcriber_hf_max_workers"] = settings.auto_timing_hf_max_workers
+
+        # Parser / aligner / writer
+        use_default("parser_lyrics_encoding", "auto_timing_parser_lyrics_encoding")
+        use_default("aligner_backend", "auto_timing_aligner_backend")
+        if data.get("aligner_min_gap") is None:
+            data["aligner_min_gap"] = settings.auto_timing_aligner_min_gap
+        if data.get("aligner_repetition") is None:
+            data["aligner_repetition"] = settings.auto_timing_aligner_repetition
+        use_default("writer_by_tag", "auto_timing_writer_by_tag")
+        use_default("writer_ass_karaoke_tag_type", "auto_timing_writer_ass_karaoke_tag_type")
+
+        return self._sanitize_effective_request(RollRequest.model_validate(data))
+
+    def _sanitize_effective_request(self, request: RollRequest) -> RollRequest:
+        data = request.model_dump()
+        stages = {item.strip() for item in (request.stages or "").split(",") if item.strip()}
+
+        def clear(fields: tuple[str, ...] | list[str]) -> None:
+            for field in fields:
+                data[field] = None
+
+        if "s" not in stages:
+            clear(_SPLITTER_FIELDS)
+        if "f" not in stages:
+            data["filter_chain"] = None
+        if "t" not in stages:
+            clear(_TRANSCRIBER_FIELDS)
+        else:
+            language = str(data.get("language") or "mul")
+            backend = str(data.get("transcriber_backend") or "faster_whisper")
+            if backend not in _ALLOWED_TRANSCRIBERS.get(language, {"faster_whisper"}):
+                backend = "faster_whisper"
+                data["transcriber_backend"] = backend
+            if backend != "faster_whisper":
+                data["transcriber_compute_type"] = None
+                data["transcriber_batch_size"] = None
+        if "p" not in stages:
+            data["parser_lyrics_encoding"] = None
+        if "a" not in stages:
+            data["aligner_backend"] = None
+            data["aligner_min_gap"] = None
+            data["aligner_repetition"] = None
+        if "w" not in stages:
+            data["writer_by_tag"] = None
+            data["writer_ass_karaoke_tag_type"] = None
+        elif data.get("writer_backend") != "ass_karaoke":
+            data["writer_ass_karaoke_tag_type"] = None
+
         return RollRequest.model_validate(data)
 
     def _paths_for_project(self, project_id: str) -> tuple[Path, Path, Path, Path]:
@@ -116,8 +228,9 @@ class RollerService:
             updated = self.project_service.write_pyroller_result(project_id, synced)
             return {
                 "project_id": project_id,
-                "synced_lyrics": synced,
+                "synced_lyrics": updated.synced_lyrics,
                 "plain_lyrics": updated.plain_lyrics,
+                "raw_synced_lyrics": synced,
                 "output_path": str(output_path),
             }
 

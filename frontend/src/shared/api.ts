@@ -97,13 +97,45 @@ export type RuntimeSettings = {
     auto_fill_lyrics_library_from_project_metadata: boolean;
     auto_cleanup_imported_lyrics: boolean;
     upload_derive_plain_from_synced: boolean;
+
+    auto_timing_default_language: "zh" | "en" | "mul";
+    auto_timing_default_stages: string;
+    auto_timing_default_writer_backend: string;
+    auto_timing_default_writer_spacing: "keep" | "drop";
+    auto_timing_default_cleanup: "on-success" | "never";
+    auto_timing_default_log_level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+
+    auto_timing_splitter_backend: string;
+    auto_timing_splitter_demucs_model: string;
+    auto_timing_splitter_demucs_device: string;
+    auto_timing_splitter_demucs_jobs?: number | null;
+    auto_timing_splitter_demucs_overlap?: number | null;
+    auto_timing_splitter_demucs_segment?: number | null;
+
+    auto_timing_filter_chain: string;
+
+    auto_timing_transcriber_backend: string;
+    auto_timing_transcriber_device: string;
+    auto_timing_transcriber_model_name: string;
     auto_timing_model_store: string;
+    auto_timing_transcriber_compute_type: string;
+    auto_timing_transcriber_batch_size?: number | null;
     auto_timing_local_files_only_default: boolean;
     auto_timing_hf_xet: "auto" | "on" | "off";
     auto_timing_hf_proxy: string;
     auto_timing_hf_etag_timeout?: number | null;
     auto_timing_hf_download_timeout?: number | null;
     auto_timing_hf_max_workers?: number | null;
+
+    auto_timing_parser_lyrics_encoding: string;
+
+    auto_timing_aligner_backend: string;
+    auto_timing_aligner_min_gap?: number | null;
+    auto_timing_aligner_repetition: "none" | "few" | "full";
+
+    auto_timing_writer_by_tag: string;
+    auto_timing_writer_ass_karaoke_tag_type: "" | "k" | "K" | "kf" | "ko";
+
     last_doctor_status?: string | null;
     last_doctor_at?: string | null;
     last_install_profile?: string | null;

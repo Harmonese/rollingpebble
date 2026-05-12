@@ -31,6 +31,54 @@ def strip_lrc_metadata_lines(text: str | None) -> str:
     return "\n".join(lines).strip("\n")
 
 
+
+
+def leading_lrc_metadata_block(text: str | None) -> list[str]:
+    """Return the original leading LRC metadata lines, preserving order/text.
+
+    Only the contiguous header block before the first non-empty non-metadata
+    line is preserved. This lets lrc-roller keep user/editor metadata such as
+    [ti:...], [ar:...], [al:...] when replacing the timed lyric body with an
+    automatic timing result.
+    """
+    headers: list[str] = []
+    for line in normalize_newlines(text).split("\n"):
+        if not line.strip():
+            # Ignore blank padding before/inside the header block, but do not
+            # emit it into the preserved header list.
+            continue
+        if is_lrc_metadata_line(line):
+            headers.append(line.rstrip())
+            continue
+        break
+    return headers
+
+
+def strip_all_lrc_metadata_lines(text: str | None) -> str:
+    """Remove all LRC metadata tag lines while keeping timed lyric lines."""
+    lines: list[str] = []
+    for line in normalize_newlines(text).split("\n"):
+        if is_lrc_metadata_line(line):
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip("\n")
+
+
+def merge_lrc_metadata_header(original_text: str | None, generated_lrc: str | None) -> str:
+    """Prefix generated LRC with the original editor metadata header block.
+
+    py-roller may output its own metadata such as [by: py-roller]. When the
+    generated result is written back into a project/editor, lrc-roller should
+    preserve the user's original leading metadata instead of replacing it.
+    """
+    headers = leading_lrc_metadata_block(original_text)
+    body = strip_all_lrc_metadata_lines(generated_lrc).strip()
+    if headers and body:
+        return "\n".join(headers + [body]).strip()
+    if headers:
+        return "\n".join(headers).strip()
+    return normalize_newlines(generated_lrc).strip()
+
 def clean_plain_lyrics(text: str | None) -> str:
     """Return actual lyric text, excluding LRC metadata and timestamp tags.
 
