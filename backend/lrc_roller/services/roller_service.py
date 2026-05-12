@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
-from lrc_roller.adapters.pyroller_adapter import build_pyroller_command, command_text
+from lrc_roller.adapters.pyroller_adapter import (
+    artifacts_for,
+    build_pyroller_command,
+    command_text,
+    default_artifacts_dir,
+    normalize_stages,
+    normalized_stage_text,
+)
 from lrc_roller.jobs import JobManager
-from collections.abc import Callable
-
 from lrc_roller.models import JobModel, RollPreviewResponse, RollRequest, RuntimeSettingsModel
 from lrc_roller.services.project_service import ProjectService
 from lrc_roller.storage.files import PLAIN_NAME, PYROLLER_NAME, write_text
@@ -15,6 +21,7 @@ _ALLOWED_TRANSCRIBERS: dict[str, set[str]] = {
     "en": {"faster_whisper"},
     "mul": {"faster_whisper", "wav2vec2_phoneme"},
 }
+_ALLOWED_TRANSCRIBER_DEVICES = {"", "cpu", "cuda"}
 
 _TRANSCRIBER_FIELDS = (
     "transcriber_backend",
@@ -40,6 +47,13 @@ _SPLITTER_FIELDS = (
 )
 
 
+def _positive_int(value: object | None) -> int | None:
+    if value is None or value == "":
+        return None
+    number = int(round(float(value)))
+    return number if number > 0 else None
+
+
 class RollerService:
     def __init__(
         self,
@@ -57,9 +71,7 @@ class RollerService:
         self.settings_provider = settings_provider
 
     def _effective_request(self, request: RollRequest) -> RollRequest:
-        if self.settings_provider is None:
-            return request
-        settings = self.settings_provider()
+        settings = self.settings_provider() if self.settings_provider is not None else RuntimeSettingsModel()
         data = request.model_dump()
 
         def use_default(field: str, settings_field: str, *, empty_string: bool = True) -> None:
@@ -121,11 +133,19 @@ class RollerService:
         use_default("writer_by_tag", "auto_timing_writer_by_tag")
         use_default("writer_ass_karaoke_tag_type", "auto_timing_writer_ass_karaoke_tag_type")
 
+        # Normalize values that are consumed by strict downstream CLIs/libraries.
+        data["stages"] = normalized_stage_text(str(data.get("stages") or settings.auto_timing_default_stages))
+        data["transcriber_hf_etag_timeout"] = _positive_int(data.get("transcriber_hf_etag_timeout"))
+        data["transcriber_hf_download_timeout"] = _positive_int(data.get("transcriber_hf_download_timeout"))
+        data["transcriber_hf_max_workers"] = _positive_int(data.get("transcriber_hf_max_workers"))
+        data["transcriber_batch_size"] = _positive_int(data.get("transcriber_batch_size"))
+        data["splitter_demucs_jobs"] = _positive_int(data.get("splitter_demucs_jobs"))
+
         return self._sanitize_effective_request(RollRequest.model_validate(data))
 
     def _sanitize_effective_request(self, request: RollRequest) -> RollRequest:
         data = request.model_dump()
-        stages = {item.strip() for item in (request.stages or "").split(",") if item.strip()}
+        stages = set(normalize_stages(request.stages))
 
         def clear(fields: tuple[str, ...] | list[str]) -> None:
             for field in fields:
@@ -143,6 +163,9 @@ class RollerService:
             if backend not in _ALLOWED_TRANSCRIBERS.get(language, {"faster_whisper"}):
                 backend = "faster_whisper"
                 data["transcriber_backend"] = backend
+            if str(data.get("transcriber_device") or "") not in _ALLOWED_TRANSCRIBER_DEVICES:
+                # faster-whisper/ctranslate2 does not accept PyTorch's mps device.
+                data["transcriber_device"] = "cpu"
             if backend != "faster_whisper":
                 data["transcriber_compute_type"] = None
                 data["transcriber_batch_size"] = None
@@ -160,36 +183,51 @@ class RollerService:
 
         return RollRequest.model_validate(data)
 
-    def _paths_for_project(self, project_id: str) -> tuple[Path, Path, Path, Path]:
+    def _paths_for_project(self, project_id: str, stages_text: str) -> tuple[Path, Path, Path, Path, Path]:
         project = self.project_service.get(project_id)
-        if not project.audio_path:
+        stages = set(normalize_stages(stages_text))
+        needs_audio = bool(stages.intersection({"s", "f", "t"}))
+        if needs_audio and not project.audio_path:
             raise ValueError("Project has no audio file")
         root = self.projects_root / project_id
-        audio_path = Path(project.audio_path)
+        audio_path = Path(project.audio_path) if project.audio_path else root / "audio"
         lyrics_path = root / PLAIN_NAME
         output_path = root / PYROLLER_NAME
         intermediate_dir = root / "intermediate"
-        return audio_path, lyrics_path, output_path, intermediate_dir
+        artifacts_dir = default_artifacts_dir(root)
+        return audio_path, lyrics_path, output_path, intermediate_dir, artifacts_dir
+
+    def _artifact_warnings(self, stages_text: str, artifacts_dir: Path) -> list[str]:
+        stages = normalize_stages(stages_text)
+        first_stage = stages[0]
+        artifacts = artifacts_for(artifacts_dir.parent)
+        warnings: list[str] = []
+        if first_stage == "a":
+            for key in ("timed_units", "parsed_lyrics"):
+                if not artifacts[key].exists():
+                    warnings.append(f"Missing {artifacts[key].name}; run Quick or Full once before realigning.")
+        if first_stage == "w" and not artifacts["alignment_result"].exists():
+            warnings.append("Missing alignment_result.json; run an alignment step before rewriting output.")
+        return warnings
 
     def preview(self, project_id: str, request: RollRequest) -> RollPreviewResponse:
-        project = self.project_service.get(project_id)
         timing_plain = self.project_service.plain_lyrics_for_timing(project_id)
         request = self._effective_request(request)
-        audio_path, lyrics_path, output_path, intermediate_dir = self._paths_for_project(project_id)
+        audio_path, lyrics_path, output_path, intermediate_dir, artifacts_dir = self._paths_for_project(project_id, str(request.stages))
         command = build_pyroller_command(
             audio_path=audio_path,
             lyrics_path=lyrics_path,
             output_path=output_path,
             intermediate_dir=intermediate_dir,
+            artifacts_dir=artifacts_dir,
             request=request,
         )
         warnings: list[str] = []
-        if not timing_plain.strip():
+        if "p" in set(normalize_stages(request.stages)) and not timing_plain.strip():
             warnings.append("No lyric lines are saved for this project yet. Metadata-only LRC headers are ignored.")
-        else:
+        elif timing_plain.strip():
             write_text(self.projects_root, project_id, PLAIN_NAME, timing_plain)
-        if request.stages in {"a,w", "w"}:
-            warnings.append("Artifact-only flows are not wired in this UI yet. Use Quick or Full for now.")
+        warnings.extend(self._artifact_warnings(str(request.stages), artifacts_dir))
         return RollPreviewResponse(
             command=command,
             command_text=command_text(command),
@@ -201,23 +239,30 @@ class RollerService:
     def roll(self, project_id: str, request: RollRequest) -> JobModel:
         request = self._effective_request(request)
         project = self.project_service.get(project_id)
-        if not project.audio_path:
+        stages = set(normalize_stages(request.stages))
+        if stages.intersection({"s", "f", "t"}) and not project.audio_path:
             raise ValueError("Project has no audio file")
         timing_plain = self.project_service.plain_lyrics_for_timing(project_id)
-        if not timing_plain.strip():
+        if "p" in stages and not timing_plain.strip():
             raise ValueError("Project has no lyric lines. Import or paste real lyrics before starting automatic timing; metadata-only LRC headers are ignored.")
 
         root = self.projects_root / project_id
-        audio_path = Path(project.audio_path)
-        lyrics_path = write_text(self.projects_root, project_id, PLAIN_NAME, timing_plain)
+        audio_path = Path(project.audio_path) if project.audio_path else root / "audio"
+        lyrics_path = write_text(self.projects_root, project_id, PLAIN_NAME, timing_plain) if timing_plain.strip() else root / PLAIN_NAME
         output_path = root / PYROLLER_NAME
         intermediate_dir = root / "intermediate"
+        artifacts_dir = default_artifacts_dir(root)
         intermediate_dir.mkdir(parents=True, exist_ok=True)
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        artifact_warnings = self._artifact_warnings(str(request.stages), artifacts_dir)
+        if artifact_warnings:
+            raise ValueError(" ".join(artifact_warnings))
         command = build_pyroller_command(
             audio_path=audio_path,
             lyrics_path=lyrics_path,
             output_path=output_path,
             intermediate_dir=intermediate_dir,
+            artifacts_dir=artifacts_dir,
             request=request,
         )
 
@@ -232,6 +277,7 @@ class RollerService:
                 "plain_lyrics": updated.plain_lyrics,
                 "raw_synced_lyrics": synced,
                 "output_path": str(output_path),
+                "artifacts_dir": str(artifacts_dir),
             }
 
         return self.jobs.create_subprocess_job(

@@ -15,6 +15,7 @@
 
 .roller-side,
 .roller-center {
+    min-width: 0;
     min-height: 0;
     overflow: auto;
 }
@@ -83,6 +84,7 @@
 }
 
 .roller-card {
+    min-width: 0;
     border-radius: 16px;
     padding: 14px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), var(--roller-surface);
@@ -287,6 +289,7 @@
 }
 
 .roller-card details {
+    min-width: 0;
     margin-top: 12px;
     padding-top: 10px;
     border-top: 1px solid rgba(255, 255, 255, 0.07);
@@ -331,17 +334,37 @@
     margin-top: 3px;
 }
 
-.roller-log {
-    max-height: 260px;
+.roller-log,
+.roller-command {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
     overflow: auto;
-    white-space: pre-wrap;
     border-radius: 12px;
     padding: 10px;
     background: #0d0f11;
     border: 1px solid #2b3036;
     color: #dbe4e8;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     font-size: 0.78rem;
     line-height: 1.35;
+}
+
+.roller-log {
+    max-height: 260px;
+    white-space: pre-wrap;
+}
+
+.roller-command {
+    max-height: 220px;
+    white-space: pre;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+.roller-command code {
+    display: block;
+    min-width: max-content;
 }
 
 .roller-plan {
@@ -504,17 +527,6 @@
 
 .command-preview {
     margin-top: 8px;
-    max-height: 160px;
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    border-radius: 12px;
-    padding: 10px;
-    background: #0d0f11;
-    border: 1px solid #2b3036;
-    color: #dbe4e8;
-    font-size: 0.78rem;
-    line-height: 1.4;
 }
 
 .roller-section-title {

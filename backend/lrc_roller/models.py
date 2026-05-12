@@ -115,7 +115,9 @@ class SaveEditorRequest(BaseModel):
 
 class RollRequest(BaseModel):
     language: Literal["zh", "en", "mul"] = "zh"
-    stages: str = "s,f,t,p,a,w"
+    # UI should prefer business-level presets, but keep raw stages for
+    # backward compatibility with older frontends and saved settings.
+    stages: str | None = None
 
     splitter_backend: str | None = None
     splitter_demucs_model: str | None = None
@@ -135,8 +137,8 @@ class RollRequest(BaseModel):
     transcriber_batch_size: int | None = None
     transcriber_hf_xet: Literal["auto", "on", "off"] | None = None
     transcriber_hf_proxy: str | None = None
-    transcriber_hf_etag_timeout: float | None = None
-    transcriber_hf_download_timeout: float | None = None
+    transcriber_hf_etag_timeout: int | None = None
+    transcriber_hf_download_timeout: int | None = None
     transcriber_hf_max_workers: int | None = None
 
     parser_lyrics_encoding: str | None = None
@@ -212,7 +214,7 @@ class RuntimeSettingsModel(BaseModel):
     upload_derive_plain_from_synced: bool = True
 
     auto_timing_default_language: Literal["zh", "en", "mul"] = "zh"
-    auto_timing_default_stages: str = "s,f,t,p,a,w"
+    auto_timing_default_stages: str = "t,p,a,w"
     auto_timing_default_writer_backend: str = "lrc_ms"
     auto_timing_default_writer_spacing: Literal["keep", "drop"] = "keep"
     auto_timing_default_cleanup: Literal["on-success", "never"] = "never"
@@ -236,8 +238,8 @@ class RuntimeSettingsModel(BaseModel):
     auto_timing_local_files_only_default: bool = False
     auto_timing_hf_xet: Literal["auto", "on", "off"] = "auto"
     auto_timing_hf_proxy: str = ""
-    auto_timing_hf_etag_timeout: float | None = None
-    auto_timing_hf_download_timeout: float | None = None
+    auto_timing_hf_etag_timeout: int | None = None
+    auto_timing_hf_download_timeout: int | None = None
     auto_timing_hf_max_workers: int | None = None
 
     auto_timing_parser_lyrics_encoding: str = "auto"
@@ -304,8 +306,8 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     auto_timing_local_files_only_default: bool | None = None
     auto_timing_hf_xet: Literal["auto", "on", "off"] | None = None
     auto_timing_hf_proxy: str | None = None
-    auto_timing_hf_etag_timeout: float | None = None
-    auto_timing_hf_download_timeout: float | None = None
+    auto_timing_hf_etag_timeout: int | None = None
+    auto_timing_hf_download_timeout: int | None = None
     auto_timing_hf_max_workers: int | None = None
 
     auto_timing_parser_lyrics_encoding: str | None = None

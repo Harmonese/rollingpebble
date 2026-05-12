@@ -30,6 +30,7 @@ import {
   includesStage,
   isFasterWhisper,
   normalizeTranscriberBackend,
+  normalizeTranscriberDevice,
   transcriberBackendOptions,
   transcriberModelOptions,
   type HfXet,
@@ -45,6 +46,18 @@ function optionalNumberValue(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function optionalPositiveIntValue(value: string): number | null {
+  const text = value.trim();
+  if (!text) return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.max(1, Math.round(parsed)) : null;
+}
+
+function formatCommandPreview(commandText?: string | null): string {
+  if (!commandText) return "Preview the command before running.";
+  return commandText.replace(/\s--/g, " \\\n  --");
+}
+
 type InputState = {
   ready: boolean;
   audioReady: boolean;
@@ -56,9 +69,12 @@ function computeInputState(
   project: ProjectModel | null,
   plainLyrics: string,
   syncedLyrics: string,
+  stages: string,
 ): InputState {
-  const audioReady = Boolean(project?.audio_path);
-  const lyricsReady = hasLyricContent(plainLyrics) || hasLyricContent(syncedLyrics);
+  const needsAudio = includesStage(stages, "s") || includesStage(stages, "f") || includesStage(stages, "t");
+  const needsLyrics = includesStage(stages, "p");
+  const audioReady = !needsAudio || Boolean(project?.audio_path);
+  const lyricsReady = !needsLyrics || hasLyricContent(plainLyrics) || hasLyricContent(syncedLyrics);
   if (!project) {
     return { ready: false, audioReady, lyricsReady, reason: "Create or open a project first." };
   }
@@ -97,7 +113,7 @@ export const RollerPanel: React.FC<{
   onImportText: (text: string) => void;
 }> = ({ project, plainLyrics, syncedLyrics, editorMeta, onProject, onImportText }) => {
   const [language, setLanguage] = useState<Language>("zh");
-  const [stages, setStages] = useState("s,f,t,p,a,w");
+  const [stages, setStages] = useState("t,p,a,w");
   const [writerBackend, setWriterBackend] = useState("lrc_ms");
   const [writerSpacing, setWriterSpacing] = useState("keep");
   const [alignerRepetition, setAlignerRepetition] = useState<Repetition>("none");
@@ -138,8 +154,8 @@ export const RollerPanel: React.FC<{
   const [busy, setBusy] = useState(false);
 
   const inputState = useMemo(
-    () => computeInputState(project, plainLyrics, syncedLyrics),
-    [project, plainLyrics, syncedLyrics],
+    () => computeInputState(project, plainLyrics, syncedLyrics, stages),
+    [project, plainLyrics, syncedLyrics, stages],
   );
 
   const loadDefaults = async () => {
@@ -149,7 +165,7 @@ export const RollerPanel: React.FC<{
       const nextBackend = normalizeTranscriberBackend(nextLanguage, settings.auto_timing_transcriber_backend || "faster_whisper");
       const nextModel = settings.auto_timing_transcriber_model_name || defaultModelFor(nextLanguage, nextBackend);
       setLanguage(nextLanguage);
-      setStages(settings.auto_timing_default_stages || "s,f,t,p,a,w");
+      setStages(settings.auto_timing_default_stages || "t,p,a,w");
       setWriterBackend(settings.auto_timing_default_writer_backend || "lrc_ms");
       setWriterSpacing(settings.auto_timing_default_writer_spacing || "keep");
       setCleanup(settings.auto_timing_default_cleanup || "never");
@@ -163,7 +179,7 @@ export const RollerPanel: React.FC<{
       setSplitterSegment(settings.auto_timing_splitter_demucs_segment == null ? "" : String(settings.auto_timing_splitter_demucs_segment));
       setFilterChain(settings.auto_timing_filter_chain || "");
       setTranscriberBackend(nextBackend);
-      setTranscriberDevice(settings.auto_timing_transcriber_device || "cpu");
+      setTranscriberDevice(normalizeTranscriberDevice(settings.auto_timing_transcriber_device || "cpu"));
       setTranscriberModel(nextModel);
       setTranscriberModelPath(settings.auto_timing_model_store || "");
       setTranscriberComputeType(settings.auto_timing_transcriber_compute_type || "int8");
@@ -230,7 +246,7 @@ export const RollerPanel: React.FC<{
       payload.splitter_backend = splitterBackend || null;
       payload.splitter_demucs_model = splitterModel || null;
       payload.splitter_demucs_device = splitterDevice || null;
-      payload.splitter_demucs_jobs = optionalNumberValue(splitterJobs);
+      payload.splitter_demucs_jobs = optionalPositiveIntValue(splitterJobs);
       payload.splitter_demucs_overlap = optionalNumberValue(splitterOverlap);
       payload.splitter_demucs_segment = optionalNumberValue(splitterSegment);
     }
@@ -245,11 +261,11 @@ export const RollerPanel: React.FC<{
       payload.transcriber_local_files_only = localOnly === "on";
       payload.transcriber_hf_xet = hfXet;
       payload.transcriber_hf_proxy = hfProxy.trim() || null;
-      payload.transcriber_hf_etag_timeout = optionalNumberValue(hfEtagTimeout);
-      payload.transcriber_hf_download_timeout = optionalNumberValue(hfDownloadTimeout);
-      payload.transcriber_hf_max_workers = optionalNumberValue(hfMaxWorkers);
+      payload.transcriber_hf_etag_timeout = optionalPositiveIntValue(hfEtagTimeout);
+      payload.transcriber_hf_download_timeout = optionalPositiveIntValue(hfDownloadTimeout);
+      payload.transcriber_hf_max_workers = optionalPositiveIntValue(hfMaxWorkers);
       payload.transcriber_compute_type = transcriberIsFasterWhisper ? transcriberComputeType : null;
-      payload.transcriber_batch_size = transcriberIsFasterWhisper ? optionalNumberValue(transcriberBatchSize) : null;
+      payload.transcriber_batch_size = transcriberIsFasterWhisper ? optionalPositiveIntValue(transcriberBatchSize) : null;
     }
     if (includesParser) {
       payload.parser_lyrics_encoding = parserEncoding || "auto";
@@ -408,6 +424,8 @@ export const RollerPanel: React.FC<{
     setMessage("This run will use local model cache only.");
   };
 
+  const commandPreviewText = formatCommandPreview(preview?.command_text);
+
   const running = !!job && ["queued", "running"].includes(job.status);
   const selectedStage = STAGE_OPTIONS.find((item) => item.value === stages);
   const startDisabled = busy || running || !inputState.ready;
@@ -424,8 +442,8 @@ export const RollerPanel: React.FC<{
 
       <div className="roller-section-title">Input status</div>
       <div className="roller-input-status">
-        <span className={inputState.audioReady ? "status-ok" : "status-missing"}>Audio: {inputState.audioReady ? "ready" : "missing"}</span>
-        <span className={inputState.lyricsReady ? "status-ok" : "status-missing"}>Lyrics: {inputState.lyricsReady ? "ready" : "missing"}</span>
+        <span className={inputState.audioReady ? "status-ok" : "status-missing"}>Audio: {includesTranscriber || includesSplitter || includesFilter ? (inputState.audioReady ? "ready" : "missing") : "not needed"}</span>
+        <span className={inputState.lyricsReady ? "status-ok" : "status-missing"}>Lyrics: {includesParser ? (inputState.lyricsReady ? "ready" : "missing") : "not needed"}</span>
       </div>
       {!inputState.ready && <p className="roller-warning">{inputState.reason}</p>}
 
@@ -509,8 +527,8 @@ export const RollerPanel: React.FC<{
             <div className="roller-form two-col">
               <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
               <label>Proxy URL<input placeholder="http://127.0.0.1:7890" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
-              <label>Metadata timeout, seconds<input inputMode="decimal" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
-              <label>File download timeout, seconds<input inputMode="decimal" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
+              <label>Metadata timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
+              <label>File download timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
               <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
             </div>
             <div className="roller-actions download-presets"><button type="button" onClick={useSaferDownload}>Safer download</button><button type="button" onClick={useOfflineCache}>Offline cache</button></div>
@@ -576,7 +594,7 @@ export const RollerPanel: React.FC<{
       <details open={!!preview}>
         <summary>Command preview</summary>
         {preview?.warnings?.map((warning) => <p key={warning} className="roller-warning">{warning}</p>)}
-        <pre className="roller-command">{preview?.command_text || "Preview the command before running."}</pre>
+        <pre className="roller-command" aria-label="Command preview"><code>{commandPreviewText}</code></pre>
       </details>
 
       {job && (

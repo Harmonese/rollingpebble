@@ -22,6 +22,7 @@ import {
     defaultModelFor,
     isFasterWhisper,
     normalizeTranscriberBackend,
+    normalizeTranscriberDevice,
     transcriberBackendOptions,
     transcriberModelOptions,
     type Cleanup,
@@ -49,6 +50,16 @@ function optionalNumber(value: string): number | null {
     return parsed;
 }
 
+function optionalPositiveInt(value: string): number | null {
+    const text = value.trim();
+    if (!text) return null;
+    const parsed = Number(text);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error("Integer settings must be positive numbers.");
+    }
+    return Math.max(1, Math.round(parsed));
+}
+
 const optionNodes = (options: { value: string; label: string; disabled?: boolean }[]) =>
     options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>);
 
@@ -60,7 +71,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const [uploadDerivePlain, setUploadDerivePlain] = useState(true);
 
     const [defaultLanguage, setDefaultLanguage] = useState<Language>("zh");
-    const [defaultStages, setDefaultStages] = useState("s,f,t,p,a,w");
+    const [defaultStages, setDefaultStages] = useState("t,p,a,w");
     const [defaultWriterBackend, setDefaultWriterBackend] = useState("lrc_ms");
     const [defaultWriterSpacing, setDefaultWriterSpacing] = useState<Spacing>("keep");
     const [defaultCleanup, setDefaultCleanup] = useState<Cleanup>("never");
@@ -111,7 +122,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             setUploadDerivePlain(settings.upload_derive_plain_from_synced);
 
             setDefaultLanguage(language);
-            setDefaultStages(settings.auto_timing_default_stages || "s,f,t,p,a,w");
+            setDefaultStages(settings.auto_timing_default_stages || "t,p,a,w");
             setDefaultWriterBackend(settings.auto_timing_default_writer_backend || "lrc_ms");
             setDefaultWriterSpacing(settings.auto_timing_default_writer_spacing || "keep");
             setDefaultCleanup(settings.auto_timing_default_cleanup || "never");
@@ -126,7 +137,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             setFilterChain(settings.auto_timing_filter_chain || "");
 
             setTranscriberBackend(backend);
-            setTranscriberDevice(settings.auto_timing_transcriber_device || "cpu");
+            setTranscriberDevice(normalizeTranscriberDevice(settings.auto_timing_transcriber_device || "cpu"));
             setTranscriberModelName(settings.auto_timing_transcriber_model_name || defaultModelFor(language, backend));
             setModelStore(settings.auto_timing_model_store || "");
             setTranscriberComputeType(settings.auto_timing_transcriber_compute_type || "int8");
@@ -220,7 +231,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                 auto_timing_splitter_backend: splitterBackend,
                 auto_timing_splitter_demucs_model: splitterModel,
                 auto_timing_splitter_demucs_device: splitterDevice,
-                auto_timing_splitter_demucs_jobs: optionalNumber(splitterJobs),
+                auto_timing_splitter_demucs_jobs: optionalPositiveInt(splitterJobs),
                 auto_timing_splitter_demucs_overlap: optionalNumber(splitterOverlap),
                 auto_timing_splitter_demucs_segment: optionalNumber(splitterSegment),
                 auto_timing_filter_chain: filterChain,
@@ -230,13 +241,13 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                 auto_timing_transcriber_model_name: transcriberModelName,
                 auto_timing_model_store: modelStore.trim(),
                 auto_timing_transcriber_compute_type: transcriberIsFasterWhisper ? transcriberComputeType : "",
-                auto_timing_transcriber_batch_size: transcriberIsFasterWhisper ? optionalNumber(transcriberBatchSize) : null,
+                auto_timing_transcriber_batch_size: transcriberIsFasterWhisper ? optionalPositiveInt(transcriberBatchSize) : null,
                 auto_timing_local_files_only_default: defaultLocalOnly,
                 auto_timing_hf_xet: hfXet,
                 auto_timing_hf_proxy: hfProxy.trim(),
-                auto_timing_hf_etag_timeout: optionalNumber(hfEtagTimeout),
-                auto_timing_hf_download_timeout: optionalNumber(hfDownloadTimeout),
-                auto_timing_hf_max_workers: optionalNumber(hfMaxWorkers),
+                auto_timing_hf_etag_timeout: optionalPositiveInt(hfEtagTimeout),
+                auto_timing_hf_download_timeout: optionalPositiveInt(hfDownloadTimeout),
+                auto_timing_hf_max_workers: optionalPositiveInt(hfMaxWorkers),
 
                 auto_timing_parser_lyrics_encoding: parserEncoding,
                 auto_timing_aligner_backend: alignerBackend,
@@ -399,8 +410,8 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                             <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
                             <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
                             <label>Proxy URL<input placeholder="http://127.0.0.1:7890" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
-                            <label>Metadata timeout<input inputMode="decimal" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
-                            <label>File download timeout<input inputMode="decimal" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
+                            <label>Metadata timeout<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
+                            <label>File download timeout<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
                             <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
                             <label className="roller-checkbox">Use local cache only<input type="checkbox" checked={defaultLocalOnly} onChange={(ev) => setDefaultLocalOnly(ev.currentTarget.checked)} /></label>
                         </div>

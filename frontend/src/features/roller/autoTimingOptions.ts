@@ -17,14 +17,24 @@ export const LANGUAGE_OPTIONS: Option[] = [
 
 export const STAGE_OPTIONS: Option[] = [
   {
-    value: "s,f,t,p,a,w",
-    label: "Full processing",
-    help: "Split vocals -> Filter -> Transcribe -> Parse -> Align -> Write",
+    value: "t,p,a,w",
+    label: "Direct timing",
+    help: "Transcribe -> Parse -> Align -> Write. Fastest path when the original mix is clear enough.",
   },
   {
-    value: "t,p,a,w",
-    label: "Quick timing",
-    help: "Transcribe -> Parse -> Align -> Write",
+    value: "s,f,t,p,a,w",
+    label: "Split vocals first",
+    help: "Split vocals -> optional Filter -> Transcribe -> Parse -> Align -> Write. Slower, but often more accurate for dense mixes.",
+  },
+  {
+    value: "a,w",
+    label: "Reuse recognition and realign",
+    help: "Reuse saved timed_units.json and parsed_lyrics.json, then Align -> Write.",
+  },
+  {
+    value: "w",
+    label: "Rewrite output only",
+    help: "Reuse saved alignment_result.json and only write a new output format.",
   },
 ];
 
@@ -82,9 +92,9 @@ export const FILTER_CHAIN_OPTIONS: Option[] = [
 ];
 
 export const DEVICE_OPTIONS: Option[] = [
+  { value: "", label: "Auto / py-roller default" },
   { value: "cpu", label: "CPU" },
   { value: "cuda", label: "CUDA" },
-  { value: "mps", label: "Apple Silicon / MPS" },
 ];
 
 export const FASTER_WHISPER_MODEL_OPTIONS: Option[] = [
@@ -133,6 +143,11 @@ export function stageSet(stages: string): Set<string> {
 
 export function includesStage(stages: string, stage: "s" | "f" | "t" | "p" | "a" | "w"): boolean {
   return stageSet(stages).has(stage);
+}
+
+export function normalizeTranscriberDevice(device: string): string {
+  const allowed = DEVICE_OPTIONS.map((item) => item.value);
+  return allowed.includes(device) ? device : "cpu";
 }
 
 export function transcriberBackendOptions(language: Language): Option[] {

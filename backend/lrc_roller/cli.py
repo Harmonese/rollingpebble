@@ -133,7 +133,7 @@ def _setup(args: argparse.Namespace) -> int:
     if not args.skip_roller:
         # py-roller base package is intentionally lightweight; the audio stack is installed by py-roller install.
         if shutil.which("py-roller") is None:
-            code = _run([sys.executable, "-m", "pip", "install", "py-roller>=0.5.0"], dry_run=args.dry_run)
+            code = _run([sys.executable, "-m", "pip", "install", "py-roller>=0.5.2"], dry_run=args.dry_run)
             if code != 0:
                 return code
         cmd = ["py-roller", "install", "--profile", args.profile]
