@@ -76,11 +76,37 @@
 }
 
 .roller-editor-host {
+    position: relative;
     display: flex;
     flex: 1 1 auto;
     min-height: 0;
     overflow: auto;
-    background: #121416;
+    background:
+        radial-gradient(circle at 58% 46%, rgba(var(--theme-rgb), 0.08), transparent 38%),
+        linear-gradient(180deg, rgba(10, 13, 15, 0.70), rgba(10, 13, 15, 0.92)),
+        url("/img/lrc-roller-workspace-bg.webp"),
+        #121416;
+    background-repeat: no-repeat, no-repeat, no-repeat, repeat;
+    background-position: center center, center center, center center, center center;
+    background-size: auto, auto, cover, auto;
+}
+
+.roller-empty-state {
+    flex: 1 1 auto;
+    min-height: 100%;
+    pointer-events: none;
+}
+
+@media (height <= 760px) {
+    .roller-editor-host {
+        background-position: center center, center center, center top, center center;
+    }
+}
+
+@media (width <= 900px) {
+    .roller-editor-host {
+        background-position: center center, center center, 58% center, center center;
+    }
 }
 
 .roller-card {

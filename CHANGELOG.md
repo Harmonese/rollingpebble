@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.5
+
+- Reworked the Synchronizer/Editor workspace artwork as a non-interactive background layer instead of a large image card.
+- Removed the rounded green-bordered workspace avatar image from the empty Synchronizer state.
+- Added a borderless workspace background asset and responsive positioning for shorter or narrower screens.
+
 ## 0.5.4
 
 - Polished Auto Timing settings terminology and kept matching controls aligned between Settings and the main Auto Timing panel.

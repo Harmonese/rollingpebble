@@ -12,14 +12,7 @@ export const LrcRollerSideMascot: React.FC = () => {
 };
 
 export const LrcRollerEmptyState: React.FC = () => {
-    return (
-        <img
-            className="roller-empty-illustration roller-avatar-legacy"
-            alt="LRC Roller empty state"
-            src={avatar}
-            crossOrigin="anonymous"
-        />
-    );
+    return <div className="roller-empty-state" aria-label="No lyrics loaded" />;
 };
 
 export const LrcRollerLoading: React.FC = () => {
