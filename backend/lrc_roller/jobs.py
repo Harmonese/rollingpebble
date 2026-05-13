@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+import inspect
 import json
+import os
 import re
+import signal
 import subprocess
 import threading
 import uuid
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Any
 
 from lrc_roller.models import JobModel, JobProgressModel, JobStatus
 
 _PYROLLER_EVENT_PREFIX = "PYROLLER_EVENT "
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 _ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -109,7 +117,12 @@ def _parse_pyroller_event_line(line: str) -> JobProgressModel | None:
     if not isinstance(event, dict):
         return None
     event_type = str(event.get("type") or "")
-    stage = _normalize_stage_name(str(event.get("stage") or ("model_download" if event_type.startswith("download_") else "")))
+    stage_value = event.get("stage")
+    if not stage_value and event_type.startswith("download_"):
+        stage_value = "model_download"
+    if not stage_value and event_type.startswith("install_"):
+        stage_value = "install"
+    stage = _normalize_stage_name(str(stage_value or ""))
     completed = _int_or_zero(event.get("completed"))
     total = _int_or_zero(event.get("total"))
     percent = _event_percent(event.get("progress"))
@@ -130,7 +143,7 @@ def _parse_pyroller_event_line(line: str) -> JobProgressModel | None:
         completed=completed,
         total=total,
         unit=str(event.get("unit") or ("%" if total == 100 else "")),
-        message=str(event.get("message") or ""),
+        message=str(event.get("message") or event.get("line") or event.get("step") or ""),
         percent=percent,
         progress=percent,
         raw=clean,
@@ -372,20 +385,41 @@ class JobManager:
         project_id: str | None,
         command: list[str],
         cwd: Path | None,
-        on_success: Callable[[], dict] | None = None,
+        on_success: Callable[..., dict] | None = None,
+        on_failure: Callable[..., dict] | None = None,
+        env: dict[str, str] | None = None,
     ) -> JobModel:
         job_id = f"job_{uuid.uuid4().hex[:12]}"
+        now = _utc_now_iso()
         managed = ManagedJob(
-            model=JobModel(job_id=job_id, kind=kind, project_id=project_id, status=JobStatus.queued, command=command)
+            model=JobModel(
+                job_id=job_id,
+                kind=kind,
+                project_id=project_id,
+                status=JobStatus.queued,
+                command=command,
+                started_at=now,
+                updated_at=now,
+            )
         )
         with self._lock:
             self._jobs[job_id] = managed
+
+        def run_callback(callback: Callable[..., dict] | None, snapshot: JobModel) -> dict[str, Any]:
+            if callback is None:
+                return {}
+            try:
+                params = inspect.signature(callback).parameters
+                return callback(snapshot) if params else callback()
+            except (TypeError, ValueError):
+                return callback()
 
         def runner() -> None:
             with managed.lock:
                 if managed.model.status == JobStatus.canceled:
                     return
                 managed.model.status = JobStatus.running
+                managed.model.updated_at = _utc_now_iso()
             try:
                 process = subprocess.Popen(
                     command,
@@ -394,15 +428,24 @@ class JobManager:
                     stderr=subprocess.STDOUT,
                     text=True,
                     bufsize=1,
+                    start_new_session=(os.name != "nt"),
+                    env=env,
                 )
                 managed.process = process
+                with managed.lock:
+                    managed.model.pid = process.pid
+                    managed.model.updated_at = _utc_now_iso()
                 assert process.stdout is not None
                 last_download_percent: int | None = None
                 for output_line, separator in _iter_process_output(process.stdout):
                     clean_line = _clean_progress_line(output_line)
                     progress = _parse_progress_line(clean_line, managed.model.progress)
                     is_structured_event = clean_line.startswith(_PYROLLER_EVENT_PREFIX)
+                    event_detail = progress.detail if progress is not None and is_structured_event else None
                     should_append_log = separator == "\n" and not is_structured_event
+                    if event_detail and event_detail.get("type") == "install_subprocess_output" and event_detail.get("line"):
+                        should_append_log = True
+                        clean_line = str(event_detail.get("line"))
                     if separator == "\r" and progress is not None and _normalize_stage_name(progress.stage) == "model_download":
                         # tqdm refreshes many times per second. Keep the compact
                         # progress bar live, but only add meaningful download
@@ -419,8 +462,15 @@ class JobManager:
                             if should_append_log:
                                 last_download_percent = percent_int
                     with managed.lock:
+                        now = _utc_now_iso()
+                        managed.model.updated_at = now
+                        managed.model.last_output_at = now
                         if should_append_log:
                             managed.model.logs.append(clean_line)
+                        if event_detail and event_detail.get("type") != "install_subprocess_output":
+                            managed.model.events.append(event_detail)
+                            if len(managed.model.events) > 500:
+                                managed.model.events = managed.model.events[-500:]
                         if progress is not None:
                             managed.model.progress = progress
                             if progress.done:
@@ -433,30 +483,63 @@ class JobManager:
                         return
                 if return_code != 0:
                     with managed.lock:
+                        failure_model = managed.model.model_copy(deep=True)
+                    result = run_callback(on_failure, failure_model)
+                    with managed.lock:
                         managed.model.status = JobStatus.failed
+                        managed.model.return_code = return_code
+                        managed.model.updated_at = _utc_now_iso()
                         managed.model.error = f"Command exited with code {return_code}"
+                        managed.model.result = result or None
                         if managed.model.progress is not None:
                             managed.model.progress.failed = True
                     return
-                result = on_success() if on_success is not None else {}
+                result: dict[str, Any] = {}
+                if on_success is not None:
+                    with managed.lock:
+                        success_model = managed.model.model_copy(deep=True)
+                    result = run_callback(on_success, success_model)
                 with managed.lock:
                     managed.model.status = JobStatus.succeeded
+                    managed.model.return_code = return_code
+                    managed.model.updated_at = _utc_now_iso()
                     managed.model.result = result
+                    complete_message = "Task complete"
+                    if managed.model.kind == "auto-roller-runtime-install":
+                        runtime_id = result.get("runtime_id") if isinstance(result, dict) else None
+                        complete_message = f"Runtime ready: {runtime_id}" if runtime_id else "Runtime ready"
+                    elif managed.model.kind == "auto-roller-doctor":
+                        complete_message = ""
+                    elif managed.model.kind == "auto-timing":
+                        complete_message = "Automatic timing complete"
                     managed.model.progress = JobProgressModel(
                         stage="complete",
                         completed=1,
                         total=1,
                         unit="task",
-                        message="Automatic timing complete",
+                        message=complete_message,
                         percent=1.0,
+                        progress=1.0,
                         raw="",
                         done=True,
                     )
             except Exception as exc:  # pragma: no cover - subprocess/env dependent
+                result: dict[str, Any] = {}
+                with managed.lock:
+                    failure_model = managed.model.model_copy(deep=True)
+                try:
+                    result = run_callback(on_failure, failure_model)
+                except Exception:
+                    result = {}
                 with managed.lock:
                     if managed.model.status != JobStatus.canceled:
+                        now = _utc_now_iso()
                         managed.model.status = JobStatus.failed
+                        managed.model.updated_at = now
+                        managed.model.last_output_at = managed.model.last_output_at or now
                         managed.model.error = str(exc)
+                        managed.model.result = result or None
+                        managed.model.logs.append(f"Failed to start or monitor command: {exc}")
 
         thread = threading.Thread(target=runner, name=job_id, daemon=True)
         managed.thread = thread
@@ -489,14 +572,23 @@ class JobManager:
             if managed.model.status not in {JobStatus.queued, JobStatus.running}:
                 return managed.model.model_copy(deep=True)
             managed.model.status = JobStatus.canceled
+            now = _utc_now_iso()
+            managed.model.updated_at = now
+            managed.model.last_output_at = now
             managed.model.logs.append("Cancellation requested by lrc-roller.")
             if managed.model.progress is not None:
                 managed.model.progress.message = "Cancellation requested"
             process = managed.process
         if process is not None and process.poll() is None:
             try:
-                process.terminate()
+                if os.name != "nt":
+                    os.killpg(process.pid, signal.SIGTERM)
+                else:
+                    process.terminate()
             except Exception:
-                pass
+                try:
+                    process.terminate()
+                except Exception:
+                    pass
         with managed.lock:
             return managed.model.model_copy(deep=True)

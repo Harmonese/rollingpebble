@@ -45,44 +45,41 @@ pnpm dev
 
 ## Auto Timing runtime setup
 
-The main workflow calls this feature **Auto Timing**. The technical engine is `py-roller`, and engine details live in **Settings -> Auto Timing Runtime** rather than the main task panel.
+The main workflow calls this feature **Auto Timing**. The technical engine is `py-roller`.
 
-`pip install py-roller` installs the lightweight base package. The actual audio/transcriber stack is installed separately by py-roller because Torch/Torchaudio must match the machine profile.
+Starting with v0.5.0, lrc-roller runs py-roller from an **isolated runtime virtual environment** under the lrc-roller data directory instead of installing or repairing py-roller inside the backend `.venv`. This keeps FastAPI/pylrclib separate from heavy audio dependencies such as Torch, Demucs, and faster-whisper.
 
-Recommended wrapper:
+Open **Settings -> Auto Timing -> Runtime** and choose:
 
-```bash
-. .venv/bin/activate
-lrc-roller setup --profile auto
-```
+- **Create / Repair Runtime** to create the isolated py-roller runtime for the selected profile.
+- **Runtime Check** to run `py-roller doctor` inside that isolated runtime.
+- **Refresh Status** to rescan the runtime.
 
-This runs:
+The runtime is created under a path similar to:
 
 ```text
-pnpm install
-py-roller install --profile auto
-py-roller doctor
+~/.local/share/lrc-roller/envs/pyroller-py312-cpu/.venv
 ```
 
-For CPU-only machines:
+Model files are stored separately from the runtime, for example:
+
+```text
+~/.local/share/lrc-roller/models/transcriber
+```
+
+This means the runtime can be repaired or recreated without deleting multi-gigabyte model caches.
+
+For py-roller development, point lrc-roller at a local py-roller checkout before creating the runtime:
 
 ```bash
-lrc-roller setup --profile cpu
+export LRC_ROLLER_PYROLLER_SOURCE=/path/to/py-roller
 ```
 
-To inspect the current environment:
+Then use **Create / Repair Runtime** from Settings.
 
-```bash
-lrc-roller doctor
-lrc-roller doctor --run-pyroller-doctor
-```
+When using the default PyPI source, **Create / Repair Runtime** also upgrades py-roller within the compatible runtime range declared by lrc-roller, currently `py-roller>=0.5.6,<0.6`. It does not upgrade to py-roller 0.6.x until lrc-roller explicitly supports that CLI/runtime contract.
 
-The WebUI also provides runtime actions under Settings:
-
-- Runtime check
-- Install / repair
-- Install dry run
-- Copy diagnostics
+After a model has been downloaded, enable local cache-only model use in Settings or Auto Timing to avoid unnecessary Hugging Face network access. For restricted networks, prefer `socks5h://` proxies so DNS resolution also goes through the SOCKS proxy.
 
 ## Production-like local server
 
@@ -98,22 +95,3 @@ Then open:
 ```text
 http://127.0.0.1:6789
 ```
-
-
-## v0.3.0 notes
-
-Auto Timing now focuses on single-song tasks with input readiness, command preview, cancel/retry controls, copied logs, project-folder opening, and a local model path field passed to py-roller as `--transcriber-model-path`.
-
-## v0.3.4 notes
-
-Auto Timing now exposes Hugging Face model download controls in both Settings and the per-song Advanced task parameters. These map to the latest py-roller CLI options:
-
-- `--transcriber-hf-xet`
-- `--transcriber-hf-proxy`
-- `--transcriber-hf-etag-timeout`
-- `--transcriber-hf-download-timeout`
-- `--transcriber-hf-max-workers`
-- `--transcriber-local-files-only`
-- `--transcriber-model-path`
-
-Use **Settings → Auto Timing Runtime → Use safe download defaults** when XET/CAS or high parallel downloads are unreliable on the current network.

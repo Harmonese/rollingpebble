@@ -96,6 +96,8 @@ def build_pyroller_command(
     intermediate_dir: Path,
     request: RollRequest,
     artifacts_dir: Path | None = None,
+    command_prefix: list[str] | None = None,
+    default_model_store: Path | None = None,
 ) -> list[str]:
     stages = normalize_stages(request.stages)
     stage_set = set(stages)
@@ -111,7 +113,7 @@ def build_pyroller_command(
         }
 
     command = [
-        "py-roller",
+        *(command_prefix or ["py-roller"]),
         "run",
         "--stages",
         ",".join(stages),
@@ -156,8 +158,9 @@ def build_pyroller_command(
         _add_option(command, "--transcriber-backend", request.transcriber_backend)
         _add_option(command, "--transcriber-device", request.transcriber_device)
         _add_option(command, "--transcriber-model-name", request.transcriber_model_name)
-        if request.transcriber_model_path:
-            model_path = Path(request.transcriber_model_path).expanduser()
+        model_path_value = request.transcriber_model_path or (str(default_model_store) if default_model_store else "")
+        if model_path_value:
+            model_path = Path(model_path_value).expanduser()
             command.extend(["--transcriber-model-path", str(model_path)])
         if request.transcriber_local_files_only:
             command.append("--transcriber-local-files-only")

@@ -13,6 +13,7 @@ import {
     HF_XET_OPTIONS,
     KARAOKE_TAG_OPTIONS,
     LANGUAGE_OPTIONS,
+    LOCAL_CACHE_OPTIONS,
     LOG_LEVEL_OPTIONS,
     PARSER_ENCODING_OPTIONS,
     REPETITION_OPTIONS,
@@ -22,6 +23,7 @@ import {
     WRITER_OPTIONS,
     defaultModelFor,
     isFasterWhisper,
+    normalizeStages,
     normalizeTranscriberBackend,
     normalizeTranscriberDevice,
     transcriberBackendOptions,
@@ -30,6 +32,7 @@ import {
     type HfXet,
     type KaraokeTag,
     type Language,
+    type LocalOnly,
     type LogLevel,
     type Repetition,
     type Spacing,
@@ -61,12 +64,173 @@ function optionalPositiveInt(value: string): number | null {
     return Math.max(1, Math.round(parsed));
 }
 
-function preferRemoteDnsProxy(proxy: string): string {
-    const text = proxy.trim();
-    if (!text) return "socks5h://127.0.0.1:9909";
-    if (text.startsWith("socks5://")) return `socks5h://${text.slice("socks5://".length)}`;
-    return text;
+function formatDateTime(value?: string | null): string {
+    if (!value) return "not available";
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
+
+function secondsSince(value?: string | null): number | null {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return Math.max(0, Math.round((Date.now() - date.getTime()) / 1000));
+}
+
+function formatDuration(seconds: number | null): string {
+    if (seconds === null) return "unknown";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+}
+
+
+type RuntimeStepStatus = "pending" | "running" | "done" | "failed";
+
+type RuntimeStep = {
+    key: string;
+    label: string;
+    status: RuntimeStepStatus;
+    message: string;
+};
+
+const INSTALL_STEP_LABELS: Record<string, string> = {
+    upgrade_packaging_tools: "Upgrade packaging tools",
+    uninstall_existing_torch: "Remove existing Torch packages",
+    install_torch_stack: "Install Torch stack",
+    install_audio_requirements: "Install audio requirements",
+    validation: "Validate runtime profile",
+    doctor: "Runtime check",
+};
+
+function titleFromKey(key: string): string {
+    return INSTALL_STEP_LABELS[key] || key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function runtimeEvents(job: JobModel | null): Record<string, unknown>[] {
+    return Array.isArray(job?.events) ? job!.events! : [];
+}
+
+function eventText(value: unknown): string {
+    return typeof value === "string" ? value : "";
+}
+
+function buildRuntimeSteps(job: JobModel | null): RuntimeStep[] {
+    const events = runtimeEvents(job);
+    const steps = new Map<string, RuntimeStep>();
+    const ensure = (key: string): RuntimeStep => {
+        const existing = steps.get(key);
+        if (existing) return existing;
+        const created = { key, label: titleFromKey(key), status: "pending" as RuntimeStepStatus, message: "" };
+        steps.set(key, created);
+        return created;
+    };
+    for (const event of events) {
+        const type = eventText(event.type);
+        let key = eventText(event.step);
+        if (!key && type.startsWith("install_validation_")) key = "validation";
+        if (!key && type.startsWith("install_doctor_")) key = "doctor";
+        if (!key) continue;
+        const step = ensure(key);
+        if (type.endsWith("started")) step.status = "running";
+        if (type.endsWith("completed")) step.status = "done";
+        if (type.endsWith("failed")) step.status = "failed";
+        const message = eventText(event.message) || eventText(event.line);
+        if (message && type !== "install_subprocess_output") step.message = message;
+        if (type === "install_validation_completed") {
+            step.status = event.ok === false ? "failed" : "done";
+            step.message = eventText(event.message);
+        }
+        if (type === "install_doctor_completed") {
+            step.status = event.ok === false ? "failed" : "done";
+        }
+    }
+    return Array.from(steps.values());
+}
+
+function doctorCheckSteps(job: JobModel | null): RuntimeStep[] {
+    if (!job || job.kind !== "auto-roller-doctor") return [];
+    const report = job.result?.doctor_report;
+    if (!report || typeof report !== "object" || !Array.isArray((report as { checks?: unknown }).checks)) return [];
+    return ((report as { checks: unknown[] }).checks).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object")).map((check) => {
+        const name = eventText(check.name) || "check";
+        const statusText = eventText(check.status);
+        return {
+            key: name,
+            label: titleFromKey(name),
+            status: statusText === "fail" ? "failed" : "done",
+            message: eventText(check.message),
+        };
+    });
+}
+
+function runtimeJobTitle(job: JobModel): string {
+    if (job.kind === "auto-roller-runtime-install") return "Create / Repair Runtime";
+    if (job.kind === "auto-roller-doctor") return "Runtime Check";
+    return job.kind;
+}
+
+function runtimeCompletionMessage(job: JobModel): string {
+    const result = job.result || {};
+    if (job.kind === "auto-roller-runtime-install" && typeof result.runtime_id === "string") {
+        return `Runtime ready: ${result.runtime_id}`;
+    }
+    if (job.kind === "auto-roller-doctor") return "";
+    return job.progress?.message || "Task complete.";
+}
+
+const RuntimeJobTerminal: React.FC<{ job: JobModel; elapsed: number | null; lastOutput: number | null }> = ({ job, elapsed, lastOutput }) => {
+    const running = ["queued", "running"].includes(job.status);
+    const steps = buildRuntimeSteps(job);
+    const checks = doctorCheckSteps(job);
+    const rawLog = job.logs.join("\n") || job.command.join(" ");
+    return (
+        <div className="settings-job-terminal">
+            <div className="settings-job-header">
+                <div>
+                    <b>{runtimeJobTitle(job)}</b>
+                    <small>{job.job_id} · {job.status}</small>
+                </div>
+                {job.status === "succeeded" && <span className="runtime-status-pill ok">Succeeded</span>}
+                {job.status === "failed" && <span className="runtime-status-pill fail">Failed</span>}
+                {running && <span className="runtime-status-pill running">Running</span>}
+            </div>
+            <div className="roller-kv compact">
+                <b>PID</b><span>{job.pid || "pending"}</span>
+                <b>Elapsed</b><span>{formatDuration(elapsed)}</span>
+                <b>Last output</b><span>{formatDuration(lastOutput)} ago</span>
+                <b>Exit code</b><span>{job.return_code ?? "n/a"}</span>
+            </div>
+            {job.status === "succeeded" && runtimeCompletionMessage(job) && <p className="roller-message success">{runtimeCompletionMessage(job)}</p>}
+            {job.status === "failed" && <p className="roller-message error">{job.error || "Runtime task failed."}</p>}
+            {running && lastOutput !== null && lastOutput > 30 && <p className="roller-message subtle">No output recently. pip may still be downloading, resolving, or installing packages. The process is still running.</p>}
+            {steps.length > 0 && (
+                <ol className="runtime-step-list">
+                    {steps.map((step) => (
+                        <li key={step.key} className={`runtime-step ${step.status}`}>
+                            <span className="runtime-step-dot" />
+                            <span><b>{step.label}</b>{step.message && <small>{step.message}</small>}</span>
+                        </li>
+                    ))}
+                </ol>
+            )}
+            {checks.length > 0 && (
+                <ol className="runtime-step-list">
+                    {checks.map((step) => (
+                        <li key={step.key} className={`runtime-step ${step.status}`}>
+                            <span className="runtime-step-dot" />
+                            <span><b>{step.label}</b>{step.message && <small>{step.message}</small>}</span>
+                        </li>
+                    ))}
+                </ol>
+            )}
+            <details className="runtime-raw-log">
+                <summary>Raw log</summary>
+                <pre className="roller-log">{rawLog}</pre>
+            </details>
+        </div>
+    );
+};
 
 
 const optionNodes = (options: { value: string; label: string; disabled?: boolean }[]) =>
@@ -105,7 +269,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const [modelStore, setModelStore] = useState("");
     const [transcriberComputeType, setTranscriberComputeType] = useState("int8");
     const [transcriberBatchSize, setTranscriberBatchSize] = useState("8");
-    const [defaultLocalOnly, setDefaultLocalOnly] = useState(false);
+    const [defaultLocalOnly, setDefaultLocalOnly] = useState<LocalOnly>("off");
     const [hfXet, setHfXet] = useState<HfXet>("auto");
     const [hfProxy, setHfProxy] = useState("");
     const [hfEtagTimeout, setHfEtagTimeout] = useState("");
@@ -116,11 +280,12 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const [alignerBackend, setAlignerBackend] = useState("global_dp_v1");
     const [alignerMinGap, setAlignerMinGap] = useState("0.5");
     const [alignerRepetition, setAlignerRepetition] = useState<Repetition>("none");
-    const [writerByTag, setWriterByTag] = useState("py-roller");
+    const [writerByTag, setWriterByTag] = useState("LRC Roller");
     const [writerKaraokeTag, setWriterKaraokeTag] = useState<KaraokeTag>("kf");
 
     const [job, setJob] = useState<JobModel | null>(null);
     const [message, setMessage] = useState("");
+    const [runtimeError, setRuntimeError] = useState("");
     const [busy, setBusy] = useState(false);
 
     const refresh = useCallback(async () => {
@@ -138,7 +303,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             setRecentProjectsLimit(String(settings.recent_projects_limit || 8));
 
             setDefaultLanguage(language);
-            setDefaultStages(settings.auto_timing_default_stages || "t,p,a,w");
+            setDefaultStages(normalizeStages(settings.auto_timing_default_stages || "t,p,a,w"));
             setDefaultWriterBackend(settings.auto_timing_default_writer_backend || "lrc_ms");
             setDefaultWriterSpacing(settings.auto_timing_default_writer_spacing || "keep");
             setDefaultCleanup(settings.auto_timing_default_cleanup || "never");
@@ -158,7 +323,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             setModelStore(settings.auto_timing_model_store || "");
             setTranscriberComputeType(settings.auto_timing_transcriber_compute_type || "int8");
             setTranscriberBatchSize(textFromOptionalNumber(settings.auto_timing_transcriber_batch_size) || "8");
-            setDefaultLocalOnly(settings.auto_timing_local_files_only_default);
+            setDefaultLocalOnly(settings.auto_timing_local_files_only_default ? "on" : "off");
             setHfXet(settings.auto_timing_hf_xet || "auto");
             setHfProxy(settings.auto_timing_hf_proxy || "");
             setHfEtagTimeout(textFromOptionalNumber(settings.auto_timing_hf_etag_timeout));
@@ -169,7 +334,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             setAlignerBackend(settings.auto_timing_aligner_backend || "global_dp_v1");
             setAlignerMinGap(textFromOptionalNumber(settings.auto_timing_aligner_min_gap) || "0.5");
             setAlignerRepetition(settings.auto_timing_aligner_repetition || "none");
-            setWriterByTag(settings.auto_timing_writer_by_tag || "py-roller");
+            setWriterByTag(settings.auto_timing_writer_by_tag === "py-roller" ? "LRC Roller" : (settings.auto_timing_writer_by_tag || "LRC Roller"));
             setWriterKaraokeTag(settings.auto_timing_writer_ass_karaoke_tag_type || "kf");
             skipAutoTimingSave.current = true;
             window.setTimeout(() => setAutoTimingLoaded(true), 0);
@@ -213,6 +378,9 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
 
     const transcriberIsFasterWhisper = isFasterWhisper(transcriberBackend);
     const writerIsAss = defaultWriterBackend === "ass_karaoke";
+    const runtimeJobRunning = Boolean(job && ["queued", "running"].includes(job.status));
+    const runtimeJobElapsed = secondsSince(job?.started_at);
+    const runtimeJobLastOutput = secondsSince(job?.last_output_at || job?.started_at);
 
     const savePatch = async (payload: Record<string, unknown>, success = "Settings saved.") => {
         setBusy(true);
@@ -258,7 +426,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                 auto_timing_model_store: modelStore.trim(),
                 auto_timing_transcriber_compute_type: transcriberIsFasterWhisper ? transcriberComputeType : "",
                 auto_timing_transcriber_batch_size: transcriberIsFasterWhisper ? optionalPositiveInt(transcriberBatchSize) : null,
-                auto_timing_local_files_only_default: defaultLocalOnly,
+                auto_timing_local_files_only_default: defaultLocalOnly === "on",
                 auto_timing_hf_xet: hfXet,
                 auto_timing_hf_proxy: hfProxy.trim(),
                 auto_timing_hf_etag_timeout: optionalPositiveInt(hfEtagTimeout),
@@ -311,31 +479,6 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         });
     };
 
-    const applyCliLikeDownloadDefaults = () => {
-        setDefaultLocalOnly(false);
-        setHfXet("off");
-        setHfProxy("");
-        setHfEtagTimeout("");
-        setHfDownloadTimeout("");
-        setHfMaxWorkers("");
-        setMessage("Direct-network download settings selected.");
-    };
-
-    const applyRestrictedNetworkDownloadDefaults = () => {
-        const proxy = preferRemoteDnsProxy(hfProxy);
-        setDefaultLocalOnly(false);
-        setHfXet("off");
-        setHfProxy(proxy);
-        setHfEtagTimeout("");
-        setHfDownloadTimeout("");
-        setHfMaxWorkers("");
-        setMessage("Restricted-network download settings selected.");
-    };
-
-    const applyOfflineCacheDefaults = () => {
-        setDefaultLocalOnly(true);
-        setMessage("Offline cache mode selected.");
-    };
 
     const browseModelStore = async () => {
         setBusy(true);
@@ -361,36 +504,47 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
 
     const runDoctor = async () => {
         setBusy(true);
-        setMessage("Starting runtime check...");
+        setRuntimeError("");
         try {
             const created = await api.runAutoRollerDoctor();
             setJob(created);
-            setMessage(`Started ${created.job_id}`);
         } catch (error) {
-            setMessage((error as Error).message);
+            setRuntimeError((error as Error).message);
         } finally {
             setBusy(false);
         }
     };
 
-    const runInstall = async (dryRun = false) => {
+    const runInstall = async () => {
         setBusy(true);
-        setMessage(dryRun ? "Preparing install dry run..." : "Starting install/repair...");
+        setRuntimeError("");
         try {
-            const created = await api.runAutoRollerInstall({ profile, dry_run: dryRun });
+            const created = await api.runAutoRollerInstall({ profile });
             setJob(created);
-            setMessage(`Started ${created.job_id}`);
         } catch (error) {
-            setMessage((error as Error).message);
+            setRuntimeError((error as Error).message);
         } finally {
             setBusy(false);
         }
     };
 
     const copyDiagnostics = async () => {
-        const text = JSON.stringify({ runtime, job }, null, 2);
+        const text = JSON.stringify({ runtime, doctor_report: runtime?.doctor_report || job?.result?.doctor_report || null, install_report: runtime?.install_report || job?.result?.install_report || null, job }, null, 2);
         await navigator.clipboard?.writeText(text);
-        setMessage("Diagnostics copied.");
+    };
+
+    const cancelRuntimeJob = async () => {
+        if (!job || !runtimeJobRunning) return;
+        setBusy(true);
+        setRuntimeError("");
+        try {
+            const canceled = await api.cancelJob(job.job_id);
+            setJob(canceled);
+        } catch (error) {
+            setRuntimeError((error as Error).message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     if (!open) return null;
@@ -440,22 +594,27 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                     <div className="settings-subsection">
                         <h4>Runtime</h4>
                         <div className="roller-kv">
+                            <b>Mode</b><span>Isolated runtime</span>
                             <b>Engine</b><span>{runtime?.engine || "py-roller"}</span>
-                            <b>Status</b><span>{runtime ? (runtime.available ? "available" : "not available") : "loading"}</span>
-                            <b>Version</b><span>{runtime?.version || "unknown"}</span>
-                            <b>Command</b><span>{runtime?.cli_path || runtime?.detail || "not found"}</span>
-                            <b>Python</b><span>{runtime?.python_executable || "unknown"}</span>
+                            <b>Status</b><span>{runtime?.runtime_status || "loading"}</span>
+                            <b>Version</b><span>{runtime?.version || "not installed"}</span>
+                            <b>Runtime ID</b><span>{runtime?.runtime_id || "not created"}</span>
+                            <b>Runtime Python</b><span>{runtime?.runtime_python || "not created"}</span>
+                            <b>Runtime folder</b><span>{runtime?.runtime_root || "not created"}</span>
+                            <b>Source</b><span>{runtime?.runtime_source || "PyPI compatible package"}</span>
+                            <b>Required py-roller</b><span>{runtime?.runtime_requirement || "py-roller>=0.5.6,<0.6"}</span>
                             <b>Model store</b><span>{modelStore || runtime?.model_store || "unknown"}</span>
                             <b>Last check</b><span>{runtime?.settings.last_doctor_status || "not run"} {runtime?.settings.last_doctor_at ? `· ${runtime.settings.last_doctor_at}` : ""}</span>
-                            <b>Last install</b><span>{runtime?.settings.last_install_profile || "not run"} {runtime?.settings.last_install_at ? `· ${runtime.settings.last_install_at}` : ""}</span>
+                            <b>Last install</b><span>{runtime?.settings.last_install_status || runtime?.settings.last_install_profile || "not run"} {runtime?.settings.last_install_at ? `· ${runtime.settings.last_install_at}` : ""}</span>
                         </div>
-                        <div className="roller-form settings-profile-row"><label>Install profile<select value={profile} disabled={busy} onChange={(ev) => void saveProfile(ev.target.value as Profile)}><option value="auto">Auto</option><option value="cpu">CPU only</option><option value="cu124">CUDA 12.4</option></select></label></div>
-                        <div className="roller-actions"><button type="button" disabled={busy} onClick={runDoctor}>Runtime Check</button><button type="button" disabled={busy} onClick={() => void runInstall(false)}>Install / Repair</button><button type="button" onClick={copyDiagnostics}>Copy Diagnostics</button><button type="button" onClick={refresh}>Refresh Status</button></div>
-                        {job && <div className="settings-job-terminal"><details open><summary>{job.kind} · {job.job_id} · {job.status}</summary><pre className="roller-log">{job.logs.join("\n") || job.command.join(" ")}</pre></details></div>}
+                        {runtime?.detail && <p className="roller-message subtle">{runtime.detail}</p>}
+                        <div className="roller-form settings-profile-row"><label>Runtime profile<select value={profile} disabled={busy || runtimeJobRunning} onChange={(ev) => void saveProfile(ev.target.value as Profile)}><option value="auto">Auto</option><option value="cpu">CPU only</option><option value="cu124">CUDA 12.4</option></select></label></div>
+                        <div className="roller-actions"><button type="button" disabled={busy || runtimeJobRunning} onClick={runDoctor}>Runtime Check</button><button type="button" disabled={busy || runtimeJobRunning} onClick={() => void runInstall()}>Create / Repair Runtime</button>{runtimeJobRunning && <button type="button" disabled={busy} onClick={cancelRuntimeJob}>Cancel</button>}<button type="button" onClick={copyDiagnostics}>Copy Diagnostics</button><button type="button" onClick={refresh}>Refresh Status</button></div>
+                        {runtimeError && <p className="roller-message error runtime-local-notice">{runtimeError}</p>}
+                        {job && <RuntimeJobTerminal job={job} elapsed={runtimeJobElapsed} lastOutput={runtimeJobLastOutput} />}
                     </div>
 
                     <div className="settings-subsection">
-                        <h4>Defaults</h4>
                         <div className="roller-section-title">Core</div>
                         <div className="roller-form two-col">
                             <label>Language<select value={defaultLanguage} onChange={(ev) => setDefaultLanguage(ev.target.value as Language)}>{optionNodes(LANGUAGE_OPTIONS)}</select></label>
@@ -468,7 +627,17 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                         </div>
 
                         <details>
-                            <summary>Stage settings</summary>
+                            <summary>Advanced Parameters</summary>
+                            <div className="roller-section-title">Model download</div>
+                            <div className="roller-form two-col">
+                                <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
+                                <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+                                <label>Metadata timeout<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
+                                <label>File download timeout<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
+                                <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
+                                <label>Local cache mode<select value={defaultLocalOnly} onChange={(ev) => setDefaultLocalOnly(ev.target.value as LocalOnly)}>{optionNodes(LOCAL_CACHE_OPTIONS)}</select></label>
+                            </div>
+
                             <div className="roller-section-title">Splitter</div>
                             <div className="roller-form two-col">
                                 <label>Backend<select value={splitterBackend} onChange={(ev) => setSplitterBackend(ev.target.value)}>{optionNodes(SPLITTER_BACKEND_OPTIONS)}</select></label>
@@ -482,22 +651,15 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                             <div className="roller-section-title">Filter</div>
                             <div className="roller-form"><label>Filter chain<select value={filterChain} onChange={(ev) => setFilterChain(ev.target.value)}>{optionNodes(FILTER_CHAIN_OPTIONS)}</select></label></div>
 
-                            <div className="roller-section-title">Transcriber and model download</div>
+                            <div className="roller-section-title">Transcriber</div>
                             <div className="roller-form two-col">
                                 <label>Backend<select value={transcriberBackend} onChange={(ev) => setTranscriberBackend(ev.target.value)}>{optionNodes(transcriberBackendOptions(defaultLanguage))}</select></label>
                                 <label>Device<select value={transcriberDevice} onChange={(ev) => setTranscriberDevice(ev.target.value)}>{optionNodes(DEVICE_OPTIONS)}</select></label>
                                 <label>Model name<select value={transcriberModelName} onChange={(ev) => setTranscriberModelName(ev.target.value)}>{optionNodes(transcriberModelOptions(defaultLanguage, transcriberBackend))}</select></label>
-                                <label className="field-with-browse">Model store path<span className="browse-row"><input placeholder={runtime?.model_store || "~/.cache/py-roller/models/transcriber"} value={modelStore} onChange={(ev) => setModelStore(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>Browse</button></span></label>
+                                <label className="field-with-browse">Model store path<span className="browse-row"><input placeholder={runtime?.model_store || "~/.local/share/lrc-roller/models/transcriber"} value={modelStore} onChange={(ev) => setModelStore(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>Browse</button></span></label>
                                 <label>Compute type<select value={transcriberComputeType} onChange={(ev) => setTranscriberComputeType(ev.target.value)} disabled={!transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS)}</select></label>
                                 <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
-                                <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
-                                <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
-                                <label>Metadata timeout<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
-                                <label>File download timeout<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
-                                <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
-                                <label className="roller-checkbox">Use local cache only<input type="checkbox" checked={defaultLocalOnly} onChange={(ev) => setDefaultLocalOnly(ev.currentTarget.checked)} /></label>
                             </div>
-                            <div className="roller-actions download-presets"><button type="button" disabled={busy} onClick={applyRestrictedNetworkDownloadDefaults}>Use restricted-network settings</button><button type="button" disabled={busy} onClick={applyCliLikeDownloadDefaults}>Use direct-network settings</button><button type="button" disabled={busy} onClick={applyOfflineCacheDefaults}>Use offline cache</button></div>
 
                             <div className="roller-section-title">Parser</div>
                             <div className="roller-form"><label>Lyrics encoding<select value={parserEncoding} onChange={(ev) => setParserEncoding(ev.target.value)}>{optionNodes(PARSER_ENCODING_OPTIONS)}</select></label></div>
@@ -506,7 +668,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                             <div className="roller-form two-col"><label>Backend<select value={alignerBackend} onChange={(ev) => setAlignerBackend(ev.target.value)}>{optionNodes(ALIGNER_BACKEND_OPTIONS)}</select></label><label>Min gap seconds<input inputMode="decimal" placeholder="0.5" value={alignerMinGap} onChange={(ev) => setAlignerMinGap(ev.target.value)} /></label></div>
 
                             <div className="roller-section-title">Writer</div>
-                            <div className="roller-form two-col"><label>BY tag<input placeholder="py-roller" value={writerByTag} onChange={(ev) => setWriterByTag(ev.target.value)} /></label><label>ASS karaoke tag<select value={writerKaraokeTag} onChange={(ev) => setWriterKaraokeTag(ev.target.value as KaraokeTag)} disabled={!writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS)}</select></label></div>
+                            <div className="roller-form two-col"><label>BY tag<input placeholder="LRC Roller" value={writerByTag} onChange={(ev) => setWriterByTag(ev.target.value)} /></label><label>ASS karaoke tag<select value={writerKaraokeTag} onChange={(ev) => setWriterKaraokeTag(ev.target.value as KaraokeTag)} disabled={!writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS)}</select></label></div>
                         </details>
                     </div>
                 </section>

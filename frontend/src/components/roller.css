@@ -1496,3 +1496,155 @@
     cursor: pointer;
     font-size: 0.8rem;
 }
+
+/* lrc-roller v0.5.0 isolated runtime status */
+.roller-kv.compact {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.055);
+    font-size: 0.78rem;
+}
+
+.roller-message.subtle {
+    color: var(--roller-muted);
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.075);
+}
+
+/* lrc-roller v0.5.2 runtime JSON progress terminal */
+.settings-job-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.028);
+}
+
+.settings-job-header > div {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+}
+
+.settings-job-header b {
+    color: var(--roller-text);
+    font-size: 0.88rem;
+}
+
+.settings-job-header small {
+    color: var(--roller-muted);
+    font-size: 0.76rem;
+    overflow-wrap: anywhere;
+}
+
+.runtime-status-pill {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 4px 9px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--roller-muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.runtime-status-pill.ok {
+    color: var(--roller-accent-2);
+    background: rgba(89, 199, 165, 0.11);
+    border-color: rgba(89, 199, 165, 0.22);
+}
+
+.runtime-status-pill.fail {
+    color: var(--roller-warn);
+    background: rgba(255, 176, 108, 0.1);
+    border-color: rgba(255, 176, 108, 0.22);
+}
+
+.runtime-status-pill.running {
+    color: var(--roller-accent);
+    background: rgba(127, 229, 205, 0.08);
+    border-color: rgba(127, 229, 205, 0.18);
+}
+
+.runtime-local-notice {
+    margin: 10px 0 0;
+}
+
+.runtime-step-list {
+    display: grid;
+    gap: 8px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.runtime-step {
+    display: grid;
+    grid-template-columns: 12px 1fr;
+    gap: 9px;
+    align-items: start;
+    padding: 8px 10px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.022);
+    border: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.runtime-step-dot {
+    width: 8px;
+    height: 8px;
+    margin-top: 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.24);
+}
+
+.runtime-step.running .runtime-step-dot {
+    background: var(--roller-accent);
+    box-shadow: 0 0 0 3px rgba(127, 229, 205, 0.12);
+}
+
+.runtime-step.done .runtime-step-dot {
+    background: var(--roller-accent-2);
+}
+
+.runtime-step.failed .runtime-step-dot {
+    background: var(--roller-warn);
+}
+
+.runtime-step b {
+    display: block;
+    color: var(--roller-text);
+    font-size: 0.8rem;
+}
+
+.runtime-step small {
+    display: block;
+    margin-top: 2px;
+    color: var(--roller-muted);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.runtime-raw-log {
+    margin-top: 12px;
+}
+
+.runtime-raw-log summary {
+    color: var(--roller-muted);
+    cursor: pointer;
+    font-size: 0.78rem;
+}
+
+.roller-message.success {
+    color: var(--roller-accent-2);
+}
+
+.roller-message.error {
+    color: var(--roller-warn);
+}

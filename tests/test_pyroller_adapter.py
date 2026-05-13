@@ -51,3 +51,19 @@ def test_rewrite_command_uses_alignment_artifact_without_audio_or_lyrics() -> No
 def test_stage_validation_rejects_non_continuous_pipeline() -> None:
     with pytest.raises(ValueError):
         normalize_stages("s,t,w")
+
+
+def test_build_command_can_use_isolated_runtime_python_and_model_store() -> None:
+    command = build_pyroller_command(
+        audio_path=Path("/song/audio.mp3"),
+        lyrics_path=Path("/song/plain.txt"),
+        output_path=Path("/song/pyroller_output.lrc"),
+        intermediate_dir=Path("/song/intermediate"),
+        artifacts_dir=Path("/song/artifacts"),
+        request=RollRequest(stages="t,p,a,w", writer_backend="lrc_ms"),
+        command_prefix=["/runtime/bin/python", "-m", "pyroller.cli.main"],
+        default_model_store=Path("/models/transcriber"),
+    )
+
+    assert command[:4] == ["/runtime/bin/python", "-m", "pyroller.cli.main", "run"]
+    assert command[command.index("--transcriber-model-path") + 1] == "/models/transcriber"

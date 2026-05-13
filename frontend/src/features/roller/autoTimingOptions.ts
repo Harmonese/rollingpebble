@@ -17,31 +17,31 @@ export const LANGUAGE_OPTIONS: Option[] = [
 
 export const STAGE_OPTIONS: Option[] = [
   {
-    value: "t,p,a,w",
-    label: "Direct timing",
-    help: "Transcribe -> Parse -> Align -> Write. Fastest path when the original mix is clear enough.",
-  },
-  {
     value: "s,f,t,p,a,w",
-    label: "Split vocals first",
-    help: "Split vocals -> optional Filter -> Transcribe -> Parse -> Align -> Write. Slower, but often more accurate for dense mixes.",
+    label: "Full",
+    help: "Split vocals -> Filter -> Transcribe -> Parse -> Align -> Write. Best for normal mixed songs.",
   },
   {
-    value: "a,w",
-    label: "Reuse recognition and realign",
-    help: "Reuse saved timed_units.json and parsed_lyrics.json, then Align -> Write.",
-  },
-  {
-    value: "w",
-    label: "Rewrite output only",
-    help: "Reuse saved alignment_result.json and only write a new output format.",
+    value: "t,p,a,w",
+    label: "Quick",
+    help: "Transcribe -> Parse -> Align -> Write. Faster when the original mix is clear enough.",
   },
 ];
+
+export const LOCAL_CACHE_OPTIONS: Option[] = [
+  { value: "off", label: "Allow download if missing" },
+  { value: "on", label: "Use local cache only" },
+];
+
+export function normalizeStages(stages: string): string {
+  const allowed = STAGE_OPTIONS.map((item) => item.value);
+  return allowed.includes(stages) ? stages : "t,p,a,w";
+}
 
 export const WRITER_OPTIONS: Option[] = [
   { value: "lrc_ms", label: "LRC, millisecond tags" },
   { value: "lrc_cs", label: "LRC, centisecond tags" },
-  { value: "lrc_compressed", label: "Compressed LRC" },
+  { value: "lrc_compressed", label: "LRC, compressed" },
   { value: "ass_karaoke", label: "ASS karaoke" },
 ];
 

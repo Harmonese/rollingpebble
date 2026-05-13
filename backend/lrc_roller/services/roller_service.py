@@ -14,6 +14,7 @@ from lrc_roller.adapters.pyroller_adapter import (
 from lrc_roller.jobs import JobManager
 from lrc_roller.models import JobModel, RollPreviewResponse, RollRequest, RuntimeSettingsModel
 from lrc_roller.services.project_service import ProjectService
+from lrc_roller.services.runtime_manager import RuntimeManager
 from lrc_roller.storage.files import PLAIN_NAME, PYROLLER_NAME, write_text
 
 _ALLOWED_TRANSCRIBERS: dict[str, set[str]] = {
@@ -63,12 +64,14 @@ class RollerService:
         project_service: ProjectService,
         jobs: JobManager,
         settings_provider: Callable[[], RuntimeSettingsModel] | None = None,
+        runtime_manager: RuntimeManager | None = None,
     ) -> None:
         self.projects_root = projects_root
         self.outputs_root = outputs_root
         self.project_service = project_service
         self.jobs = jobs
         self.settings_provider = settings_provider
+        self.runtime_manager = runtime_manager
 
     def _effective_request(self, request: RollRequest) -> RollRequest:
         settings = self.settings_provider() if self.settings_provider is not None else RuntimeSettingsModel()
@@ -214,10 +217,26 @@ class RollerService:
             warnings.append("Missing alignment_result.json; run an alignment step before rewriting output.")
         return warnings
 
+    def _runtime_command_options(self) -> tuple[list[str] | None, Path | None]:
+        settings = self.settings_provider() if self.settings_provider is not None else RuntimeSettingsModel()
+        if self.runtime_manager is None:
+            return None, None
+        return (
+            self.runtime_manager.command_prefix(settings.auto_roller_profile),
+            self.runtime_manager.default_model_store(),
+        )
+
+    def _runtime_install_running(self) -> bool:
+        return any(
+            job.kind == "auto-roller-runtime-install" and job.status in {"queued", "running"}
+            for job in self.jobs.list()
+        )
+
     def preview(self, project_id: str, request: RollRequest) -> RollPreviewResponse:
         timing_plain = self.project_service.plain_lyrics_for_timing(project_id)
         request = self._effective_request(request)
         audio_path, lyrics_path, output_path, intermediate_dir, artifacts_dir = self._paths_for_project(project_id, str(request.stages))
+        command_prefix, default_model_store = self._runtime_command_options()
         command = build_pyroller_command(
             audio_path=audio_path,
             lyrics_path=lyrics_path,
@@ -225,6 +244,8 @@ class RollerService:
             intermediate_dir=intermediate_dir,
             artifacts_dir=artifacts_dir,
             request=request,
+            command_prefix=command_prefix,
+            default_model_store=default_model_store,
         )
         warnings: list[str] = []
         if "p" in set(normalize_stages(request.stages)) and not timing_plain.strip():
@@ -264,6 +285,8 @@ class RollerService:
         )
 
     def roll(self, project_id: str, request: RollRequest) -> JobModel:
+        if self._runtime_install_running():
+            raise RuntimeError("The isolated Auto Timing runtime is being created or repaired. Wait for it to finish before starting Auto Timing.")
         request = self._effective_request(request)
         project = self.project_service.get(project_id)
         stages = set(normalize_stages(request.stages))
@@ -284,6 +307,7 @@ class RollerService:
         artifact_warnings = self._artifact_warnings(str(request.stages), artifacts_dir)
         if artifact_warnings:
             raise ValueError(" ".join(artifact_warnings))
+        command_prefix, default_model_store = self._runtime_command_options()
         command = build_pyroller_command(
             audio_path=audio_path,
             lyrics_path=lyrics_path,
@@ -291,6 +315,8 @@ class RollerService:
             intermediate_dir=intermediate_dir,
             artifacts_dir=artifacts_dir,
             request=request,
+            command_prefix=command_prefix,
+            default_model_store=default_model_store,
         )
 
         def on_success() -> dict:

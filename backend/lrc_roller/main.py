@@ -45,6 +45,7 @@ from lrc_roller.services.lrclib_service import LrclibService
 from lrc_roller.services.project_service import ProjectService
 from lrc_roller.services.roller_service import RollerService
 from lrc_roller.services.upload_service import UploadService
+from lrc_roller.services.runtime_manager import RuntimeManager
 from lrc_roller.services.runtime_service import RuntimeService
 from lrc_roller.services.local_dialog import select_local_path
 
@@ -53,7 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     paths = ensure_data_dirs(settings.data_dir)
 
-    app = FastAPI(title="lrc-roller", version="0.4.3")
+    app = FastAPI(title="lrc-roller", version="0.5.2")
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", f"http://{settings.host}:{settings.port}"],
@@ -65,26 +66,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     jobs = JobManager()
     projects = ProjectService(paths["projects"])
     lrclib = LrclibService()
-    runtime = RuntimeService(data_dir=paths["root"], jobs=jobs)
+    runtime_manager = RuntimeManager(paths["root"])
+    runtime = RuntimeService(data_dir=paths["root"], jobs=jobs, manager=runtime_manager)
     roller = RollerService(
         projects_root=paths["projects"],
         outputs_root=paths["outputs"],
         project_service=projects,
         jobs=jobs,
         settings_provider=runtime.get_settings,
+        runtime_manager=runtime_manager,
     )
     upload = UploadService(projects)
 
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
         pyok, pyver, pydetail = pylrclib_adapter.dependency_status()
-        rok, rver, rdetail = pyroller_adapter.dependency_status()
+        runtime_info = runtime.get_auto_roller_runtime()
         return HealthResponse(
             ok=True,
             port=settings.port,
             data_dir=str(settings.data_dir),
             pylrclib=HealthDependency(available=pyok, version=pyver, detail=pydetail),
-            pyroller=HealthDependency(available=rok, version=rver, detail=rdetail),
+            pyroller=HealthDependency(available=runtime_info.available, version=runtime_info.version, detail=runtime_info.detail or runtime_info.runtime_status),
         )
 
     @app.post("/api/projects", response_model=ProjectModel)

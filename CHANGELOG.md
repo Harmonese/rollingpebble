@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.5.4
+
+- Polished Auto Timing settings terminology and kept matching controls aligned between Settings and the main Auto Timing panel.
+- Reduced processing presets to the currently supported Quick and Full flows.
+- Moved model download options into their own Advanced Parameters section and removed one-click network preset buttons from the UI.
+- Changed the default Auto Timing BY tag to `LRC Roller`.
+- Refined the startup avatar presentation to remove the framed rounded-rectangle treatment and scale more safely on shorter displays.
+
+
+## 0.5.3
+
+- Refined isolated py-roller runtime upgrade and diagnostics behavior.
+- Changed runtime creation/repair to upgrade `py-roller>=0.5.6,<0.6` when using the PyPI runtime source.
+- Centralized the py-roller runtime version requirement to avoid drift between status and installer code.
+- Updated `lrc-roller doctor --run-pyroller-doctor` to run doctor inside the isolated runtime instead of PATH.
+- Persisted failed runtime install/check results so Settings can show the latest failure after refresh.
+- Kept pip raw output in logs while preventing `install_subprocess_output` events from crowding out structured install steps.
+- Added a simple guard to avoid repairing the runtime while Auto Timing is running, and to avoid starting Auto Timing during runtime repair.
+- Removed redundant runtime action notices; the runtime terminal now provides the task state.
+
+## 0.5.2
+
+- Integrated py-roller 0.5.6 runtime install JSONL progress and JSON doctor reports.
+- Changed isolated runtime creation to call `py-roller install --progress-format jsonl --output-format json`.
+- Changed Runtime Check to call `py-roller doctor --output-format json`.
+- Added structured runtime step rendering in Settings and moved runtime notices next to the runtime terminal.
+- Folded raw runtime logs behind a details panel and included doctor/install JSON reports in diagnostics.
+- Raised the isolated runtime package requirement to `py-roller>=0.5.6,<0.6`.
+
+## 0.5.1
+
+- Fixed isolated runtime installation failing before the installer starts when the runtime directory does not exist yet.
+- Improved subprocess job error logging when a command cannot be started.
+
+## 0.5.0 - 2026-05-13
+
+- Moved Auto Timing to an isolated py-roller runtime virtual environment under the lrc-roller data directory.
+- Changed Runtime install/repair to create or repair that isolated runtime instead of modifying the lrc-roller backend .venv.
+- Changed Auto Timing command generation to call the runtime Python with `-m pyroller.cli.main`, avoiding PATH-based py-roller resolution.
+- Added runtime liveness metadata to jobs, including PID, elapsed time, last output time, and return code.
+- Added runtime task cancellation using process groups on POSIX systems.
+
 ## 0.4.3 - 2026-05-12
 
 - Fixed a React hook-order crash when changing the editor metadata setting.
@@ -10,7 +52,7 @@
 
 - Fixed the Recent projects limit setting so it persists and updates the project list as expected.
 - Simplified Lyrics Import settings by removing automatic imported-LRC cleanup from the UI; imported lyrics now remain unchanged by default.
-- Added a Synchronizer & Editor setting to show or hide the metadata editor.
+- Introduced an editor metadata setting, later corrected in 0.4.3 to control metadata tag writing.
 - Cleaned up Auto Timing settings copy and runtime controls; runtime logs now appear directly under the runtime action buttons.
 
 ## 0.4.1 - 2026-05-12

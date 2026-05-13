@@ -1,6 +1,6 @@
 {
   "name": "lrc-roller-frontend",
-  "version": "0.4.3",
+  "version": "0.5.4",
   "description": "Local WebUI for pylrclib and py-roller lyrics timing workflow",
   "repository": "https://github.com/Harmonese/lrc-roller",
   "author": "Harmonese",

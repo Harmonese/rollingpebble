@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata
+import json
 import os
 import shutil
 import socket
@@ -15,6 +16,8 @@ import uvicorn
 
 from lrc_roller.config import DEFAULT_HOST, DEFAULT_PORT, Settings
 from lrc_roller.main import create_app
+from lrc_roller.services.runtime_manager import RuntimeManager
+from lrc_roller.storage.app_settings import SettingsStore
 
 
 def _repo_root() -> Path:
@@ -41,15 +44,16 @@ def build_parser() -> argparse.ArgumentParser:
     dev.add_argument("--frontend-port", type=int, default=5173)
     dev.add_argument("--no-backend-reload", action="store_true", help="Disable uvicorn reload in dev mode")
 
-    setup = subparsers.add_parser("setup", help="Install/check optional runtime dependencies")
+    setup = subparsers.add_parser("setup", help="Install/check frontend and isolated Auto Timing runtime")
     setup.add_argument("--profile", choices=("auto", "cpu", "cu124"), default="auto", help="py-roller install profile")
     setup.add_argument("--skip-frontend", action="store_true", help="Do not run pnpm install")
-    setup.add_argument("--skip-roller", action="store_true", help="Do not install py-roller audio runtime")
+    setup.add_argument("--skip-roller", action="store_true", help="Do not create/repair the isolated py-roller runtime")
     setup.add_argument("--skip-doctor", action="store_true", help="Pass --skip-doctor to py-roller install")
     setup.add_argument("--dry-run", action="store_true", help="Print commands without running them")
 
-    doctor = subparsers.add_parser("doctor", help="Show lrc-roller, frontend, pylrclib, and py-roller status")
-    doctor.add_argument("--run-pyroller-doctor", action="store_true", help="Also execute 'py-roller doctor'")
+    doctor = subparsers.add_parser("doctor", help="Show lrc-roller, frontend, pylrclib, and isolated py-roller runtime status")
+    doctor.add_argument("--run-pyroller-doctor", action="store_true", help="Also execute py-roller doctor inside the isolated runtime")
+    doctor.add_argument("--profile", choices=("auto", "cpu", "cu124"), default=None, help="Runtime profile to inspect; defaults to saved settings")
     return parser
 
 
@@ -131,21 +135,14 @@ def _setup(args: argparse.Namespace) -> int:
             return code
 
     if not args.skip_roller:
-        # py-roller base package is intentionally lightweight; the audio stack is installed by py-roller install.
-        if shutil.which("py-roller") is None:
-            code = _run([sys.executable, "-m", "pip", "install", "py-roller>=0.5.4"], dry_run=args.dry_run)
-            if code != 0:
-                return code
-        cmd = ["py-roller", "install", "--profile", args.profile]
+        settings = Settings.from_env()
+        cmd = [sys.executable, "-m", "lrc_roller.runtime_installer", "--data-dir", str(settings.data_dir), "--profile", args.profile]
         if args.skip_doctor:
             cmd.append("--skip-doctor")
-        if args.dry_run:
-            cmd.append("--dry-run")
-        code = _run(cmd, dry_run=False)
+        code = _run(cmd, dry_run=args.dry_run)
         if code != 0:
             return code
-    return _doctor(argparse.Namespace(run_pyroller_doctor=not args.skip_roller and not args.dry_run))
-
+    return _doctor(argparse.Namespace(run_pyroller_doctor=not args.skip_roller and not args.dry_run, profile=args.profile))
 
 def _package_version(name: str) -> str | None:
     try:
@@ -165,8 +162,18 @@ def _doctor(args: argparse.Namespace) -> int:
     _print_row("Source root", str(root))
     _print_row("lrc-roller", _package_version("lrc-roller") or "not installed")
     _print_row("pylrclib-cli", _package_version("pylrclib-cli") or "not installed")
-    _print_row("py-roller", _package_version("py-roller") or "not installed")
-    _print_row("py-roller CLI", shutil.which("py-roller") or "not found")
+    settings = Settings.from_env()
+    runtime_settings = SettingsStore(settings.data_dir).read()
+    runtime_profile = args.profile or runtime_settings.auto_roller_profile
+    runtime_manager = RuntimeManager(settings.data_dir)
+    runtime_info = runtime_manager.inspect(runtime_profile)
+    _print_row("py-roller (backend)", _package_version("py-roller") or "not installed")
+    _print_row("py-roller CLI (PATH)", shutil.which("py-roller") or "not found")
+    _print_row("runtime profile", runtime_profile)
+    _print_row("runtime status", runtime_info.status)
+    _print_row("runtime id", runtime_info.runtime_id)
+    _print_row("runtime python", str(runtime_info.python_path))
+    _print_row("runtime py-roller", runtime_info.version or "not installed")
     _print_row("node", shutil.which("node") or "not found")
     _print_row("pnpm", shutil.which("pnpm") or "not found")
     _print_row("frontend package", "yes" if (root / "frontend" / "package.json").exists() else "not found")
@@ -180,13 +187,34 @@ def _doctor(args: argparse.Namespace) -> int:
         _print_row("lrc_roller module", f"import failed: {exc.__class__.__name__}: {exc}")
 
     if args.run_pyroller_doctor:
-        if shutil.which("py-roller") is None:
-            print("\nCannot run py-roller doctor: py-roller CLI not found.", file=sys.stderr)
+        if not runtime_info.ready:
+            print("\nCannot run py-roller doctor: isolated runtime is not ready.", file=sys.stderr)
             return 1
-        print("\npy-roller doctor:")
-        return _run(["py-roller", "doctor"])
+        print("\npy-roller doctor (isolated runtime):")
+        result = subprocess.run(
+            runtime_manager.doctor_command(runtime_profile),
+            cwd=str(runtime_info.runtime_root),
+            text=True,
+            capture_output=True,
+            env=runtime_manager.runtime_env(runtime_info.venv_path),
+        )
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            payload = None
+        if isinstance(payload, dict):
+            for check in payload.get("checks", []):
+                if isinstance(check, dict):
+                    status = str(check.get("status", "")).upper()
+                    name = str(check.get("name", "check"))
+                    message = str(check.get("message", ""))
+                    print(f"[{status:<4}] {name:<18} {message}")
+        else:
+            print(result.stdout, end="")
+        if result.stderr:
+            print(result.stderr, end="", file=sys.stderr)
+        return result.returncode
     return 0
-
 
 def _dev(args: argparse.Namespace) -> int:
     root = _repo_root()

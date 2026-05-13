@@ -81,6 +81,12 @@ export type JobModel = {
     error?: string | null;
     progress?: JobProgress | null;
     completed_stages: string[];
+    events?: Record<string, unknown>[];
+    pid?: number | null;
+    return_code?: number | null;
+    started_at?: string | null;
+    updated_at?: string | null;
+    last_output_at?: string | null;
 };
 
 export type RollPreview = {
@@ -153,10 +159,12 @@ export type RuntimeSettings = {
     last_doctor_at?: string | null;
     last_install_profile?: string | null;
     last_install_at?: string | null;
+    last_install_status?: string | null;
 };
 
 export type AutoRollerRuntime = {
     engine: string;
+    mode: string;
     available: boolean;
     version?: string | null;
     cli_path?: string | null;
@@ -165,6 +173,16 @@ export type AutoRollerRuntime = {
     model_store: string;
     settings: RuntimeSettings;
     detail?: string | null;
+    runtime_id?: string | null;
+    runtime_status: string;
+    runtime_profile?: string | null;
+    runtime_root?: string | null;
+    runtime_venv?: string | null;
+    runtime_python?: string | null;
+    runtime_source?: string | null;
+    runtime_requirement?: string | null;
+    doctor_report?: Record<string, unknown> | null;
+    install_report?: Record<string, unknown> | null;
 };
 
 function parseResponseText(text: string): unknown {

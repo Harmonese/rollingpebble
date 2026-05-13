@@ -19,6 +19,7 @@ import {
   HF_XET_OPTIONS,
   KARAOKE_TAG_OPTIONS,
   LANGUAGE_OPTIONS,
+  LOCAL_CACHE_OPTIONS,
   LOG_LEVEL_OPTIONS,
   PARSER_ENCODING_OPTIONS,
   REPETITION_OPTIONS,
@@ -29,6 +30,7 @@ import {
   defaultModelFor,
   includesStage,
   isFasterWhisper,
+  normalizeStages,
   normalizeTranscriberBackend,
   normalizeTranscriberDevice,
   transcriberBackendOptions,
@@ -58,12 +60,6 @@ function formatCommandPreview(commandText?: string | null): string {
   return commandText.replace(/\s--/g, " \\\n  --");
 }
 
-function preferRemoteDnsProxy(proxy: string): string {
-  const text = proxy.trim();
-  if (!text) return "socks5h://127.0.0.1:9909";
-  if (text.startsWith("socks5://")) return `socks5h://${text.slice("socks5://".length)}`;
-  return text;
-}
 
 
 type InputState = {
@@ -220,7 +216,7 @@ export const RollerPanel: React.FC<{
 
   const [alignerBackend, setAlignerBackend] = useState("global_dp_v1");
   const [alignerMinGap, setAlignerMinGap] = useState("0.5");
-  const [writerByTag, setWriterByTag] = useState("py-roller");
+  const [writerByTag, setWriterByTag] = useState("LRC Roller");
   const [writerKaraokeTag, setWriterKaraokeTag] = useState("kf");
 
   const [job, setJob] = useState<JobModel | null>(null);
@@ -240,7 +236,7 @@ export const RollerPanel: React.FC<{
       const nextBackend = normalizeTranscriberBackend(nextLanguage, settings.auto_timing_transcriber_backend || "faster_whisper");
       const nextModel = settings.auto_timing_transcriber_model_name || defaultModelFor(nextLanguage, nextBackend);
       setLanguage(nextLanguage);
-      setStages(settings.auto_timing_default_stages || "t,p,a,w");
+      setStages(normalizeStages(settings.auto_timing_default_stages || "t,p,a,w"));
       setWriterBackend(settings.auto_timing_default_writer_backend || "lrc_ms");
       setWriterSpacing(settings.auto_timing_default_writer_spacing || "keep");
       setCleanup(settings.auto_timing_default_cleanup || "never");
@@ -268,7 +264,7 @@ export const RollerPanel: React.FC<{
       setParserEncoding(settings.auto_timing_parser_lyrics_encoding || "auto");
       setAlignerBackend(settings.auto_timing_aligner_backend || "global_dp_v1");
       setAlignerMinGap(settings.auto_timing_aligner_min_gap == null ? "0.5" : String(settings.auto_timing_aligner_min_gap));
-      setWriterByTag(settings.auto_timing_writer_by_tag || "py-roller");
+      setWriterByTag(settings.auto_timing_writer_by_tag === "py-roller" ? "LRC Roller" : (settings.auto_timing_writer_by_tag || "LRC Roller"));
       setWriterKaraokeTag(settings.auto_timing_writer_ass_karaoke_tag_type || "kf");
     } catch {
       // Settings are optional for initial rendering. Keep built-in defaults.
@@ -485,36 +481,10 @@ export const RollerPanel: React.FC<{
     }
   };
 
-  const useCliLikeDownload = () => {
-    setLocalOnly("off");
-    setHfXet("off");
-    setHfProxy("");
-    setHfEtagTimeout("");
-    setHfDownloadTimeout("");
-    setHfMaxWorkers("");
-    setMessage("Direct-network download settings selected for this run.");
-  };
-
-  const useRestrictedNetworkDownload = () => {
-    const proxy = preferRemoteDnsProxy(hfProxy);
-    setLocalOnly("off");
-    setHfXet("off");
-    setHfProxy(proxy);
-    setHfEtagTimeout("");
-    setHfDownloadTimeout("");
-    setHfMaxWorkers("");
-    setMessage(`Restricted-network download settings selected for this run.`);
-  };
-
-  const useOfflineCache = () => {
-    setLocalOnly("on");
-    setMessage("This run will use local model cache only.");
-  };
 
   const commandPreviewText = formatCommandPreview(preview?.command_text);
 
   const running = !!job && ["queued", "running"].includes(job.status);
-  const selectedStage = STAGE_OPTIONS.find((item) => item.value === stages);
   const startDisabled = busy || running || !inputState.ready;
   const logsOpen = !!job && ["running", "failed", "succeeded", "canceled"].includes(job.status);
   const progress = job?.progress || null;
@@ -565,15 +535,27 @@ export const RollerPanel: React.FC<{
           </select>
         </label>
       </div>
-      {selectedStage && <p className="roller-muted">{selectedStage.help}</p>}
-
       <details>
-        <summary>Advanced task parameters</summary>
+        <summary>Advanced Parameters</summary>
         <div className="roller-section-title">Pipeline runtime</div>
         <div className="roller-form two-col">
           <label>Cleanup policy<select value={cleanup} onChange={(ev) => setCleanup(ev.target.value)}>{optionNodes(CLEANUP_OPTIONS)}</select></label>
           <label>Log level<select value={logLevel} onChange={(ev) => setLogLevel(ev.target.value)}>{optionNodes(LOG_LEVEL_OPTIONS)}</select></label>
         </div>
+
+        {includesTranscriber && (
+          <>
+            <div className="roller-section-title">Model download</div>
+            <div className="roller-form two-col">
+              <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
+              <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+              <label>Metadata timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
+              <label>File download timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
+              <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
+              <label>Local cache mode<select value={localOnly} onChange={(ev) => setLocalOnly(ev.target.value as LocalOnly)}>{optionNodes(LOCAL_CACHE_OPTIONS)}</select></label>
+            </div>
+          </>
+        )}
 
         {includesSplitter && (
           <>
@@ -605,18 +587,7 @@ export const RollerPanel: React.FC<{
               <label>Model name<select value={transcriberModel} onChange={(ev) => setTranscriberModel(ev.target.value)}>{optionNodes(transcriberModelOptions(language, transcriberBackend))}</select></label>
               <label>Compute type<select value={transcriberComputeType} onChange={(ev) => setTranscriberComputeType(ev.target.value)} disabled={!transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS)}</select></label>
               <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
-              <label>Local cache mode<select value={localOnly} onChange={(ev) => setLocalOnly(ev.target.value as LocalOnly)}><option value="off">Allow download if missing</option><option value="on">Use local cache only</option></select></label>
             </div>
-
-            <div className="roller-section-title">Model download</div>
-            <div className="roller-form two-col">
-              <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
-              <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
-              <label>Metadata timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
-              <label>File download timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
-              <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
-            </div>
-            <div className="roller-actions download-presets"><button type="button" onClick={useRestrictedNetworkDownload}>Restricted network</button><button type="button" onClick={useCliLikeDownload}>Direct network</button><button type="button" onClick={useOfflineCache}>Offline cache</button></div>
           </>
         )}
 
@@ -641,7 +612,7 @@ export const RollerPanel: React.FC<{
           <>
             <div className="roller-section-title">Writer</div>
             <div className="roller-form two-col">
-              <label>BY tag<input placeholder="py-roller" value={writerByTag} onChange={(ev) => setWriterByTag(ev.target.value)} /></label>
+              <label>BY tag<input placeholder="LRC Roller" value={writerByTag} onChange={(ev) => setWriterByTag(ev.target.value)} /></label>
               <label>ASS karaoke tag<select value={writerKaraokeTag} onChange={(ev) => setWriterKaraokeTag(ev.target.value)} disabled={!writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS)}</select></label>
             </div>
           </>

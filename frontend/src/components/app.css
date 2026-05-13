@@ -286,8 +286,8 @@ select, input, textarea, button {
 .roller-splash-card {
     position: fixed;
     inset: 0;
-    width: min(44vmin, 280px);
-    height: min(44vmin, 280px);
+    width: min(62vw, 42vmin, 280px);
+    height: min(62dvh, 42vmin, 280px);
     margin: auto;
     display: grid;
     place-items: center;
@@ -295,33 +295,34 @@ select, input, textarea, button {
 }
 
 .roller-splash-avatar {
-    width: min(34vmin, 216px);
-    height: min(34vmin, 216px);
-    object-fit: cover;
-    border-radius: 28%;
-    border: 1px solid rgba(var(--theme-rgb), 0.52);
+    width: min(54vw, 34vmin, 216px);
+    height: min(54dvh, 34vmin, 216px);
+    object-fit: contain;
+    border-radius: 0;
+    border: 0;
     box-shadow:
-        0 0 0 8px rgba(var(--theme-rgb), 0.07),
-        0 0 42px rgba(var(--theme-rgb), 0.28),
-        0 24px 70px rgba(0, 0, 0, 0.45);
+        0 0 46px rgba(var(--theme-rgb), 0.26),
+        0 24px 70px rgba(0, 0, 0, 0.38);
     animation: roller-splash-float 2.8s ease-in-out infinite alternate;
 }
 
 .roller-splash-orbit {
     position: absolute;
-    inset: 8%;
+    inset: 4%;
     z-index: -1;
-    border-radius: 32%;
-    border: 1px solid rgba(var(--theme-rgb), 0.42);
-    border-top-color: rgba(94, 197, 255, 0.78);
-    border-left-color: rgba(94, 197, 255, 0.2);
-    filter: drop-shadow(0 0 10px rgba(var(--theme-rgb), 0.32));
+    border-radius: 50%;
+    border: 0;
+    background:
+        radial-gradient(circle, rgba(var(--theme-rgb), 0.17), transparent 58%),
+        conic-gradient(from 90deg, transparent, rgba(var(--theme-rgb), 0.32), transparent 42%);
+    filter: blur(0.2px) drop-shadow(0 0 14px rgba(var(--theme-rgb), 0.24));
+    opacity: 0.85;
     animation: roller-splash-orbit 3.2s linear infinite;
 }
 
 .roller-splash-title {
     position: absolute;
-    bottom: -2.1rem;
+    bottom: clamp(-2rem, -5dvh, -1.15rem);
     color: var(--roller-text);
     font-size: clamp(1rem, 2.8vmin, 1.35rem);
     font-weight: 760;

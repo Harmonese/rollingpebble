@@ -203,6 +203,12 @@ class JobModel(BaseModel):
     error: str | None = None
     progress: JobProgressModel | None = None
     completed_stages: list[str] = Field(default_factory=list)
+    events: list[dict[str, Any]] = Field(default_factory=list)
+    pid: int | None = None
+    return_code: int | None = None
+    started_at: str | None = None
+    updated_at: str | None = None
+    last_output_at: str | None = None
 
 
 class LocalPathRequest(BaseModel):
@@ -260,7 +266,7 @@ class RuntimeSettingsModel(BaseModel):
     auto_timing_aligner_min_gap: float | None = 0.5
     auto_timing_aligner_repetition: Literal["none", "few", "full"] = "none"
 
-    auto_timing_writer_by_tag: str = "py-roller"
+    auto_timing_writer_by_tag: str = "LRC Roller"
     auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] = "kf"
 
     recent_projects_limit: int = 8
@@ -269,10 +275,12 @@ class RuntimeSettingsModel(BaseModel):
     last_doctor_at: str | None = None
     last_install_profile: str | None = None
     last_install_at: str | None = None
+    last_install_status: str | None = None
 
 
 class AutoRollerRuntimeResponse(BaseModel):
     engine: str = "py-roller"
+    mode: str = "isolated"
     available: bool
     version: str | None = None
     cli_path: str | None = None
@@ -281,11 +289,23 @@ class AutoRollerRuntimeResponse(BaseModel):
     model_store: str
     settings: RuntimeSettingsModel
     detail: str | None = None
+    runtime_id: str | None = None
+    runtime_status: str = "missing"
+    runtime_profile: str | None = None
+    runtime_root: str | None = None
+    runtime_venv: str | None = None
+    runtime_python: str | None = None
+    runtime_source: str | None = None
+    runtime_requirement: str | None = None
+    doctor_report: dict[str, Any] | None = None
+    install_report: dict[str, Any] | None = None
 
 
 class RuntimeInstallRequest(BaseModel):
     profile: Literal["auto", "cpu", "cu124"] = "auto"
     skip_doctor: bool = False
+    # Kept for compatibility with older frontends. v0.5.0 always creates or repairs
+    # the isolated runtime; dry-run is intentionally ignored.
     dry_run: bool = False
 
 
