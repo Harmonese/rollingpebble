@@ -1,7 +1,7 @@
 {
   "name": "lrc-roller-frontend",
-  "version": "0.3.12",
-  "description": "Local WebUI for pylrclib, py-roller, and lrc-maker workflow",
+  "version": "0.4.3",
+  "description": "Local WebUI for pylrclib and py-roller lyrics timing workflow",
   "repository": "https://github.com/Harmonese/lrc-roller",
   "author": "Harmonese",
   "license": "MIT",
@@ -11,8 +11,8 @@
     "lyric",
     "lyric maker"
   ],
-  "bugs": "https://github.com/magic-akari/lrc-maker/issues",
-  "homepage": "https://github.com/magic-akari/lrc-maker#readme",
+  "bugs": "https://github.com/Harmonese/lrc-roller/issues",
+  "homepage": "https://github.com/Harmonese/lrc-roller#readme",
   "files": [
     "src",
     "build"

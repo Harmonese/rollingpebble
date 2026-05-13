@@ -172,7 +172,7 @@ input[type="number"] {
     border-radius: 0;
 }
 
-.akari-hide-wall {
+.roller-side-mascot {
     position: fixed;
     right: 0;
     bottom: 32px;
@@ -181,11 +181,11 @@ input[type="number"] {
     height: 256px;
     transform: translateX(100%);
     opacity: 0.8;
-    animation: akari-slide-in 500ms var(--animation-out-back) 3s forwards, akari-float 20s ease-in-out 4s infinite;
+    animation: roller-side-slide-in 500ms var(--animation-out-back) 3s forwards, roller-side-float 20s ease-in-out 4s infinite;
     stroke-width: 4px;
 }
 
-@keyframes akari-slide-in {
+@keyframes roller-side-slide-in {
     from {
         transform: translateX(100%);
     }
@@ -195,7 +195,7 @@ input[type="number"] {
     }
 }
 
-@keyframes akari-float {
+@keyframes roller-side-float {
     0% {
         transform: translate(34%, 0);
     }

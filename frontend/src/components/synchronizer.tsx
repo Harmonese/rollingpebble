@@ -45,7 +45,7 @@ export const Synchronizer: React.FC<ISynchronizerProps> = ({ state, dispatch }) 
             type: ActionType.info,
             payload: {
                 name: "tool",
-                value: `${lang.app.name} https://lrc-maker.github.io`,
+                value: "LRC Roller https://github.com/Harmonese/lrc-roller",
             },
         });
     }, [dispatch, lang]);

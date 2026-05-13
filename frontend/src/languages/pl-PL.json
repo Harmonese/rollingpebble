@@ -1,8 +1,8 @@
 {
     "languageName": "Polski",
     "app": {
-        "name": "LRC Maker",
-        "fullname": "Akari LRC Maker"
+        "name": "LRC Roller",
+        "fullname": "LRC Roller"
     },
     "header": {
         "home": "strona główna",
@@ -54,7 +54,7 @@
         "utils": "narzędzia LRC"
     },
     "gist": {
-        "newTokenTip": "LRC Maker używa Tokena Github do pobierania i przechowywania danych w Github Gist",
+        "newTokenTip": "LRC Roller używa Tokena Github do pobierania i przechowywania danych w Github Gist",
         "newTokenButton": "Wygeneruj nowy Token Github",
         "newGistTip": "Utwórz nowe repozytorium Gist lub przypisz istniejący identyfikator Gist",
         "newGistRepoButton": "Utwórz nowe repozytorium Gist",

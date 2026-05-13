@@ -5,7 +5,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import { themeColor, ThemeMode } from "../hooks/usePref.js";
 import { unregister } from "../utils/sw.unregister.js";
 import { appContext, ChangBits } from "./app.context.js";
-import { AkariHideWall } from "./svg.img.js";
+import { LrcRollerSideMascot } from "./svg.img.js";
 
 const numberInputProps = { type: "number", step: 1 } as const;
 
@@ -459,7 +459,7 @@ export const Preferences: React.FC = () => {
                     <section className="list-item">{lang.preferences.clearCache}</section>
                 </li>
             </ul>
-            <AkariHideWall />
+            <LrcRollerSideMascot />
         </div>
     );
 };

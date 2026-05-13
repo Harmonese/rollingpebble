@@ -1,8 +1,8 @@
 {
     "languageName": "English",
     "app": {
-        "name": "LRC Maker",
-        "fullname": "Akari's LRC Maker"
+        "name": "LRC Roller",
+        "fullname": "LRC Roller"
     },
     "header": {
         "home": "home",
@@ -54,7 +54,7 @@
         "utils": "LRC utilities"
     },
     "gist": {
-        "newTokenTip": "LRC Maker use Github Token to fetch and store data to Github Gist",
+        "newTokenTip": "LRC Roller uses Github Token to fetch and store data to Github Gist",
         "newTokenButton": "Generate a new Github Token",
         "newGistTip": "Create a new Gist repository or assign an existing Gist id",
         "newGistRepoButton": "Create a new Gist Repository",

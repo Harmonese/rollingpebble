@@ -1,5 +1,5 @@
 @font-face {
-    font-family: "Akari Fallback UI";
+    font-family: "LRC Roller Fallback UI";
     src:
         local("Segoe UI"),
         local("Roboto"),
@@ -14,7 +14,7 @@
 :root {
     color: var(--font-color);
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "Akari Fallback UI", sans-serif, "Apple Color Emoji",
+        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
     background-color: var(--background-color);
     font-feature-settings: "kern" 1;
@@ -29,28 +29,28 @@
 
 [lang]:lang(zh) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "Akari Fallback UI", "PingFang SC", "Microsoft YaHei UI",
+        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", "PingFang SC", "Microsoft YaHei UI",
         "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif,
         "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 [lang]:lang(zh-HK) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "Akari Fallback UI", "PingFang HK", "Microsoft JhengHei UI",
+        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", "PingFang HK", "Microsoft JhengHei UI",
         "Microsoft JhengHei", "Source Han Sans HK", "Noto Sans CJK TC", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
 }
 
 [lang]:lang(zh-TW) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "Akari Fallback UI", "PingFang TC", "Microsoft JhengHei UI",
+        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", "PingFang TC", "Microsoft JhengHei UI",
         "Microsoft JhengHei", "Source Han Sans TW", "Noto Sans CJK TC", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
 }
 
 [lang]:lang(ja) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "Akari Fallback UI", "Hiragino Kaku Gothic Pro", "Yu Gothic UI",
+        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", "Hiragino Kaku Gothic Pro", "Yu Gothic UI",
         "Yu Gothic", "Meiryo UI", Meiryo, "Source Han Sans JP", "Noto Sans CJK JP", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
 }
@@ -188,7 +188,7 @@ a > * {
     content: "";
 }
 
-.akari-odango-loading {
+.roller-legacy-loading {
     position: fixed;
     inset: 0;
     width: 50vmin;
@@ -198,10 +198,10 @@ a > * {
 }
 
 .start-loading {
-    animation: akari-loading 2s linear infinite;
+    animation: roller-legacy-loading 2s linear infinite;
 }
 
-@keyframes akari-loading {
+@keyframes roller-legacy-loading {
     from {
         transform: rotate(0deg) translateX(-2vmin) rotate(0deg);
     }
@@ -211,7 +211,7 @@ a > * {
     }
 }
 
-.akari-not-found {
+.roller-empty-illustration {
     flex: 1 1 auto;
     align-self: center;
     max-width: 100vw;
@@ -273,4 +273,88 @@ select, input, textarea, button {
 .button {
     color: var(--roller-text);
     background-color: var(--roller-surface-2);
+}
+
+/* lrc-roller v0.4.0 startup screen */
+.page-loading::before {
+    background:
+        radial-gradient(circle at 50% 45%, rgba(var(--theme-rgb), 0.12), transparent 32vmin),
+        linear-gradient(180deg, #161a1f 0%, #0b0e10 100%);
+    opacity: 1;
+}
+
+.roller-splash-card {
+    position: fixed;
+    inset: 0;
+    width: min(44vmin, 280px);
+    height: min(44vmin, 280px);
+    margin: auto;
+    display: grid;
+    place-items: center;
+    isolation: isolate;
+}
+
+.roller-splash-avatar {
+    width: min(34vmin, 216px);
+    height: min(34vmin, 216px);
+    object-fit: cover;
+    border-radius: 28%;
+    border: 1px solid rgba(var(--theme-rgb), 0.52);
+    box-shadow:
+        0 0 0 8px rgba(var(--theme-rgb), 0.07),
+        0 0 42px rgba(var(--theme-rgb), 0.28),
+        0 24px 70px rgba(0, 0, 0, 0.45);
+    animation: roller-splash-float 2.8s ease-in-out infinite alternate;
+}
+
+.roller-splash-orbit {
+    position: absolute;
+    inset: 8%;
+    z-index: -1;
+    border-radius: 32%;
+    border: 1px solid rgba(var(--theme-rgb), 0.42);
+    border-top-color: rgba(94, 197, 255, 0.78);
+    border-left-color: rgba(94, 197, 255, 0.2);
+    filter: drop-shadow(0 0 10px rgba(var(--theme-rgb), 0.32));
+    animation: roller-splash-orbit 3.2s linear infinite;
+}
+
+.roller-splash-title {
+    position: absolute;
+    bottom: -2.1rem;
+    color: var(--roller-text);
+    font-size: clamp(1rem, 2.8vmin, 1.35rem);
+    font-weight: 760;
+    letter-spacing: 0.04em;
+    text-shadow: 0 0 18px rgba(var(--theme-rgb), 0.35);
+}
+
+.roller-splash-start {
+    animation: roller-splash-in 700ms ease-out both;
+}
+
+@keyframes roller-splash-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.94);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes roller-splash-float {
+    from {
+        transform: translateY(-2px) scale(0.995);
+    }
+    to {
+        transform: translateY(5px) scale(1.012);
+    }
+}
+
+@keyframes roller-splash-orbit {
+    to {
+        transform: rotate(360deg);
+    }
 }

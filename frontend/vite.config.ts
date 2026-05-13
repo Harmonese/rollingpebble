@@ -20,7 +20,7 @@ export default defineConfig({
         "import.meta.env.app": JSON.stringify({
             hash: "dev",
             updateTime: new Date().toISOString(),
-            version: "0.2.1",
+            version: "0.4.3",
         }),
         "i18n.langCodeList": JSON.stringify(langCodeList),
         "i18n.langMap": JSON.stringify(langMap),

@@ -34,7 +34,6 @@ export const LrclibPanel: React.FC<{
     const [message, setMessage] = useState("");
     const [busy, setBusy] = useState(false);
     const [autoFillFromProject, setAutoFillFromProject] = useState(true);
-    const [autoCleanupImportedLyrics, setAutoCleanupImportedLyrics] = useState(false);
     const [localFileName, setLocalFileName] = useState("");
     const [localText, setLocalText] = useState("");
     const localInputRef = useRef<HTMLInputElement | null>(null);
@@ -44,10 +43,8 @@ export const LrclibPanel: React.FC<{
         try {
             const settings = await api.settings();
             setAutoFillFromProject(settings.auto_fill_lyrics_library_from_project_metadata);
-            setAutoCleanupImportedLyrics(settings.auto_cleanup_imported_lyrics);
         } catch {
             setAutoFillFromProject(true);
-            setAutoCleanupImportedLyrics(false);
         }
     };
 
@@ -124,18 +121,9 @@ export const LrclibPanel: React.FC<{
         }
     };
 
-    const maybeCleanSyncedLyrics = async (text: string): Promise<string> => {
-        const raw = text.trim();
-        if (!raw || !autoCleanupImportedLyrics || !hasLrcTimestamps(raw)) {
-            return raw;
-        }
-        const result = await api.cleanLrc({ text: raw, remove_translations: true });
-        return result.cleaned_text || raw;
-    };
-
     const importRecord = async (record: LyricsRecord, mode: "plain" | "synced") => {
         try {
-            const syncedLyrics = mode === "plain" ? "" : await maybeCleanSyncedLyrics(record.synced_lyrics);
+            const syncedLyrics = mode === "plain" ? "" : record.synced_lyrics.trim();
             const plainLyrics = mode === "synced" ? "" : record.plain_lyrics;
             const payload = {
                 metadata: {
@@ -159,7 +147,7 @@ export const LrclibPanel: React.FC<{
                 const updated = await api.applyLyrics(project.project_id, payload);
                 onProject(updated, false);
             }
-            setMessage(autoCleanupImportedLyrics && syncedLyrics ? "Imported lyrics. Auto-clean was applied when needed." : "Imported lyrics.");
+            setMessage("Imported lyrics.");
         } catch (error) {
             setMessage((error as Error).message);
         }
@@ -186,7 +174,7 @@ export const LrclibPanel: React.FC<{
         if (!raw) return;
         const synced = hasLrcTimestamps(raw);
         try {
-            const text = synced ? await maybeCleanSyncedLyrics(raw) : raw;
+            const text = raw;
             onImportText(text);
             if (project) {
                 const updated = await api.applyLyrics(project.project_id, {
@@ -259,12 +247,12 @@ export const LrclibPanel: React.FC<{
             {localFileName && <p className="roller-muted">Selected: {localFileName}</p>}
             <textarea
                 className="local-lyrics-preview"
-                placeholder="Local lyrics preview"
+                placeholder="Local lyrics input"
                 value={localText}
                 onChange={(ev) => setLocalText(ev.target.value)}
             />
             <div className="roller-actions">
-                <button type="button" disabled={!localText.trim()} onClick={importLocalText}>Import local lyrics</button>
+                <button type="button" disabled={!localText.trim()} onClick={importLocalText}>Import</button>
             </div>
         </div>
     );

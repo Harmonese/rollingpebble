@@ -58,6 +58,7 @@ export type JobProgress = {
     unit: string;
     message: string;
     percent?: number | null;
+    progress?: number | null;
     raw: string;
     done: boolean;
     failed: boolean;
@@ -79,6 +80,7 @@ export type JobModel = {
     result?: Record<string, unknown> | null;
     error?: string | null;
     progress?: JobProgress | null;
+    completed_stages: string[];
 };
 
 export type RollPreview = {
@@ -103,6 +105,8 @@ export type RuntimeSettings = {
     auto_roller_profile: "auto" | "cpu" | "cu124";
     auto_fill_lyrics_library_from_project_metadata: boolean;
     auto_cleanup_imported_lyrics: boolean;
+    editor_show_metadata: boolean;
+    editor_write_metadata_tags: boolean;
     upload_derive_plain_from_synced: boolean;
 
     auto_timing_default_language: "zh" | "en" | "mul";
@@ -142,6 +146,8 @@ export type RuntimeSettings = {
 
     auto_timing_writer_by_tag: string;
     auto_timing_writer_ass_karaoke_tag_type: "" | "k" | "K" | "kf" | "ko";
+
+    recent_projects_limit: number;
 
     last_doctor_status?: string | null;
     last_doctor_at?: string | null;

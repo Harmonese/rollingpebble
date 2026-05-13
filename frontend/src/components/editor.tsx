@@ -5,6 +5,7 @@ import type { Action as LrcAction } from "../hooks/useLrc.js";
 import { ActionType as LrcActionType } from "../hooks/useLrc.js";
 import { lrcFileName } from "../utils/lrc-file-name.js";
 import { api } from "../shared/api.js";
+import { EDITOR_LRC_CLEANUP_REQUEST_EVENT, type EditorLrcCleanupRequest } from "../shared/editorCleanupEvents.js";
 import { appContext } from "./app.context.js";
 import { CopySVG, DownloadSVG, OpenFileSVG } from "./svg.js";
 
@@ -38,17 +39,26 @@ const useDefaultValue: UseDefaultValue = (defaultValue, ref) => {
 export const Eidtor: React.FC<{
     lrcState: LrcState;
     lrcDispatch: React.Dispatch<LrcAction>;
-}> = ({ lrcState, lrcDispatch }) => {
+    includeMetadataTags?: boolean;
+}> = ({ lrcState, lrcDispatch, includeMetadataTags = true }) => {
     const { prefState, trimOptions } = useContext(appContext);
+
+    const metadataHeader = useCallback((): string => {
+        return Array.from(lrcState.info.entries())
+            .map(([name, value]) => `[${name}:${value}]`)
+            .join("\n");
+    }, [lrcState.info]);
 
     const parse = useCallback(
         (ev: React.FocusEvent<HTMLTextAreaElement>) => {
+            const body = ev.target.value;
+            const text = includeMetadataTags ? body : [metadataHeader(), body].filter(Boolean).join("\n");
             lrcDispatch({
                 type: LrcActionType.parse,
-                payload: { text: ev.target.value, options: trimOptions },
+                payload: { text, options: trimOptions },
             });
         },
-        [lrcDispatch, trimOptions],
+        [includeMetadataTags, lrcDispatch, metadataHeader, trimOptions],
     );
 
     const setInfo = useCallback(
@@ -62,7 +72,7 @@ export const Eidtor: React.FC<{
         [lrcDispatch],
     );
 
-    const text = stringify(lrcState, prefState);
+    const text = includeMetadataTags ? stringify(lrcState, prefState) : stringify({ ...lrcState, info: new Map() } as LrcState, prefState);
 
     const details = useRef<HTMLDetailsElement>(null);
 
@@ -76,9 +86,6 @@ export const Eidtor: React.FC<{
 
     const textarea = useRef<HTMLInputLikeElement>(null);
     const [href, setHref] = useState<string | undefined>(undefined);
-    const [cleanupRemoveTranslations, setCleanupRemoveTranslations] = useState(true);
-    const [cleanupMessage, setCleanupMessage] = useState("");
-    const [cleanupBusy, setCleanupBusy] = useState(false);
 
     const onDownloadClick = useCallback(() => {
         setHref((url) => {
@@ -117,28 +124,39 @@ export const Eidtor: React.FC<{
         document.execCommand("copy");
     }, []);
 
-    const onCleanupClick = useCallback(async () => {
-        const current = textarea.current?.value ?? text;
-        setCleanupBusy(true);
-        setCleanupMessage("Cleaning current LRC text...");
-        try {
-            const result = await api.cleanLrc({ text: current, remove_translations: cleanupRemoveTranslations });
-            if (!result.cleaned_text) {
-                setCleanupMessage(result.reason ? `Cleanup skipped: ${result.reason}` : "Cleanup skipped: no cleaned text returned.");
+    useEffect(() => {
+        const onCleanupRequest = (event: Event) => {
+            const detail = (event as CustomEvent<EditorLrcCleanupRequest>).detail;
+            const current = textarea.current?.value ?? text;
+            if (!textarea.current) {
+                detail?.onResult?.({ ok: false, message: "Editor is not ready." });
                 return;
             }
-            textarea.current!.value = result.cleaned_text;
-            lrcDispatch({
-                type: LrcActionType.parse,
-                payload: { text: result.cleaned_text, options: trimOptions },
-            });
-            setCleanupMessage(result.status === "unchanged" ? "No cleanup changes were needed." : "Cleaned LRC applied to the editor.");
-        } catch (error) {
-            setCleanupMessage((error as Error).message);
-        } finally {
-            setCleanupBusy(false);
-        }
-    }, [cleanupRemoveTranslations, lrcDispatch, text, trimOptions]);
+            api.cleanLrc({ text: current, remove_translations: detail?.removeTranslations ?? true })
+                .then((result) => {
+                    if (!result.cleaned_text) {
+                        detail?.onResult?.({
+                            ok: false,
+                            message: result.reason ? `Cleanup skipped: ${result.reason}` : "Cleanup skipped: no cleaned text returned.",
+                        });
+                        return;
+                    }
+                    textarea.current!.value = result.cleaned_text;
+                    const parsedText = includeMetadataTags ? result.cleaned_text : [metadataHeader(), result.cleaned_text].filter(Boolean).join("\n");
+                    lrcDispatch({
+                        type: LrcActionType.parse,
+                        payload: { text: parsedText, options: trimOptions },
+                    });
+                    detail?.onResult?.({
+                        ok: true,
+                        message: result.status === "unchanged" ? "No cleanup changes were needed." : "Cleaned LRC applied to the editor.",
+                    });
+                })
+                .catch((error: Error) => detail?.onResult?.({ ok: false, message: error.message }));
+        };
+        window.addEventListener(EDITOR_LRC_CLEANUP_REQUEST_EVENT, onCleanupRequest);
+        return () => window.removeEventListener(EDITOR_LRC_CLEANUP_REQUEST_EVENT, onCleanupRequest);
+    }, [includeMetadataTags, lrcDispatch, metadataHeader, text, trimOptions]);
 
     const downloadName = useMemo(() => lrcFileName(lrcState.info), [lrcState.info]);
 
@@ -146,37 +164,37 @@ export const Eidtor: React.FC<{
         <div className="app-editor">
             <div className="editor-header-row">
                 <details ref={details} open={detailsOpened} onToggle={onDetailsToggle}>
-                    <summary>Metadata</summary>
-                    <section className="app-editor-infobox" onBlur={setInfo}>
-                        <label htmlFor="info-ti">[ti:</label>
-                        <input
-                            id="info-ti"
-                            name="ti"
-                            placeholder="Title"
-                            {...disableCheck}
-                            {...useDefaultValue(lrcState.info.get("ti") || "")}
-                        />
-                        <label htmlFor="info-ti">]</label>
-                        <label htmlFor="info-ar">[ar:</label>
-                        <input
-                            id="info-ar"
-                            name="ar"
-                            placeholder="Artist"
-                            {...disableCheck}
-                            {...useDefaultValue(lrcState.info.get("ar") || "")}
-                        />
-                        <label htmlFor="info-ar">]</label>
-                        <label htmlFor="info-al">[al:</label>
-                        <input
-                            id="info-al"
-                            name="al"
-                            placeholder="Album"
-                            {...disableCheck}
-                            {...useDefaultValue(lrcState.info.get("al") || "")}
-                        />
-                        <label htmlFor="info-al">]</label>
-                    </section>
-                </details>
+                        <summary>Metadata</summary>
+                        <section className="app-editor-infobox" onBlur={setInfo}>
+                            <label htmlFor="info-ti">[ti:</label>
+                            <input
+                                id="info-ti"
+                                name="ti"
+                                placeholder="Title"
+                                {...disableCheck}
+                                {...useDefaultValue(lrcState.info.get("ti") || "")}
+                            />
+                            <label htmlFor="info-ti">]</label>
+                            <label htmlFor="info-ar">[ar:</label>
+                            <input
+                                id="info-ar"
+                                name="ar"
+                                placeholder="Artist"
+                                {...disableCheck}
+                                {...useDefaultValue(lrcState.info.get("ar") || "")}
+                            />
+                            <label htmlFor="info-ar">]</label>
+                            <label htmlFor="info-al">[al:</label>
+                            <input
+                                id="info-al"
+                                name="al"
+                                placeholder="Album"
+                                {...disableCheck}
+                                {...useDefaultValue(lrcState.info.get("al") || "")}
+                            />
+                            <label htmlFor="info-al">]</label>
+                        </section>
+                    </details>
 
                 <section className="editor-tools">
                     <label className="editor-tools-item ripple" title="Import lyrics text">
@@ -197,22 +215,6 @@ export const Eidtor: React.FC<{
                     </a>
                 </section>
             </div>
-
-            <details className="editor-cleanup">
-                <summary>LRC cleanup</summary>
-                <label className="editor-cleanup-check">
-                    <input
-                        type="checkbox"
-                        checked={cleanupRemoveTranslations}
-                        onChange={(ev) => setCleanupRemoveTranslations(ev.currentTarget.checked)}
-                    />
-                    <span>Remove same-timestamp translated duplicate lines when detected</span>
-                </label>
-                <div className="editor-cleanup-actions">
-                    <button type="button" disabled={cleanupBusy} onClick={onCleanupClick}>Apply cleanup</button>
-                </div>
-                {cleanupMessage && <small>{cleanupMessage}</small>}
-            </details>
 
             <textarea
                 className="app-textarea"

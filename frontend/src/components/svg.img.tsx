@@ -1,31 +1,33 @@
-export const AkariHideWall: React.FC = () => {
+const avatar = "./img/lrc-roller-avatar.webp";
+
+export const LrcRollerSideMascot: React.FC = () => {
     return (
         <img
-            className="akari-hide-wall"
-            alt="akari-hide-wall"
-            src={"./svg/akari-hide-wall.svg"}
+            className="roller-side-mascot roller-avatar-legacy"
+            alt="LRC Roller"
+            src={avatar}
             crossOrigin="anonymous"
         />
     );
 };
 
-export const AkariNotFound: React.FC = () => {
+export const LrcRollerEmptyState: React.FC = () => {
     return (
         <img
-            className="akari-not-found"
-            alt="not found"
-            src={"./svg/akari-not-found.svg"}
+            className="roller-empty-illustration roller-avatar-legacy"
+            alt="LRC Roller empty state"
+            src={avatar}
             crossOrigin="anonymous"
         />
     );
 };
 
-export const AkariOdangoLoading: React.FC = () => {
+export const LrcRollerLoading: React.FC = () => {
     return (
         <img
-            className="akari-odango-loading start-loading"
-            alt="loading"
-            src={"./svg/akari-odango-loading.svg"}
+            className="roller-legacy-loading start-loading roller-avatar-legacy"
+            alt="Loading LRC Roller"
+            src={avatar}
             crossOrigin="anonymous"
         />
     );

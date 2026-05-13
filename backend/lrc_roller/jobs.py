@@ -36,6 +36,34 @@ def _clean_progress_line(line: str) -> str:
     return _ANSI_RE.sub("", line).replace("\r", "").strip()
 
 
+def _normalize_stage_name(stage: str) -> str:
+    normalized = (stage or "").strip().replace("-", "_")
+    aliases = {
+        "transcriber_preflight": "preflight",
+        "model_download": "model_download",
+        "model-download": "model_download",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _mark_stage_done(model: JobModel, stage: str) -> None:
+    clean = _normalize_stage_name(stage)
+    if clean and clean not in model.completed_stages:
+        model.completed_stages.append(clean)
+
+
+def _is_model_download_tqdm(clean: str, previous: JobProgressModel | None) -> bool:
+    lowered = clean.lower()
+    if previous is not None and _normalize_stage_name(previous.stage) == "model_download":
+        return True
+    return any(token in lowered for token in ("fetching", "model", "download", "hugging", "hf", "xet", "cache"))
+
+
+def _is_demucs_tqdm(clean: str, previous: JobProgressModel | None) -> bool:
+    lowered = clean.lower()
+    if previous is not None and _normalize_stage_name(previous.stage) == "splitter":
+        return True
+    return "seconds/s" in lowered or "track" in lowered or "separating" in lowered
 
 
 def _event_percent(value: object) -> float | None:
@@ -81,10 +109,12 @@ def _parse_pyroller_event_line(line: str) -> JobProgressModel | None:
     if not isinstance(event, dict):
         return None
     event_type = str(event.get("type") or "")
-    stage = str(event.get("stage") or ("model-download" if event_type.startswith("download_") else ""))
+    stage = _normalize_stage_name(str(event.get("stage") or ("model_download" if event_type.startswith("download_") else "")))
     completed = _int_or_zero(event.get("completed"))
     total = _int_or_zero(event.get("total"))
-    percent = _event_percent(event.get("percent"))
+    percent = _event_percent(event.get("progress"))
+    if percent is None:
+        percent = _event_percent(event.get("percent"))
     bytes_downloaded = _optional_int(event.get("bytes_downloaded"))
     bytes_total = _optional_int(event.get("bytes_total"))
     if percent is None and bytes_downloaded is not None and bytes_total:
@@ -102,6 +132,7 @@ def _parse_pyroller_event_line(line: str) -> JobProgressModel | None:
         unit=str(event.get("unit") or ("%" if total == 100 else "")),
         message=str(event.get("message") or ""),
         percent=percent,
+        progress=percent,
         raw=clean,
         done=bool(event.get("done")) or event_type.endswith("completed"),
         failed=bool(event.get("failed")) or event_type.endswith("failed"),
@@ -115,18 +146,12 @@ def _parse_pyroller_event_line(line: str) -> JobProgressModel | None:
 
 
 def _parse_download_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
-    """Extract model/download progress emitted by tqdm/Hugging Face.
+    """Extract model/download progress emitted by Hugging Face/tqdm.
 
-    py-roller's own progress logger can only say that the model cache is being
-    checked. The actual Hugging Face/tqdm download output is written as carriage
-    return updates, for example:
-
-        Fetching 6 files:  33%|███▎      | 2/6 [00:12<00:22,  5.62s/it]
-        model.bin:  48%|████▊     | 1.02G/2.10G [00:20<00:18, 58.1MB/s]
-
-    These updates are not normal newline-terminated log lines, so JobManager
-    reads stdout/stderr on both "\\n" and "\\r" and maps these lines to a
-    dedicated Model Download progress snapshot.
+    Be conservative: Demucs also prints tqdm-style percentage bars, so a bare
+    ``42%|...|`` line must not be treated as model download unless the previous
+    structured progress snapshot was already model-download or the line carries
+    a model/download hint.
     """
     clean = _clean_progress_line(line)
     if not clean:
@@ -134,6 +159,8 @@ def _parse_download_progress_line(line: str, previous: JobProgressModel | None =
 
     match = _TQDM_PERCENT_RE.search(clean)
     if match:
+        if not _is_model_download_tqdm(clean, previous):
+            return None
         percent_value = max(0.0, min(100.0, float(match.group("percent"))))
         label = (match.group("label") or "Model download").strip(" :-") or "Model download"
         completed_text = match.group("completed")
@@ -143,32 +170,66 @@ def _parse_download_progress_line(line: str, previous: JobProgressModel | None =
         if completed_text and total_text:
             message_parts.append(f"{completed_text}/{total_text}")
         if bracket:
-            # Keep only compact speed/ETA information; long tqdm postfixes make
-            # the small task panel noisy.
             message_parts.append(bracket)
         return JobProgressModel(
-            stage="model-download",
+            stage="model_download",
             completed=int(round(percent_value)),
             total=100,
             unit="%",
             message=" · ".join(message_parts),
             percent=percent_value / 100.0,
+            progress=percent_value / 100.0,
             raw=clean,
         )
 
     if _DOWNLOAD_HINT_RE.search(clean):
-        previous_is_download = previous is not None and previous.stage == "model-download"
+        previous_is_download = previous is not None and _normalize_stage_name(previous.stage) == "model_download"
         return JobProgressModel(
-            stage="model-download",
+            stage="model_download",
             completed=previous.completed if previous_is_download else 0,
             total=previous.total if previous_is_download else 0,
             unit=previous.unit if previous_is_download else "",
             message=clean.split("|", maxsplit=3)[-1].strip() if "|" in clean else clean,
             percent=previous.percent if previous_is_download else None,
+            progress=previous.progress if previous_is_download else None,
             raw=clean,
         )
 
     return None
+
+
+def _parse_demucs_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
+    """Extract Demucs native tqdm progress as splitter progress.
+
+    Demucs writes progress bars such as ``50%|...| 175.5/351.0 [..seconds/s]``.
+    Earlier lrc-roller versions parsed every tqdm line as model download, which
+    made Vocal separation jump back to the model-download card.
+    """
+    clean = _clean_progress_line(line)
+    if not clean:
+        return None
+    match = _TQDM_PERCENT_RE.search(clean)
+    if not match or not _is_demucs_tqdm(clean, previous):
+        return None
+    percent_value = max(0.0, min(100.0, float(match.group("percent"))))
+    completed_text = match.group("completed")
+    total_text = match.group("total")
+    bracket = (match.group("bracket") or "").strip()
+    message_parts = ["Separating vocals"]
+    if completed_text and total_text:
+        message_parts.append(f"{completed_text}/{total_text} sec")
+    if bracket:
+        message_parts.append(bracket)
+    return JobProgressModel(
+        stage="splitter",
+        completed=int(round(percent_value)),
+        total=100,
+        unit="%",
+        message=" · ".join(message_parts),
+        percent=percent_value / 100.0,
+        progress=percent_value / 100.0,
+        raw=clean,
+    )
 
 
 def _parse_pyroller_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
@@ -188,7 +249,7 @@ def _parse_pyroller_progress_line(line: str, previous: JobProgressModel | None =
     if not match:
         return None
 
-    stage = (match.group("stage") or "").strip()
+    stage = _normalize_stage_name((match.group("stage") or "").strip())
     message = (match.group("message") or "").strip()
     completed_text = match.group("completed")
     total_text = match.group("total")
@@ -228,12 +289,13 @@ def _parse_pyroller_progress_line(line: str, previous: JobProgressModel | None =
     # download stage here so users do not think the app is stuck at preflight.
     if "checking/downloading model cache" in message.lower():
         return JobProgressModel(
-            stage="model-download",
+            stage="model_download",
             completed=0,
             total=0,
             unit="",
             message="Checking/downloading model cache",
             percent=None,
+            progress=None,
             raw=line,
         )
 
@@ -244,6 +306,7 @@ def _parse_pyroller_progress_line(line: str, previous: JobProgressModel | None =
         unit=unit,
         message=message,
         percent=percent,
+        progress=percent,
         raw=line,
         done=done,
         failed=failed,
@@ -251,7 +314,12 @@ def _parse_pyroller_progress_line(line: str, previous: JobProgressModel | None =
 
 
 def _parse_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
-    return _parse_pyroller_event_line(line) or _parse_pyroller_progress_line(line, previous) or _parse_download_progress_line(line, previous)
+    return (
+        _parse_pyroller_event_line(line)
+        or _parse_pyroller_progress_line(line, previous)
+        or _parse_demucs_progress_line(line, previous)
+        or _parse_download_progress_line(line, previous)
+    )
 
 
 def _iter_process_output(stream) -> Iterable[tuple[str, str]]:
@@ -335,7 +403,7 @@ class JobManager:
                     progress = _parse_progress_line(clean_line, managed.model.progress)
                     is_structured_event = clean_line.startswith(_PYROLLER_EVENT_PREFIX)
                     should_append_log = separator == "\n" and not is_structured_event
-                    if separator == "\r" and progress is not None and progress.stage == "model-download":
+                    if separator == "\r" and progress is not None and _normalize_stage_name(progress.stage) == "model_download":
                         # tqdm refreshes many times per second. Keep the compact
                         # progress bar live, but only add meaningful download
                         # milestones to the raw task log.
@@ -355,6 +423,8 @@ class JobManager:
                             managed.model.logs.append(clean_line)
                         if progress is not None:
                             managed.model.progress = progress
+                            if progress.done:
+                                _mark_stage_done(managed.model, progress.stage)
                         if len(managed.model.logs) > 1200:
                             managed.model.logs = managed.model.logs[-1200:]
                 return_code = process.wait()

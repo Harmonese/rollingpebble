@@ -87,6 +87,9 @@ export function metaFromState(state: LrcState): MetaModel {
     };
 }
 
-export function syncedFromState(state: LrcState, prefState: any): string {
-    return stringify(state, prefState);
+export function syncedFromState(state: LrcState, prefState: any, includeMetadata = true): string {
+    if (includeMetadata) {
+        return stringify(state, prefState);
+    }
+    return stringify({ ...state, info: new Map() } as LrcState, prefState);
 }

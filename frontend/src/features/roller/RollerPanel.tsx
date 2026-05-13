@@ -65,16 +65,6 @@ function preferRemoteDnsProxy(proxy: string): string {
   return text;
 }
 
-function proxyHint(proxy: string): string | null {
-  const text = proxy.trim();
-  if (text.startsWith("socks5://")) {
-    return "This is socks5://. For Hugging Face behind restricted networks, socks5h:// is usually required so DNS also goes through the proxy.";
-  }
-  if (text.startsWith("socks5h://")) {
-    return "Using socks5h://: DNS will go through the SOCKS proxy.";
-  }
-  return null;
-}
 
 type InputState = {
   ready: boolean;
@@ -110,15 +100,25 @@ function computeInputState(
   return { ready: true, audioReady, lyricsReady, reason: "Ready." };
 }
 
+function normalizeProgressStage(stage: string): string {
+  const normalized = (stage || "").replace(/-/g, "_");
+  if (normalized === "transcriber_preflight") return "preflight";
+  if (normalized === "model_download") return "model_download";
+  return normalized;
+}
+
 function progressStageLabel(stage: string): string {
-  if (!stage) return "Preparing";
-  return stage
+  const normalizedStage = normalizeProgressStage(stage);
+  if (!normalizedStage) return "Preparing";
+  const known = STAGE_SEQUENCE.find((item) => item.key === normalizedStage);
+  if (known) return known.label;
+  if (normalizedStage === "complete") return "Complete";
+  return normalizedStage
     .split(/[\s_-]+/)
     .filter(Boolean)
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
-
 
 function formatBytes(value?: number | null): string {
   if (value == null || !Number.isFinite(value)) return "unknown";
@@ -140,12 +140,22 @@ function progressMessage(progress: JobModel["progress"]): string {
     if (progress.repo_id) pieces.push(progress.repo_id);
     return pieces.join(" · ");
   }
+  if (normalizeProgressStage(progress.stage || "") === "transcriber" && progress.message) {
+    const detail = progress.detail || {};
+    const audioTime = typeof detail.audio_time_processed === "number" ? detail.audio_time_processed : null;
+    const duration = typeof detail.audio_duration === "number" ? detail.audio_duration : null;
+    const segments = typeof detail.segments === "number" ? detail.segments : null;
+    const parts = [progress.message];
+    if (audioTime != null && duration) parts.push(`${audioTime.toFixed(1)}s / ${duration.toFixed(1)}s`);
+    if (segments != null) parts.push(`${segments} segments`);
+    return parts.join(" · ");
+  }
   return progress.message || "Working...";
 }
 
 const STAGE_SEQUENCE = [
-  { key: "transcriber-preflight", label: "Model preflight" },
-  { key: "model-download", label: "Model download" },
+  { key: "preflight", label: "Model preflight" },
+  { key: "model_download", label: "Model download" },
   { key: "splitter", label: "Vocal separation" },
   { key: "filter", label: "Filtering" },
   { key: "transcriber", label: "Transcription" },
@@ -154,10 +164,13 @@ const STAGE_SEQUENCE = [
   { key: "writer", label: "Writer" },
 ];
 
-function stageStatus(stage: string, currentStage: string, jobStatus?: string): "done" | "active" | "idle" | "failed" {
-  const currentIndex = STAGE_SEQUENCE.findIndex((item) => item.key === currentStage);
+function stageStatus(stage: string, currentStage: string, jobStatus?: string, completedStages: string[] = []): "done" | "active" | "idle" | "failed" {
+  const normalizedCurrent = normalizeProgressStage(currentStage);
+  const normalizedCompleted = completedStages.map(normalizeProgressStage);
+  if (normalizedCompleted.includes(stage)) return "done";
+  const currentIndex = STAGE_SEQUENCE.findIndex((item) => item.key === normalizedCurrent);
   const index = STAGE_SEQUENCE.findIndex((item) => item.key === stage);
-  if (currentStage === stage) return jobStatus === "failed" ? "failed" : "active";
+  if (normalizedCurrent === stage) return jobStatus === "failed" ? "failed" : "active";
   if (currentIndex >= 0 && index >= 0 && index < currentIndex) return "done";
   if (jobStatus === "succeeded") return "done";
   return "idle";
@@ -479,7 +492,7 @@ export const RollerPanel: React.FC<{
     setHfEtagTimeout("");
     setHfDownloadTimeout("");
     setHfMaxWorkers("");
-    setMessage("Direct-network model download settings are staged for this run: HF XET off, no proxy, py-roller default timeouts/workers.");
+    setMessage("Direct-network download settings selected for this run.");
   };
 
   const useRestrictedNetworkDownload = () => {
@@ -490,7 +503,7 @@ export const RollerPanel: React.FC<{
     setHfEtagTimeout("");
     setHfDownloadTimeout("");
     setHfMaxWorkers("");
-    setMessage(`Restricted-network download settings are staged for this run: HF XET off, proxy ${proxy}, py-roller default timeouts/workers.`);
+    setMessage(`Restricted-network download settings selected for this run.`);
   };
 
   const useOfflineCache = () => {
@@ -505,7 +518,7 @@ export const RollerPanel: React.FC<{
   const startDisabled = busy || running || !inputState.ready;
   const logsOpen = !!job && ["running", "failed", "succeeded", "canceled"].includes(job.status);
   const progress = job?.progress || null;
-  const progressPercent = progress?.percent ?? null;
+  const progressPercent = progress?.progress ?? progress?.percent ?? null;
   const progressWidth = typeof progressPercent === "number" && Number.isFinite(progressPercent) ? `${Math.max(0, Math.min(1, progressPercent)) * 100}%` : undefined;
   const showProgress = !!job && ["queued", "running", "succeeded", "failed", "canceled"].includes(job.status);
 
@@ -556,8 +569,6 @@ export const RollerPanel: React.FC<{
 
       <details>
         <summary>Advanced task parameters</summary>
-        <p className="roller-muted">Values are initialized from Settings. Change them here to override this run.</p>
-
         <div className="roller-section-title">Pipeline runtime</div>
         <div className="roller-form two-col">
           <label>Cleanup policy<select value={cleanup} onChange={(ev) => setCleanup(ev.target.value)}>{optionNodes(CLEANUP_OPTIONS)}</select></label>
@@ -601,7 +612,6 @@ export const RollerPanel: React.FC<{
             <div className="roller-form two-col">
               <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
               <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
-              {proxyHint(hfProxy) && <p className="roller-warning two-col-span">{proxyHint(hfProxy)}</p>}
               <label>Metadata timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
               <label>File download timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
               <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
@@ -654,7 +664,7 @@ export const RollerPanel: React.FC<{
           {progress?.cache_dir && <p className="roller-muted progress-cache">Cache: {progress.cache_dir}</p>}
           <ol className="roller-stage-list">
             {STAGE_SEQUENCE.map((item) => (
-              <li key={item.key} className={`stage-${stageStatus(item.key, progress?.stage || "", job?.status)}`}>
+              <li key={item.key} className={`stage-${stageStatus(item.key, progress?.stage || "", job?.status, job?.completed_stages || [])}`}>
                 <span />{item.label}
               </li>
             ))}

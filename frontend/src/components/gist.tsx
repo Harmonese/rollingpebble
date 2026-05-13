@@ -8,11 +8,11 @@ import type { IGistFile, IGistRepo, Ratelimit } from "../utils/gistapi.js";
 import { assignRepo, createRepo, getFils, getRepos } from "../utils/gistapi.js";
 import { prependHash } from "../utils/router.js";
 import { appContext } from "./app.context.js";
-import { AkariNotFound, AkariOdangoLoading } from "./svg.img.js";
+import { LrcRollerEmptyState, LrcRollerLoading } from "./svg.img.js";
 import { EditorSVG, GithubSVG, SynchronizerSVG } from "./svg.js";
 import { toastPubSub } from "./toast.js";
 
-const newTokenUrl = "https://github.com/settings/tokens/new?scopes=gist&description=https://lrc-maker.github.io";
+const newTokenUrl = "https://github.com/settings/tokens/new?scopes=gist&description=https://github.com/Harmonese/lrc-roller";
 
 const disableCheck = {
     autoCapitalize: "none",
@@ -342,7 +342,7 @@ export const Gist: React.FC<IGistProps> = ({ lrcDispatch, langName }) => {
             if (fileList.length === 0) {
                 return (
                     <section className="gist-no-data">
-                        <AkariNotFound />
+                        <LrcRollerEmptyState />
                     </section>
                 );
             }
@@ -366,7 +366,7 @@ export const Gist: React.FC<IGistProps> = ({ lrcDispatch, langName }) => {
 const GistLoading: React.FC = () => {
     return (
         <section className="gist-loading">
-            <AkariOdangoLoading />
+            <LrcRollerLoading />
         </section>
     );
 };

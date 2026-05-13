@@ -8,6 +8,8 @@ import { LrclibPanel } from "../features/lrclib/LrclibPanel.js";
 import { RollerPanel } from "../features/roller/RollerPanel.js";
 import { UploadPanel } from "../features/upload/UploadPanel.js";
 import type { ProjectModel } from "../shared/api.js";
+import { api } from "../shared/api.js";
+import { SETTINGS_UPDATED_EVENT } from "../shared/settingsEvents.js";
 import { buildImportTextFromProject, metaFromState, plainFromState, syncedFromState } from "../shared/lrc.js";
 import { ActionType as LrcActionType, useLrc } from "../hooks/useLrc.js";
 import { ThemeMode } from "../hooks/usePref.js";
@@ -15,7 +17,7 @@ import { AudioActionType, audioStatePubSub } from "../utils/audiomodule.js";
 import { appContext } from "./app.context.js";
 import { Eidtor } from "./editor.js";
 import { Synchronizer } from "./synchronizer.js";
-import { AkariNotFound } from "./svg.img.js";
+import { LrcRollerEmptyState } from "./svg.img.js";
 import "./roller.css";
 
 export const Content: React.FC = () => {
@@ -23,6 +25,23 @@ export const Content: React.FC = () => {
     const { prefState, trimOptions } = useContext(appContext);
     const [active, setActive] = useState<"sync" | "editor">("sync");
     const [project, setProject] = useState<ProjectModel | null>(null);
+    const [includeMetadataTags, setIncludeMetadataTags] = useState(true);
+
+
+    useEffect(() => {
+        const refreshEditorSettings = async () => {
+            try {
+                const settings = await api.settings();
+                setIncludeMetadataTags(settings.editor_write_metadata_tags);
+            } catch {
+                setIncludeMetadataTags(true);
+            }
+        };
+        void refreshEditorSettings();
+        const onSettingsUpdated = () => void refreshEditorSettings();
+        window.addEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
+        return () => window.removeEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
+    }, []);
 
     const [lrcState, lrcDispatch] = useLrc(() => ({
         text: localStorage.getItem(LSK.lyric) || STRINGS.emptyString,
@@ -43,7 +62,7 @@ export const Content: React.FC = () => {
 
     useEffect(() => {
         const saveState = (): void => {
-            const text = syncedFromState(lrcState, prefState);
+            const text = syncedFromState(lrcState, prefState, includeMetadataTags);
             localStorage.setItem(LSK.lyric, text);
             sessionStorage.setItem(SSK.selectIndex, lrcState.selectIndex.toString());
             localStorage.setItem(LSK.preferences, JSON.stringify(prefState));
@@ -57,7 +76,7 @@ export const Content: React.FC = () => {
             document.removeEventListener("visibilitychange", onVisibilitychange);
             window.removeEventListener("beforeunload", saveState);
         };
-    }, [lrcState, prefState]);
+    }, [lrcState, prefState, includeMetadataTags]);
 
     useEffect(() => {
         const onDrop = (ev: DragEvent) => {
@@ -114,7 +133,7 @@ export const Content: React.FC = () => {
     }, [lrcState, project]);
 
     const plainLyrics = useMemo(() => plainFromState(lrcState), [lrcState]);
-    const syncedLyrics = useMemo(() => syncedFromState(lrcState, prefState), [lrcState, prefState]);
+    const syncedLyrics = useMemo(() => syncedFromState(lrcState, prefState, includeMetadataTags), [lrcState, prefState, includeMetadataTags]);
 
     return (
         <main className="roller-main">
@@ -130,8 +149,8 @@ export const Content: React.FC = () => {
                 </div>
                 <div className="roller-editor-host">
                     {active === "sync"
-                        ? (lrcState.lyric.length ? <Synchronizer state={lrcState} dispatch={lrcDispatch} /> : <AkariNotFound />)
-                        : <Eidtor lrcState={lrcState} lrcDispatch={lrcDispatch} />}
+                        ? (lrcState.lyric.length ? <Synchronizer state={lrcState} dispatch={lrcDispatch} /> : <LrcRollerEmptyState />)
+                        : <Eidtor lrcState={lrcState} lrcDispatch={lrcDispatch} includeMetadataTags={includeMetadataTags} />}
                 </div>
             </section>
 

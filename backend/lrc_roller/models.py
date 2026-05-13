@@ -172,6 +172,7 @@ class JobProgressModel(BaseModel):
     unit: str = ""
     message: str = ""
     percent: float | None = None
+    progress: float | None = None
     raw: str = ""
     done: bool = False
     failed: bool = False
@@ -201,6 +202,7 @@ class JobModel(BaseModel):
     result: dict[str, Any] | None = None
     error: str | None = None
     progress: JobProgressModel | None = None
+    completed_stages: list[str] = Field(default_factory=list)
 
 
 class LocalPathRequest(BaseModel):
@@ -218,6 +220,9 @@ class RuntimeSettingsModel(BaseModel):
     auto_roller_profile: Literal["auto", "cpu", "cu124"] = "auto"
     auto_fill_lyrics_library_from_project_metadata: bool = True
     auto_cleanup_imported_lyrics: bool = False
+    # Kept for compatibility with older settings.json files.
+    editor_show_metadata: bool = True
+    editor_write_metadata_tags: bool = True
     upload_derive_plain_from_synced: bool = True
 
     auto_timing_default_language: Literal["zh", "en", "mul"] = "zh"
@@ -258,6 +263,8 @@ class RuntimeSettingsModel(BaseModel):
     auto_timing_writer_by_tag: str = "py-roller"
     auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] = "kf"
 
+    recent_projects_limit: int = 8
+
     last_doctor_status: str | None = None
     last_doctor_at: str | None = None
     last_install_profile: str | None = None
@@ -286,6 +293,8 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     auto_roller_profile: Literal["auto", "cpu", "cu124"] | None = None
     auto_fill_lyrics_library_from_project_metadata: bool | None = None
     auto_cleanup_imported_lyrics: bool | None = None
+    editor_show_metadata: bool | None = None
+    editor_write_metadata_tags: bool | None = None
     upload_derive_plain_from_synced: bool | None = None
 
     auto_timing_default_language: Literal["zh", "en", "mul"] | None = None
@@ -309,7 +318,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     auto_timing_transcriber_model_name: str | None = None
     auto_timing_model_store: str | None = None
     auto_timing_transcriber_compute_type: str | None = None
-    auto_timing_transcriber_batch_size: int | None = 8
+    auto_timing_transcriber_batch_size: int | None = None
     auto_timing_local_files_only_default: bool | None = None
     auto_timing_hf_xet: Literal["auto", "on", "off"] | None = None
     auto_timing_hf_proxy: str | None = None
@@ -320,11 +329,13 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     auto_timing_parser_lyrics_encoding: str | None = None
 
     auto_timing_aligner_backend: str | None = None
-    auto_timing_aligner_min_gap: float | None = 0.5
+    auto_timing_aligner_min_gap: float | None = None
     auto_timing_aligner_repetition: Literal["none", "few", "full"] | None = None
 
     auto_timing_writer_by_tag: str | None = None
     auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] | None = None
+
+    recent_projects_limit: int | None = None
 
 
 class UploadPlanRequest(BaseModel):

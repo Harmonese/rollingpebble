@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type AutoRollerRuntime, type JobModel } from "../../shared/api.js";
 import { notifySettingsUpdated } from "../../shared/settingsEvents.js";
+import { requestEditorLrcCleanup } from "../../shared/editorCleanupEvents.js";
 import {
     ALIGNER_BACKEND_OPTIONS,
     CLEANUP_OPTIONS,
@@ -67,16 +68,6 @@ function preferRemoteDnsProxy(proxy: string): string {
     return text;
 }
 
-function proxyHint(proxy: string): string | null {
-    const text = proxy.trim();
-    if (text.startsWith("socks5://")) {
-        return "This is socks5://. For Hugging Face behind restricted networks, socks5h:// is usually required so DNS also goes through the proxy.";
-    }
-    if (text.startsWith("socks5h://")) {
-        return "Using socks5h://: DNS will go through the SOCKS proxy.";
-    }
-    return null;
-}
 
 const optionNodes = (options: { value: string; label: string; disabled?: boolean }[]) =>
     options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>);
@@ -85,8 +76,13 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const [runtime, setRuntime] = useState<AutoRollerRuntime | null>(null);
     const [profile, setProfile] = useState<Profile>("auto");
     const [autoFillLibrary, setAutoFillLibrary] = useState(true);
-    const [autoCleanupImportedLyrics, setAutoCleanupImportedLyrics] = useState(false);
+    const [editorWriteMetadataTags, setEditorWriteMetadataTags] = useState(true);
     const [uploadDerivePlain, setUploadDerivePlain] = useState(true);
+    const [recentProjectsLimit, setRecentProjectsLimit] = useState("8");
+    const [cleanupBusy, setCleanupBusy] = useState(false);
+    const [autoTimingLoaded, setAutoTimingLoaded] = useState(false);
+    const skipAutoTimingSave = useRef(true);
+    const autoTimingSaveTimer = useRef<number | null>(null);
 
     const [defaultLanguage, setDefaultLanguage] = useState<Language>("zh");
     const [defaultStages, setDefaultStages] = useState("t,p,a,w");
@@ -129,6 +125,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
 
     const refresh = useCallback(async () => {
         try {
+            setAutoTimingLoaded(false);
             const data = await api.autoRollerRuntime();
             const settings = data.settings;
             const language = settings.auto_timing_default_language || "zh";
@@ -136,8 +133,9 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             setRuntime(data);
             setProfile(settings.auto_roller_profile);
             setAutoFillLibrary(settings.auto_fill_lyrics_library_from_project_metadata);
-            setAutoCleanupImportedLyrics(settings.auto_cleanup_imported_lyrics);
+            setEditorWriteMetadataTags(settings.editor_write_metadata_tags);
             setUploadDerivePlain(settings.upload_derive_plain_from_synced);
+            setRecentProjectsLimit(String(settings.recent_projects_limit || 8));
 
             setDefaultLanguage(language);
             setDefaultStages(settings.auto_timing_default_stages || "t,p,a,w");
@@ -173,6 +171,8 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             setAlignerRepetition(settings.auto_timing_aligner_repetition || "none");
             setWriterByTag(settings.auto_timing_writer_by_tag || "py-roller");
             setWriterKaraokeTag(settings.auto_timing_writer_ass_karaoke_tag_type || "kf");
+            skipAutoTimingSave.current = true;
+            window.setTimeout(() => setAutoTimingLoaded(true), 0);
         } catch (error) {
             setMessage((error as Error).message);
         }
@@ -211,8 +211,6 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         return () => window.clearInterval(timer);
     }, [job, refresh]);
 
-    if (!open) return null;
-
     const transcriberIsFasterWhisper = isFasterWhisper(transcriberBackend);
     const writerIsAss = defaultWriterBackend === "ass_karaoke";
 
@@ -236,9 +234,9 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         await savePatch({ auto_roller_profile: value });
     };
 
-    const saveAutoTimingDefaults = async () => {
+    const saveAutoTimingDefaults = useCallback(async (success = "Auto Timing settings saved automatically.") => {
         try {
-            await savePatch({
+            await api.updateSettings({
                 auto_timing_default_language: defaultLanguage,
                 auto_timing_default_stages: defaultStages,
                 auto_timing_default_writer_backend: defaultWriterBackend,
@@ -273,10 +271,44 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                 auto_timing_aligner_repetition: alignerRepetition,
                 auto_timing_writer_by_tag: writerByTag.trim(),
                 auto_timing_writer_ass_karaoke_tag_type: writerIsAss ? writerKaraokeTag : "",
-            }, "Auto Timing settings saved.");
+            });
+            notifySettingsUpdated();
+            setMessage(success);
         } catch (error) {
             setMessage((error as Error).message);
         }
+    }, [alignerBackend, alignerMinGap, alignerRepetition, defaultCleanup, defaultLanguage, defaultLocalOnly, defaultLogLevel, defaultStages, defaultWriterBackend, defaultWriterSpacing, filterChain, hfDownloadTimeout, hfEtagTimeout, hfMaxWorkers, hfProxy, hfXet, modelStore, parserEncoding, splitterBackend, splitterDevice, splitterJobs, splitterModel, splitterOverlap, splitterSegment, transcriberBackend, transcriberBatchSize, transcriberComputeType, transcriberDevice, transcriberIsFasterWhisper, transcriberModelName, writerByTag, writerIsAss, writerKaraokeTag]);
+
+    useEffect(() => {
+        if (!open || !autoTimingLoaded) return;
+        if (skipAutoTimingSave.current) {
+            skipAutoTimingSave.current = false;
+            return;
+        }
+        if (autoTimingSaveTimer.current !== null) {
+            window.clearTimeout(autoTimingSaveTimer.current);
+        }
+        autoTimingSaveTimer.current = window.setTimeout(() => {
+            void saveAutoTimingDefaults();
+        }, 650);
+        return () => {
+            if (autoTimingSaveTimer.current !== null) {
+                window.clearTimeout(autoTimingSaveTimer.current);
+                autoTimingSaveTimer.current = null;
+            }
+        };
+    }, [autoTimingLoaded, open, saveAutoTimingDefaults]);
+
+    const requestCleanup = () => {
+        setCleanupBusy(true);
+        setMessage("Cleaning current editor lyrics...");
+        requestEditorLrcCleanup({
+            removeTranslations: true,
+            onResult: (result) => {
+                setCleanupBusy(false);
+                setMessage(result.message);
+            },
+        });
     };
 
     const applyCliLikeDownloadDefaults = () => {
@@ -286,7 +318,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         setHfEtagTimeout("");
         setHfDownloadTimeout("");
         setHfMaxWorkers("");
-        setMessage("Direct-network model download settings are staged: HF XET off, no proxy, py-roller default timeouts/workers. Click Save Auto Timing settings to apply them.");
+        setMessage("Direct-network download settings selected.");
     };
 
     const applyRestrictedNetworkDownloadDefaults = () => {
@@ -297,12 +329,12 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         setHfEtagTimeout("");
         setHfDownloadTimeout("");
         setHfMaxWorkers("");
-        setMessage(`Restricted-network download settings are staged: HF XET off, proxy ${proxy}, py-roller default timeouts/workers. Click Save Auto Timing settings to apply them.`);
+        setMessage("Restricted-network download settings selected.");
     };
 
     const applyOfflineCacheDefaults = () => {
         setDefaultLocalOnly(true);
-        setMessage("Offline cache mode is staged. Click Save Auto Timing settings to apply it.");
+        setMessage("Offline cache mode selected.");
     };
 
     const browseModelStore = async () => {
@@ -316,7 +348,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             });
             if (!result.canceled && result.path) {
                 setModelStore(result.path);
-                setMessage("Model store selected. Click Save Auto Timing settings to apply it.");
+                setMessage("Model store selected.");
             } else {
                 setMessage("Folder selection canceled.");
             }
@@ -361,15 +393,14 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         setMessage("Diagnostics copied.");
     };
 
+    if (!open) return null;
+
     return (
         <div className="settings-overlay" role="dialog" aria-modal="true" aria-label="Settings">
             <button className="settings-backdrop" type="button" onClick={onClose} aria-label="Close settings" />
             <aside className="settings-drawer">
                 <div className="settings-header">
-                    <div>
-                        <h2>Settings</h2>
-                        <p>Local runtime and app configuration.</p>
-                    </div>
+                    <h2>Settings</h2>
                     <button type="button" onClick={onClose}>Close</button>
                 </div>
 
@@ -378,10 +409,106 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                     <div className="roller-kv">
                         <b>App mode</b><span>Local WebUI</span>
                         <b>Backend</b><span>http://127.0.0.1:6789</span>
-                        <b>Frontend</b><span>Vite dev server on http://127.0.0.1:5173</span>
+                        <b>Frontend</b><span>http://127.0.0.1:5173</span>
+                        <b>Data dir</b><span>{runtime?.data_dir || "loading"}</span>
                     </div>
-                    <label className="settings-check-row"><input type="checkbox" checked={autoFillLibrary} disabled={busy} onChange={(ev) => { setAutoFillLibrary(ev.currentTarget.checked); void savePatch({ auto_fill_lyrics_library_from_project_metadata: ev.currentTarget.checked }); }} /><span><b>Auto-fill Lyrics Import from project metadata</b><small>Fill import fields from audio tags when a project is loaded.</small></span></label>
-                    <label className="settings-check-row"><input type="checkbox" checked={autoCleanupImportedLyrics} disabled={busy} onChange={(ev) => { setAutoCleanupImportedLyrics(ev.currentTarget.checked); void savePatch({ auto_cleanup_imported_lyrics: ev.currentTarget.checked }); }} /><span><b>Auto-clean imported LRC</b><small>Clean imported synced lyrics before placing them into the editor.</small></span></label>
+                </section>
+
+                <section className="settings-section">
+                    <h3>Project</h3>
+                    <div className="roller-form two-col">
+                        <label>Recent projects shown<input inputMode="numeric" value={recentProjectsLimit} onChange={(ev) => setRecentProjectsLimit(ev.target.value)} onBlur={() => { const parsed = Number(recentProjectsLimit); const value = Number.isFinite(parsed) && parsed > 0 ? Math.max(1, Math.round(parsed)) : 8; setRecentProjectsLimit(String(value)); void savePatch({ recent_projects_limit: value }, "Recent projects limit saved."); }} /></label>
+                    </div>
+                </section>
+
+                <section className="settings-section">
+                    <h3>Lyrics Import</h3>
+                    <label className="settings-check-row"><input type="checkbox" checked={autoFillLibrary} disabled={busy} onChange={(ev) => { setAutoFillLibrary(ev.currentTarget.checked); void savePatch({ auto_fill_lyrics_library_from_project_metadata: ev.currentTarget.checked }); }} /><span><b>Auto-fill from project metadata</b><small>Fill import fields from audio tags when a project is loaded.</small></span></label>
+                </section>
+
+                <section className="settings-section">
+                    <h3>Synchronizer &amp; Editor</h3>
+                    <label className="settings-check-row"><input type="checkbox" checked={editorWriteMetadataTags} disabled={busy} onChange={(ev) => { setEditorWriteMetadataTags(ev.currentTarget.checked); void savePatch({ editor_write_metadata_tags: ev.currentTarget.checked }, "Editor metadata tag setting saved."); }} /><span><b>Write metadata tags into LRC text</b><small>Include [ti:], [ar:], [al:], and other metadata lines in the text editor and exported LRC text.</small></span></label>
+                    <div className="settings-inline-action settings-cleanup-action">
+                        <span><b>LRC cleanup</b><small>Remove detected same-timestamp translated duplicate lines from the current editor contents.</small></span>
+                        <button type="button" disabled={cleanupBusy} onClick={requestCleanup}>Apply Cleanup</button>
+                    </div>
+                </section>
+
+                <section className="settings-section">
+                    <h3>Auto Timing</h3>
+                    <div className="settings-subsection">
+                        <h4>Runtime</h4>
+                        <div className="roller-kv">
+                            <b>Engine</b><span>{runtime?.engine || "py-roller"}</span>
+                            <b>Status</b><span>{runtime ? (runtime.available ? "available" : "not available") : "loading"}</span>
+                            <b>Version</b><span>{runtime?.version || "unknown"}</span>
+                            <b>Command</b><span>{runtime?.cli_path || runtime?.detail || "not found"}</span>
+                            <b>Python</b><span>{runtime?.python_executable || "unknown"}</span>
+                            <b>Model store</b><span>{modelStore || runtime?.model_store || "unknown"}</span>
+                            <b>Last check</b><span>{runtime?.settings.last_doctor_status || "not run"} {runtime?.settings.last_doctor_at ? `· ${runtime.settings.last_doctor_at}` : ""}</span>
+                            <b>Last install</b><span>{runtime?.settings.last_install_profile || "not run"} {runtime?.settings.last_install_at ? `· ${runtime.settings.last_install_at}` : ""}</span>
+                        </div>
+                        <div className="roller-form settings-profile-row"><label>Install profile<select value={profile} disabled={busy} onChange={(ev) => void saveProfile(ev.target.value as Profile)}><option value="auto">Auto</option><option value="cpu">CPU only</option><option value="cu124">CUDA 12.4</option></select></label></div>
+                        <div className="roller-actions"><button type="button" disabled={busy} onClick={runDoctor}>Runtime Check</button><button type="button" disabled={busy} onClick={() => void runInstall(false)}>Install / Repair</button><button type="button" onClick={copyDiagnostics}>Copy Diagnostics</button><button type="button" onClick={refresh}>Refresh Status</button></div>
+                        {job && <div className="settings-job-terminal"><details open><summary>{job.kind} · {job.job_id} · {job.status}</summary><pre className="roller-log">{job.logs.join("\n") || job.command.join(" ")}</pre></details></div>}
+                    </div>
+
+                    <div className="settings-subsection">
+                        <h4>Defaults</h4>
+                        <div className="roller-section-title">Core</div>
+                        <div className="roller-form two-col">
+                            <label>Language<select value={defaultLanguage} onChange={(ev) => setDefaultLanguage(ev.target.value as Language)}>{optionNodes(LANGUAGE_OPTIONS)}</select></label>
+                            <label>Processing preset<select value={defaultStages} onChange={(ev) => setDefaultStages(ev.target.value)}>{optionNodes(STAGE_OPTIONS)}</select></label>
+                            <label>Output format<select value={defaultWriterBackend} onChange={(ev) => setDefaultWriterBackend(ev.target.value)}>{optionNodes(WRITER_OPTIONS)}</select></label>
+                            <label>Repetition handling<select value={alignerRepetition} onChange={(ev) => setAlignerRepetition(ev.target.value as Repetition)}>{optionNodes(REPETITION_OPTIONS)}</select></label>
+                            <label>Spacing<select value={defaultWriterSpacing} onChange={(ev) => setDefaultWriterSpacing(ev.target.value as Spacing)}>{optionNodes(SPACING_OPTIONS)}</select></label>
+                            <label>Cleanup policy<select value={defaultCleanup} onChange={(ev) => setDefaultCleanup(ev.target.value as Cleanup)}>{optionNodes(CLEANUP_OPTIONS)}</select></label>
+                            <label>Log level<select value={defaultLogLevel} onChange={(ev) => setDefaultLogLevel(ev.target.value as LogLevel)}>{optionNodes(LOG_LEVEL_OPTIONS)}</select></label>
+                        </div>
+
+                        <details>
+                            <summary>Stage settings</summary>
+                            <div className="roller-section-title">Splitter</div>
+                            <div className="roller-form two-col">
+                                <label>Backend<select value={splitterBackend} onChange={(ev) => setSplitterBackend(ev.target.value)}>{optionNodes(SPLITTER_BACKEND_OPTIONS)}</select></label>
+                                <label>Demucs model<select value={splitterModel} onChange={(ev) => setSplitterModel(ev.target.value)}>{optionNodes(DEMUCS_MODEL_OPTIONS)}</select></label>
+                                <label>Device<select value={splitterDevice} onChange={(ev) => setSplitterDevice(ev.target.value)}>{optionNodes(DEMUCS_DEVICE_OPTIONS)}</select></label>
+                                <label>Jobs<input inputMode="numeric" placeholder="Let Demucs choose" value={splitterJobs} onChange={(ev) => setSplitterJobs(ev.target.value)} /></label>
+                                <label>Overlap<input inputMode="decimal" placeholder="Demucs built-in" value={splitterOverlap} onChange={(ev) => setSplitterOverlap(ev.target.value)} /></label>
+                                <label>Segment seconds<input inputMode="decimal" placeholder="Demucs built-in" value={splitterSegment} onChange={(ev) => setSplitterSegment(ev.target.value)} /></label>
+                            </div>
+
+                            <div className="roller-section-title">Filter</div>
+                            <div className="roller-form"><label>Filter chain<select value={filterChain} onChange={(ev) => setFilterChain(ev.target.value)}>{optionNodes(FILTER_CHAIN_OPTIONS)}</select></label></div>
+
+                            <div className="roller-section-title">Transcriber and model download</div>
+                            <div className="roller-form two-col">
+                                <label>Backend<select value={transcriberBackend} onChange={(ev) => setTranscriberBackend(ev.target.value)}>{optionNodes(transcriberBackendOptions(defaultLanguage))}</select></label>
+                                <label>Device<select value={transcriberDevice} onChange={(ev) => setTranscriberDevice(ev.target.value)}>{optionNodes(DEVICE_OPTIONS)}</select></label>
+                                <label>Model name<select value={transcriberModelName} onChange={(ev) => setTranscriberModelName(ev.target.value)}>{optionNodes(transcriberModelOptions(defaultLanguage, transcriberBackend))}</select></label>
+                                <label className="field-with-browse">Model store path<span className="browse-row"><input placeholder={runtime?.model_store || "~/.cache/py-roller/models/transcriber"} value={modelStore} onChange={(ev) => setModelStore(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>Browse</button></span></label>
+                                <label>Compute type<select value={transcriberComputeType} onChange={(ev) => setTranscriberComputeType(ev.target.value)} disabled={!transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS)}</select></label>
+                                <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
+                                <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
+                                <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+                                <label>Metadata timeout<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
+                                <label>File download timeout<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
+                                <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
+                                <label className="roller-checkbox">Use local cache only<input type="checkbox" checked={defaultLocalOnly} onChange={(ev) => setDefaultLocalOnly(ev.currentTarget.checked)} /></label>
+                            </div>
+                            <div className="roller-actions download-presets"><button type="button" disabled={busy} onClick={applyRestrictedNetworkDownloadDefaults}>Use restricted-network settings</button><button type="button" disabled={busy} onClick={applyCliLikeDownloadDefaults}>Use direct-network settings</button><button type="button" disabled={busy} onClick={applyOfflineCacheDefaults}>Use offline cache</button></div>
+
+                            <div className="roller-section-title">Parser</div>
+                            <div className="roller-form"><label>Lyrics encoding<select value={parserEncoding} onChange={(ev) => setParserEncoding(ev.target.value)}>{optionNodes(PARSER_ENCODING_OPTIONS)}</select></label></div>
+
+                            <div className="roller-section-title">Aligner</div>
+                            <div className="roller-form two-col"><label>Backend<select value={alignerBackend} onChange={(ev) => setAlignerBackend(ev.target.value)}>{optionNodes(ALIGNER_BACKEND_OPTIONS)}</select></label><label>Min gap seconds<input inputMode="decimal" placeholder="0.5" value={alignerMinGap} onChange={(ev) => setAlignerMinGap(ev.target.value)} /></label></div>
+
+                            <div className="roller-section-title">Writer</div>
+                            <div className="roller-form two-col"><label>BY tag<input placeholder="py-roller" value={writerByTag} onChange={(ev) => setWriterByTag(ev.target.value)} /></label><label>ASS karaoke tag<select value={writerKaraokeTag} onChange={(ev) => setWriterKaraokeTag(ev.target.value as KaraokeTag)} disabled={!writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS)}</select></label></div>
+                        </details>
+                    </div>
                 </section>
 
                 <section className="settings-section">
@@ -389,87 +516,9 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                     <label className="settings-check-row"><input type="checkbox" checked={uploadDerivePlain} disabled={busy} onChange={(ev) => { setUploadDerivePlain(ev.currentTarget.checked); void savePatch({ upload_derive_plain_from_synced: ev.currentTarget.checked }); }} /><span><b>Derive plain lyrics from synced lyrics</b><small>Submit timestamp-stripped plain lyrics when uploading synced LRC.</small></span></label>
                 </section>
 
-                <section className="settings-section">
-                    <h3>Auto Timing Runtime</h3>
-                    <div className="roller-kv">
-                        <b>Engine</b><span>{runtime?.engine || "py-roller"}</span>
-                        <b>Status</b><span>{runtime ? (runtime.available ? "available" : "not available") : "loading"}</span>
-                        <b>Version</b><span>{runtime?.version || "unknown"}</span>
-                        <b>Command</b><span>{runtime?.cli_path || runtime?.detail || "not found"}</span>
-                        <b>Python</b><span>{runtime?.python_executable || "unknown"}</span>
-                        <b>Data dir</b><span>{runtime?.data_dir || "unknown"}</span>
-                        <b>Model store</b><span>{modelStore || runtime?.model_store || "unknown"}</span>
-                        <b>Last check</b><span>{runtime?.settings.last_doctor_status || "not run"} {runtime?.settings.last_doctor_at ? `· ${runtime.settings.last_doctor_at}` : ""}</span>
-                        <b>Last install</b><span>{runtime?.settings.last_install_profile || "not run"} {runtime?.settings.last_install_at ? `· ${runtime.settings.last_install_at}` : ""}</span>
-                    </div>
-                    <div className="roller-form settings-profile-row"><label>Install profile<select value={profile} disabled={busy} onChange={(ev) => void saveProfile(ev.target.value as Profile)}><option value="auto">Auto</option><option value="cpu">CPU only</option><option value="cu124">CUDA 12.4</option></select></label></div>
-                    <div className="roller-actions"><button type="button" disabled={busy} onClick={runDoctor}>Run runtime check</button><button type="button" disabled={busy} onClick={() => void runInstall(false)}>Install / repair</button><button type="button" disabled={busy} onClick={() => void runInstall(true)}>Dry run install</button><button type="button" onClick={copyDiagnostics}>Copy diagnostics</button><button type="button" onClick={refresh}>Refresh</button></div>
-                </section>
-
-                <section className="settings-section">
-                    <h3>Auto Timing Task Settings</h3>
-                    <p className="roller-muted">Used by new automatic timing tasks unless changed in the task panel.</p>
-                    <div className="roller-section-title">Core</div>
-                    <div className="roller-form two-col">
-                        <label>Language<select value={defaultLanguage} onChange={(ev) => setDefaultLanguage(ev.target.value as Language)}>{optionNodes(LANGUAGE_OPTIONS)}</select></label>
-                        <label>Processing preset<select value={defaultStages} onChange={(ev) => setDefaultStages(ev.target.value)}>{optionNodes(STAGE_OPTIONS)}</select></label>
-                        <label>Output format<select value={defaultWriterBackend} onChange={(ev) => setDefaultWriterBackend(ev.target.value)}>{optionNodes(WRITER_OPTIONS)}</select></label>
-                        <label>Repetition handling<select value={alignerRepetition} onChange={(ev) => setAlignerRepetition(ev.target.value as Repetition)}>{optionNodes(REPETITION_OPTIONS)}</select></label>
-                        <label>Spacing<select value={defaultWriterSpacing} onChange={(ev) => setDefaultWriterSpacing(ev.target.value as Spacing)}>{optionNodes(SPACING_OPTIONS)}</select></label>
-                        <label>Cleanup policy<select value={defaultCleanup} onChange={(ev) => setDefaultCleanup(ev.target.value as Cleanup)}>{optionNodes(CLEANUP_OPTIONS)}</select></label>
-                        <label>Log level<select value={defaultLogLevel} onChange={(ev) => setDefaultLogLevel(ev.target.value as LogLevel)}>{optionNodes(LOG_LEVEL_OPTIONS)}</select></label>
-                    </div>
-
-                    <details>
-                        <summary>Stage settings</summary>
-                        <div className="roller-section-title">Splitter</div>
-                        <div className="roller-form two-col">
-                            <label>Backend<select value={splitterBackend} onChange={(ev) => setSplitterBackend(ev.target.value)}>{optionNodes(SPLITTER_BACKEND_OPTIONS)}</select></label>
-                            <label>Demucs model<select value={splitterModel} onChange={(ev) => setSplitterModel(ev.target.value)}>{optionNodes(DEMUCS_MODEL_OPTIONS)}</select></label>
-                            <label>Device<select value={splitterDevice} onChange={(ev) => setSplitterDevice(ev.target.value)}>{optionNodes(DEMUCS_DEVICE_OPTIONS)}</select></label>
-                            <label>Jobs<input inputMode="numeric" placeholder="Let Demucs choose" value={splitterJobs} onChange={(ev) => setSplitterJobs(ev.target.value)} /></label>
-                            <label>Overlap<input inputMode="decimal" placeholder="Demucs built-in" value={splitterOverlap} onChange={(ev) => setSplitterOverlap(ev.target.value)} /></label>
-                            <label>Segment seconds<input inputMode="decimal" placeholder="Demucs built-in" value={splitterSegment} onChange={(ev) => setSplitterSegment(ev.target.value)} /></label>
-                        </div>
-
-                        <div className="roller-section-title">Filter</div>
-                        <div className="roller-form"><label>Filter chain<select value={filterChain} onChange={(ev) => setFilterChain(ev.target.value)}>{optionNodes(FILTER_CHAIN_OPTIONS)}</select></label></div>
-
-                        <div className="roller-section-title">Transcriber and model download</div>
-                        <div className="roller-form two-col">
-                            <label>Backend<select value={transcriberBackend} onChange={(ev) => setTranscriberBackend(ev.target.value)}>{optionNodes(transcriberBackendOptions(defaultLanguage))}</select></label>
-                            <label>Device<select value={transcriberDevice} onChange={(ev) => setTranscriberDevice(ev.target.value)}>{optionNodes(DEVICE_OPTIONS)}</select></label>
-                            <label>Model name<select value={transcriberModelName} onChange={(ev) => setTranscriberModelName(ev.target.value)}>{optionNodes(transcriberModelOptions(defaultLanguage, transcriberBackend))}</select></label>
-                            <label className="field-with-browse">Model store path<span className="browse-row"><input placeholder={runtime?.model_store || "~/.cache/py-roller/models/transcriber"} value={modelStore} onChange={(ev) => setModelStore(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>Browse</button></span></label>
-                            <label>Compute type<select value={transcriberComputeType} onChange={(ev) => setTranscriberComputeType(ev.target.value)} disabled={!transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS)}</select></label>
-                            <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
-                            <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
-                            <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
-                            {proxyHint(hfProxy) && <p className="roller-warning two-col-span">{proxyHint(hfProxy)}</p>}
-                            <label>Metadata timeout<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
-                            <label>File download timeout<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
-                            <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
-                            <label className="roller-checkbox">Use local cache only<input type="checkbox" checked={defaultLocalOnly} onChange={(ev) => setDefaultLocalOnly(ev.currentTarget.checked)} /></label>
-                        </div>
-                        <div className="roller-actions download-presets"><button type="button" disabled={busy} onClick={applyRestrictedNetworkDownloadDefaults}>Use restricted-network settings</button><button type="button" disabled={busy} onClick={applyCliLikeDownloadDefaults}>Use direct-network settings</button><button type="button" disabled={busy} onClick={applyOfflineCacheDefaults}>Use offline cache</button></div>
-
-                        <div className="roller-section-title">Parser</div>
-                        <div className="roller-form"><label>Lyrics encoding<select value={parserEncoding} onChange={(ev) => setParserEncoding(ev.target.value)}>{optionNodes(PARSER_ENCODING_OPTIONS)}</select></label></div>
-
-                        <div className="roller-section-title">Aligner</div>
-                        <div className="roller-form two-col"><label>Backend<select value={alignerBackend} onChange={(ev) => setAlignerBackend(ev.target.value)}>{optionNodes(ALIGNER_BACKEND_OPTIONS)}</select></label><label>Min gap seconds<input inputMode="decimal" placeholder="0.5" value={alignerMinGap} onChange={(ev) => setAlignerMinGap(ev.target.value)} /></label></div>
-
-                        <div className="roller-section-title">Writer</div>
-                        <div className="roller-form two-col"><label>BY tag<input placeholder="py-roller" value={writerByTag} onChange={(ev) => setWriterByTag(ev.target.value)} /></label><label>ASS karaoke tag<select value={writerKaraokeTag} onChange={(ev) => setWriterKaraokeTag(ev.target.value as KaraokeTag)} disabled={!writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS)}</select></label></div>
-                    </details>
-                    <div className="roller-actions"><button type="button" disabled={busy} onClick={() => void saveAutoTimingDefaults()}>Save Auto Timing settings</button></div>
-                </section>
-
                 {message && <p className="roller-message">{message}</p>}
-                {job && <section className="settings-section"><details open><summary>{job.kind} · {job.job_id} · {job.status}</summary><pre className="roller-log">{job.logs.join("\n") || job.command.join(" ")}</pre></details></section>}
-
-                <section className="settings-section"><h3>About</h3><p className="roller-muted">lrc-roller is a local front-end workflow for lyrics lookup, automatic timing, manual editing, and publishing.</p></section>
             </aside>
         </div>
     );
+
 };
