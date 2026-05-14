@@ -44,10 +44,10 @@ _CATEGORY_LABELS: dict[str, str] = {
 }
 
 _CATEGORY_DESCRIPTIONS: dict[str, str] = {
-    "projects": "Project folders, including audio, lyrics, outputs, artifacts, and intermediates.",
+    "projects": "Project folders, including audio, lyrics, generated outputs, artifacts, and intermediates.",
     "models": "Downloaded model caches under the lrc-roller models directory.",
     "runtime_envs": "Isolated py-roller Python environments.",
-    "other": "Unmanaged files and folders under the lrc-roller data directory.",
+    "other": "Known app data and unclassified files under the lrc-roller data directory.",
 }
 
 _RUNNING_STATUSES = {JobStatus.queued, JobStatus.running, "queued", "running"}
@@ -55,8 +55,9 @@ _AUDIO_PREFIX = f"{AUDIO_NAME}."
 _LYRICS_OUTPUT_FILES = {PROJECT_JSON, PLAIN_NAME, SYNCED_NAME, PYROLLER_NAME}
 _GENERATED_DIRS = {"intermediate", "artifacts"}
 _PLAN_TTL_SECONDS = 30 * 60
-_MODEL_PROVIDER_DIRS = {"providers", "huggingface", "faster_whisper", "hub"}
-_IGNORED_MODEL_NAMES = {".DS_Store", ".locks", ".Spotlight-V100", ".Trashes", ".fseventsd"}
+_IGNORED_SYSTEM_NAMES = {".DS_Store", ".Spotlight-V100", ".Trashes", ".fseventsd"}
+_IGNORED_MODEL_NAMES = {*_IGNORED_SYSTEM_NAMES, ".locks"}
+_IGNORED_OTHER_NAMES = set(_IGNORED_SYSTEM_NAMES)
 
 
 class StorageService:
@@ -79,6 +80,13 @@ class StorageService:
         if item is None:
             raise FileNotFoundError(f"Runtime not found: {runtime_id}")
         return self._absolute_from_relative(item.relative_path)
+
+    def other_item_open_path(self, relative_path: str) -> Path:
+        item = self._other_item_for_path(relative_path)
+        path = self._absolute_from_relative(item.relative_path)
+        if path.is_file() or path.is_symlink():
+            return path.parent
+        return path
 
     def usage(self) -> StorageUsageResponse:
         total_bytes, total_count = self._tree_stats(self.data_dir)
@@ -104,11 +112,12 @@ class StorageService:
         )
 
     def preview(self, request: StorageCleanupPreviewRequest) -> StorageCleanupPlanResponse:
-        targets = list(dict.fromkeys(request.targets or ["clean_generated"]))
+        targets = list(dict.fromkeys(request.targets or ["clean_models"]))
         older_than_days = request.older_than_days
         project_ids = list(dict.fromkeys(request.project_ids or []))
         model_ids = list(dict.fromkeys(request.model_ids or []))
         runtime_ids = list(dict.fromkeys(request.runtime_ids or []))
+        other_paths = list(dict.fromkeys(request.other_paths or []))
         entries: list[StorageCleanupEntryModel] = []
         warnings: list[str] = []
 
@@ -117,7 +126,9 @@ class StorageService:
                 entries.extend(self._delete_project_entries(project_ids))
                 warnings.append("Selected projects and all files inside them will be deleted.")
             elif target == "clear_intermediate":
-                entries.extend(self._project_intermediate_entries(project_ids or None, older_than_days))
+                # Project-scoped intermediate cleanup is driven by the already-filtered
+                # project list in the UI. Do not apply the directory mtime filter again.
+                entries.extend(self._project_intermediate_entries(project_ids or None, None if project_ids else older_than_days))
             elif target == "clean_models":
                 entries.extend(self._model_cache_entries(model_ids or None))
                 warnings.append("Models will be downloaded again when needed.")
@@ -129,27 +140,27 @@ class StorageService:
                 warnings.append("Deleted inactive runtimes can be recreated with Create / Repair Runtime.")
             elif target == "clean_project_generated":
                 entries.extend(self._project_generated_entries(project_ids, older_than_days))
+            elif target == "clean_external_cache":
+                entries.extend(self._other_entries(["cache"]))
+                warnings.append("External tool caches may be downloaded or rebuilt again when needed.")
+            elif target == "delete_other_items":
+                entries.extend(self._other_entries(other_paths))
+                warnings.append("Selected other app data will be deleted.")
             elif target == "delete_project_audio":
                 entries.extend(self._project_audio_entries(project_ids))
                 warnings.append("Projects without local audio cannot run Auto Timing until audio is imported again.")
             elif target == "delete_project_lyrics_output":
                 entries.extend(self._project_lyrics_output_entries(project_ids))
-            elif target == "clean_generated":
-                entries.extend(self._global_generated_entries(older_than_days))
-            elif target == "clean_tool_caches":
-                entries.extend(self._tool_cache_entries())
             # Compatibility for plans created by older frontends.
             elif target == "safe":
                 entries.extend(self._project_generated_entries(project_ids or None, older_than_days, intermediate_only=True))
-                entries.extend(self._global_generated_entries(older_than_days, include_tool_caches=False))
+                entries.extend(self._other_entries(["cache"]))
             elif target == "job_intermediates":
                 entries.extend(self._project_generated_entries(project_ids or None, older_than_days, intermediate_only=True))
             elif target == "project_artifacts":
                 entries.extend(self._project_generated_entries(project_ids or None, older_than_days, artifacts_only=True))
             elif target == "model_cache":
                 entries.extend(self._model_cache_entries())
-            elif target == "external_caches":
-                entries.extend(self._tool_cache_entries())
             elif target == "runtime_envs":
                 entries.extend(self._runtime_entries())
 
@@ -247,6 +258,8 @@ class StorageService:
 
     def _tree_stats(self, path: Path) -> tuple[int, int]:
         try:
+            if self._is_ignored_system_child(path):
+                return 0, 0
             if not path.exists() and not path.is_symlink():
                 return 0, 0
             if path.is_symlink():
@@ -263,6 +276,10 @@ class StorageService:
             return total, count
         except OSError:
             return 0, 0
+
+    def _is_ignored_system_child(self, path: Path) -> bool:
+        name = path.name
+        return name in _IGNORED_SYSTEM_NAMES or name.startswith("._")
 
     def _entry(self, *, category: str, path: Path, label: str, risk: str, reason: str, removable: bool = True) -> StorageCleanupEntryModel:
         size, count = self._tree_stats(path)
@@ -404,14 +421,6 @@ class StorageService:
         except OSError:
             return False
         return age_seconds >= days * 86400
-
-    def _global_generated_usage_paths(self) -> list[Path]:
-        paths: list[Path] = []
-        cache = self.data_dir / "cache"
-        if cache.exists():
-            paths.extend(child for child in cache.iterdir() if child.name not in {"pip", "xdg"})
-        paths.extend([self.data_dir / "logs", self.data_dir / "uploads", self.data_dir / "outputs"])
-        return paths
 
     def _model_roots(self) -> list[Path]:
         return [self.data_dir / "models"]
@@ -653,21 +662,73 @@ class StorageService:
         for child in sorted(self.data_dir.iterdir()):
             if child.name in excluded:
                 continue
+            if self._is_ignored_other_child(child):
+                continue
             size, count = self._tree_stats(child)
+            if count == 0 and size == 0 and child.name in {"cache", "settings.json"}:
+                continue
             items.append(
                 StorageOtherItemModel(
-                    label=child.name,
+                    label=self._other_label(child),
                     relative_path=self._relative(child),
                     bytes=size,
                     file_count=count,
                     updated_at=self._mtime_iso(child),
+                    removable=child.name != "settings.json" and not child.is_symlink() and not (child.name == "cache" and self._runtime_busy()),
                 )
             )
         items.sort(key=lambda item: item.bytes, reverse=True)
         return items
 
-    def _tool_cache_roots(self) -> list[Path]:
-        return [self.data_dir / "cache" / "pip", self.data_dir / "cache" / "xdg"]
+    def _is_ignored_other_child(self, path: Path) -> bool:
+        name = path.name
+        return name in _IGNORED_OTHER_NAMES or name.startswith("._")
+
+    def _other_label(self, path: Path) -> str:
+        if path.name == "settings.json":
+            return "Settings File"
+        if path.name == "cache":
+            return "External Cache"
+        return path.name
+
+    def _other_item_for_path(self, relative_path: str) -> StorageOtherItemModel:
+        item = next((item for item in self._other_items() if item.relative_path == relative_path), None)
+        if item is None:
+            raise FileNotFoundError(f"Other storage item not found: {relative_path}")
+        return item
+
+    def _other_entries(self, relative_paths: Iterable[str]) -> list[StorageCleanupEntryModel]:
+        entries: list[StorageCleanupEntryModel] = []
+        for relative_path in relative_paths:
+            try:
+                item = self._other_item_for_path(relative_path)
+            except FileNotFoundError:
+                continue
+            path = self._absolute_from_relative(item.relative_path)
+            removable = item.removable
+            reason = "Delete this other app data item."
+            risk = "caution"
+            if item.relative_path == "settings.json":
+                removable = False
+                risk = "blocked"
+                reason = "Settings File is protected."
+            elif item.relative_path == "cache":
+                risk = "safe"
+                reason = "External tool cache data can be downloaded or rebuilt again."
+                if not item.removable:
+                    risk = "blocked"
+                    reason = "Runtime or Auto Timing work is running; External Cache is locked."
+            entries.append(
+                self._entry(
+                    category="other",
+                    path=path,
+                    label=item.label,
+                    risk=risk,
+                    reason=reason,
+                    removable=removable,
+                )
+            )
+        return entries
 
     def _delete_project_entries(self, project_ids: list[str]) -> list[StorageCleanupEntryModel]:
         entries: list[StorageCleanupEntryModel] = []
@@ -782,31 +843,6 @@ class StorageService:
                 )
         return entries
 
-    def _global_generated_entries(self, older_than_days: int | None, *, include_tool_caches: bool = True) -> list[StorageCleanupEntryModel]:
-        entries: list[StorageCleanupEntryModel] = []
-        for parent_name in ("cache", "logs", "uploads", "outputs"):
-            parent = self.data_dir / parent_name
-            if not parent.exists():
-                continue
-            for child in sorted(parent.iterdir()):
-                if child.name in {"pip", "xdg"}:
-                    if include_tool_caches:
-                        # Tool caches have their own target and label.
-                        continue
-                    continue
-                if not self._is_older_than(child, older_than_days):
-                    continue
-                entries.append(
-                    self._entry(
-                        category="generated",
-                        path=child,
-                        label=f"{parent_name}/{child.name}",
-                        risk="safe",
-                        reason="Application-generated cache, log, upload, or output content.",
-                    )
-                )
-        return entries
-
     def _model_cache_entries(self, model_ids: Iterable[str] | None = None) -> list[StorageCleanupEntryModel]:
         models_root = self.data_dir / "models"
         if self._runtime_busy():
@@ -834,22 +870,6 @@ class StorageService:
                     label=item.label,
                     risk="danger",
                     reason="Downloaded models may need to be downloaded again.",
-                )
-            )
-        return entries
-
-    def _tool_cache_entries(self) -> list[StorageCleanupEntryModel]:
-        entries: list[StorageCleanupEntryModel] = []
-        for cache_root in self._tool_cache_roots():
-            if not cache_root.exists():
-                continue
-            entries.append(
-                self._entry(
-                    category="tool_cache",
-                    path=cache_root,
-                    label=cache_root.name,
-                    risk="safe",
-                    reason="Tool cache redirected under the lrc-roller data directory.",
                 )
             )
         return entries
@@ -931,17 +951,17 @@ class StorageService:
             if Path(entry.relative_path).parts == ("models",):
                 raise RuntimeError("Refusing to delete the top-level models directory directly.")
             return
-        if entry.category == "tool_cache":
-            if path not in self._tool_cache_roots():
-                raise RuntimeError("Tool cache cleanup can only delete managed tool cache roots.")
-            return
-        if entry.category == "generated":
-            if parts[0] not in {"cache", "logs", "uploads", "outputs"}:
-                raise RuntimeError("Generated cleanup can only delete application-generated roots.")
-            if len(parts) < 2:
-                raise RuntimeError("Refusing to delete a top-level generated folder directly.")
-            if parts[0] == "cache" and parts[1] in {"pip", "xdg"}:
-                raise RuntimeError("Tool caches must be cleaned through Tool Caches.")
+        if entry.category == "other":
+            if len(parts) != 1:
+                raise RuntimeError("Other cleanup can only delete top-level data directory items.")
+            if parts[0] in {"projects", "models", "envs"}:
+                raise RuntimeError("Other cleanup cannot delete managed storage categories.")
+            if parts[0] == "settings.json":
+                raise RuntimeError("Settings File is protected.")
+            if self._is_ignored_other_child(path):
+                raise RuntimeError("Ignored system files are not cleanup targets.")
+            if parts[0] == "cache" and self._runtime_busy():
+                raise RuntimeError("Runtime or Auto Timing work is running; External Cache is locked.")
             return
         raise RuntimeError("Cleanup path is not in an allowed cleanup location.")
 

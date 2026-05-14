@@ -270,10 +270,10 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const autoTimingSaveTimer = useRef<number | null>(null);
 
     const [defaultLanguage, setDefaultLanguage] = useState<Language>("zh");
-    const [defaultStages, setDefaultStages] = useState("t,p,a,w");
+    const [defaultStages, setDefaultStages] = useState("s,f,t,p,a,w");
     const [defaultWriterBackend, setDefaultWriterBackend] = useState("lrc_ms");
     const [defaultWriterSpacing, setDefaultWriterSpacing] = useState<Spacing>("keep");
-    const [defaultCleanup, setDefaultCleanup] = useState<Cleanup>("never");
+    const [defaultCleanup, setDefaultCleanup] = useState<Cleanup>("on-success");
     const [defaultLogLevel, setDefaultLogLevel] = useState<LogLevel>("INFO");
 
     const [splitterBackend, setSplitterBackend] = useState("demucs");
@@ -330,10 +330,10 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             setRecentProjectsLimit(String(settings.recent_projects_limit || 8));
 
             setDefaultLanguage(language);
-            setDefaultStages(normalizeStages(settings.auto_timing_default_stages || "t,p,a,w"));
+            setDefaultStages(normalizeStages(settings.auto_timing_default_stages || "s,f,t,p,a,w"));
             setDefaultWriterBackend(settings.auto_timing_default_writer_backend || "lrc_ms");
             setDefaultWriterSpacing(settings.auto_timing_default_writer_spacing || "keep");
-            setDefaultCleanup(settings.auto_timing_default_cleanup || "never");
+            setDefaultCleanup(settings.auto_timing_default_cleanup || "on-success");
             setDefaultLogLevel(settings.auto_timing_default_log_level || "INFO");
 
             setSplitterBackend(settings.auto_timing_splitter_backend || "demucs");
@@ -604,11 +604,12 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
 
     const runStorageCleanupDirect = async (
         targets: StorageCleanupTarget[],
-        options: { projectIds?: string[]; modelIds?: string[]; runtimeIds?: string[]; confirmation?: string } = {},
+        options: { projectIds?: string[]; modelIds?: string[]; runtimeIds?: string[]; otherPaths?: string[]; confirmation?: string } = {},
     ) => {
         const projectIds = options.projectIds || [];
         const modelIds = options.modelIds || [];
         const runtimeIds = options.runtimeIds || [];
+        const otherPaths = options.otherPaths || [];
         if (projectIds.length === 0 && targets.some((target) => target === "delete_projects" || target === "clear_intermediate")) {
             setStorageMessage("No matching projects to clean.");
             return;
@@ -619,6 +620,10 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         }
         if (runtimeIds.length === 0 && targets.includes("clean_runtime_envs")) {
             setStorageMessage("No matching runtimes to delete.");
+            return;
+        }
+        if (otherPaths.length === 0 && targets.includes("delete_other_items")) {
+            setStorageMessage("No matching other items to delete.");
             return;
         }
         if (options.confirmation && !window.confirm(options.confirmation)) {
@@ -633,6 +638,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                 project_ids: projectIds,
                 model_ids: modelIds,
                 runtime_ids: runtimeIds,
+                other_paths: otherPaths,
                 older_than_days: 0,
             });
             const result = await api.storageCleanupRun({
@@ -676,6 +682,8 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const storageModels = storageUsage?.models || [];
     const storageRuntimes = storageUsage?.runtimes || [];
     const storageOtherItems = storageUsage?.other_items || [];
+    const externalCacheItem = storageOtherItems.find((item) => item.relative_path === "cache");
+    const safeCleanupAvailable = (storageUsage?.projects || []).some((project) => !project.active && project.has_intermediate) || Boolean(externalCacheItem?.removable);
 
     if (!open) return null;
 
@@ -736,7 +744,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                             <b>Runtime folder</b><span>{runtime?.runtime_root || "not created"}</span>
                             <b>Source</b><span>{runtime?.runtime_source || "PyPI compatible package"}</span>
                             <b>Required py-roller</b><span>{runtime?.runtime_requirement || "py-roller>=0.5.6,<0.6"}</span>
-                            <b>Effective Transcriber Model Store</b><span>{modelStore || runtime?.model_store || "unknown"}</span>
+                            <b>Effective Model Store</b><span>{modelStore || runtime?.model_store || "unknown"}</span>
                             <b>Last check</b><span>{runtime?.settings.last_doctor_status || "not run"} {runtime?.settings.last_doctor_at ? `· ${runtime.settings.last_doctor_at}` : ""}</span>
                             <b>Last install</b><span>{runtime?.settings.last_install_status || runtime?.settings.last_install_profile || "not run"} {runtime?.settings.last_install_at ? `· ${runtime.settings.last_install_at}` : ""}</span>
                         </div>
@@ -748,23 +756,28 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                     </div>
 
                     <div className="settings-subsection">
-                        <div className="roller-section-title">Core</div>
+                        <div className="roller-section-title">Basic</div>
                         <div className="roller-form two-col">
-                            <label>Language<select value={defaultLanguage} onChange={(ev) => setDefaultLanguage(ev.target.value as Language)}>{optionNodes(LANGUAGE_OPTIONS)}</select></label>
+                            <label>Lyrics language<select value={defaultLanguage} onChange={(ev) => setDefaultLanguage(ev.target.value as Language)}>{optionNodes(LANGUAGE_OPTIONS)}</select></label>
                             <label>Processing preset<select value={defaultStages} onChange={(ev) => setDefaultStages(ev.target.value)}>{optionNodes(STAGE_OPTIONS)}</select></label>
                             <label>Output format<select value={defaultWriterBackend} onChange={(ev) => setDefaultWriterBackend(ev.target.value)}>{optionNodes(WRITER_OPTIONS)}</select></label>
                             <label>Repetition handling<select value={alignerRepetition} onChange={(ev) => setAlignerRepetition(ev.target.value as Repetition)}>{optionNodes(REPETITION_OPTIONS)}</select></label>
+                            <label className="field-with-browse">Model Store<span className="browse-row"><input placeholder={runtime?.model_store || "~/.local/share/lrc-roller/models/transcriber"} value={modelStore} onChange={(ev) => setModelStore(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>Browse</button></span></label>
                             <label>Spacing<select value={defaultWriterSpacing} onChange={(ev) => setDefaultWriterSpacing(ev.target.value as Spacing)}>{optionNodes(SPACING_OPTIONS)}</select></label>
-                            <label>Cleanup policy<select value={defaultCleanup} onChange={(ev) => setDefaultCleanup(ev.target.value as Cleanup)}>{optionNodes(CLEANUP_OPTIONS)}</select></label>
-                            <label>Log level<select value={defaultLogLevel} onChange={(ev) => setDefaultLogLevel(ev.target.value as LogLevel)}>{optionNodes(LOG_LEVEL_OPTIONS)}</select></label>
                         </div>
 
                         <details>
                             <summary>Advanced Parameters</summary>
+                            <div className="roller-section-title">Pipeline runtime</div>
+                            <div className="roller-form two-col">
+                                <label>Cleanup policy<select value={defaultCleanup} onChange={(ev) => setDefaultCleanup(ev.target.value as Cleanup)}>{optionNodes(CLEANUP_OPTIONS)}</select></label>
+                                <label>Log level<select value={defaultLogLevel} onChange={(ev) => setDefaultLogLevel(ev.target.value as LogLevel)}>{optionNodes(LOG_LEVEL_OPTIONS)}</select></label>
+                            </div>
+
                             <div className="roller-section-title">Model download</div>
                             <div className="roller-form two-col">
                                 <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
-                                <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+                                <label>Proxy URL<input placeholder="http://127.0.0.1:7890" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
                                 <label>Metadata timeout<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
                                 <label>File download timeout<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
                                 <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
@@ -789,7 +802,6 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                                 <label>Backend<select value={transcriberBackend} onChange={(ev) => setTranscriberBackend(ev.target.value)}>{optionNodes(transcriberBackendOptions(defaultLanguage))}</select></label>
                                 <label>Device<select value={transcriberDevice} onChange={(ev) => setTranscriberDevice(ev.target.value)}>{optionNodes(DEVICE_OPTIONS)}</select></label>
                                 <label>Model name<select value={transcriberModelName} onChange={(ev) => setTranscriberModelName(ev.target.value)}>{optionNodes(transcriberModelOptions(defaultLanguage, transcriberBackend))}</select></label>
-                                <label className="field-with-browse">Transcriber Model Store<span className="browse-row"><input placeholder={runtime?.model_store || "~/.local/share/lrc-roller/models/transcriber"} value={modelStore} onChange={(ev) => setModelStore(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>Browse</button></span></label>
                                 <label>Compute type<select value={transcriberComputeType} onChange={(ev) => setTranscriberComputeType(ev.target.value)} disabled={!transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS)}</select></label>
                                 <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
                             </div>
@@ -831,14 +843,21 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                         </div>
                     </div>
 
+                    <div className="roller-actions storage-actions storage-root-actions">
+                        <button type="button" onClick={() => void api.openStorageFolder()}>Open Folder</button>
+                        <button type="button" disabled={storageBusy || !safeCleanupAvailable} onClick={() => void runStorageCleanupDirect(["safe"])}>Safe Cleanup</button>
+                    </div>
+
                     <details open>
                         <summary>Projects</summary>
-                        <div className="roller-form storage-controls">
-                            <label>Older Than<select value={storageOlderThanDays} onChange={(ev) => setStorageOlderThanDays(ev.target.value)}><option value="0">All</option><option value="1">1 Day</option><option value="7">7 Days</option><option value="30">30 Days</option></select></label>
-                        </div>
-                        <div className="roller-actions storage-actions">
-                            <button type="button" disabled={storageBusy || allIntermediateProjectIds.length === 0} onClick={() => void runStorageCleanupDirect(["clear_intermediate"], { projectIds: allIntermediateProjectIds })}>Clear All Intermediate</button>
-                            <button className="danger-action" type="button" disabled={storageBusy || allStorageProjectIds.length === 0} onClick={() => void runStorageCleanupDirect(["delete_projects"], { projectIds: allStorageProjectIds, confirmation: `Delete all ${allStorageProjectIds.length} displayed project${allStorageProjectIds.length === 1 ? "" : "s"}?` })}>Delete All</button>
+                        <div className="storage-project-toolbar">
+                            <div className="roller-form storage-project-controls">
+                                <label>Older Than<select value={storageOlderThanDays} onChange={(ev) => setStorageOlderThanDays(ev.target.value)}><option value="0">All</option><option value="1">1 Day</option><option value="7">7 Days</option><option value="30">30 Days</option></select></label>
+                            </div>
+                            <div className="roller-actions storage-actions">
+                                <button type="button" disabled={storageBusy || allIntermediateProjectIds.length === 0} onClick={() => void runStorageCleanupDirect(["clear_intermediate"], { projectIds: allIntermediateProjectIds })}>Clear Intermediates</button>
+                                <button className="danger-action" type="button" disabled={storageBusy || allStorageProjectIds.length === 0} onClick={() => void runStorageCleanupDirect(["delete_projects"], { projectIds: allStorageProjectIds, confirmation: `Delete ${allStorageProjectIds.length} displayed project${allStorageProjectIds.length === 1 ? "" : "s"}?` })}>Delete</button>
+                            </div>
                         </div>
                         <div className="storage-project-list">
                             {storageProjects.length === 0 && <p className="roller-message subtle">No projects match this age filter.</p>}
@@ -853,7 +872,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                                         </div>
                                     </div>
                                     <div className="storage-project-actions">
-                                        <button type="button" disabled={storageBusy || project.active || !project.has_intermediate} onClick={() => void runStorageCleanupDirect(["clear_intermediate"], { projectIds: [project.project_id] })}>Clear Intermediate</button>
+                                        <button type="button" disabled={storageBusy || project.active || !project.has_intermediate} onClick={() => void runStorageCleanupDirect(["clear_intermediate"], { projectIds: [project.project_id] })}>Clear Intermediates</button>
                                         <button className="danger-action" type="button" disabled={storageBusy || project.active} onClick={() => void runStorageCleanupDirect(["delete_projects"], { projectIds: [project.project_id], confirmation: "Delete this project?" })}>Delete</button>
                                     </div>
                                 </div>
@@ -895,7 +914,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                         <div className="storage-item-list">
                             {storageRuntimes.length === 0 && <p className="roller-message subtle">No runtime environments found.</p>}
                             {storageRuntimes.map((item) => (
-                                <div className={`storage-item-row ${item.active ? "blocked" : ""}`} key={item.runtime_id}>
+                                <div className="storage-item-row" key={item.runtime_id}>
                                     <div className="storage-project-main">
                                         <b>{item.runtime_id}{item.active ? " · Active" : ""}</b>
                                         <small>{item.profile || "profile"} · {item.status}{item.pyroller_version ? ` · py-roller ${item.pyroller_version}` : ""}{item.python_version ? ` · Python ${item.python_version}` : ""}</small>
@@ -916,7 +935,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                     <details>
                         <summary>Other</summary>
                         <div className="storage-item-list">
-                            {storageOtherItems.length === 0 && <p className="roller-message subtle">No unclassified items found.</p>}
+                            {storageOtherItems.length === 0 && <p className="roller-message subtle">No other app data found.</p>}
                             {storageOtherItems.map((item) => (
                                 <div className="storage-item-row" key={item.relative_path}>
                                     <div className="storage-project-main">
@@ -926,6 +945,10 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                                             <span>{formatBytes(item.bytes)}</span>
                                             <span>{item.file_count} files</span>
                                         </div>
+                                    </div>
+                                    <div className="storage-project-actions">
+                                        <button type="button" disabled={storageBusy} onClick={() => void api.openOtherFolder(item.relative_path)}>Open Folder</button>
+                                        {item.removable && <button className="danger-action" type="button" disabled={storageBusy} onClick={() => void runStorageCleanupDirect(["delete_other_items"], { otherPaths: [item.relative_path], confirmation: `Delete ${item.label}?` })}>Delete</button>}
                                     </div>
                                 </div>
                             ))}

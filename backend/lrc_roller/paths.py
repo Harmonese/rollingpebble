@@ -7,10 +7,7 @@ def ensure_data_dirs(data_dir: Path) -> dict[str, Path]:
     paths = {
         "root": data_dir,
         "projects": data_dir / "projects",
-        "uploads": data_dir / "uploads",
-        "outputs": data_dir / "outputs",
         "cache": data_dir / "cache",
-        "logs": data_dir / "logs",
         "envs": data_dir / "envs",
         "models": data_dir / "models",
     }

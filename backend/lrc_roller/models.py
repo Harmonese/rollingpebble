@@ -187,7 +187,7 @@ class RollRequest(BaseModel):
     writer_by_tag: str | None = None
     writer_ass_karaoke_tag_type: Literal["k", "K", "kf", "ko"] | None = None
 
-    cleanup: Literal["on-success", "never"] = "never"
+    cleanup: Literal["on-success", "never"] = "on-success"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
@@ -267,10 +267,10 @@ class RuntimeSettingsModel(BaseModel):
     upload_derive_plain_from_synced: bool = True
 
     auto_timing_default_language: Literal["zh", "en", "mul"] = "zh"
-    auto_timing_default_stages: str = "t,p,a,w"
+    auto_timing_default_stages: str = "s,f,t,p,a,w"
     auto_timing_default_writer_backend: str = "lrc_ms"
     auto_timing_default_writer_spacing: Literal["keep", "drop"] = "keep"
-    auto_timing_default_cleanup: Literal["on-success", "never"] = "never"
+    auto_timing_default_cleanup: Literal["on-success", "never"] = "on-success"
     auto_timing_default_log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     auto_timing_splitter_backend: str = "demucs"
@@ -426,18 +426,17 @@ CleanupTarget = Literal[
     "clean_runtime_envs",
     "delete_projects",
     "clear_intermediate",
-    # Backward-compatible target names used by older frontends/tests.
-    "clean_generated",
-    "clean_tool_caches",
     "clean_project_generated",
+    "clean_external_cache",
+    "delete_other_items",
     "delete_project_audio",
     "delete_project_lyrics_output",
+    # Backward-compatible project/model/runtime target names used by older frontends/tests.
     "safe",
     "job_intermediates",
     "project_artifacts",
     "model_cache",
     "runtime_envs",
-    "external_caches",
 ]
 
 
@@ -500,6 +499,7 @@ class StorageOtherItemModel(BaseModel):
     bytes: int = 0
     file_count: int = 0
     updated_at: str | None = None
+    removable: bool = True
 
 
 class StorageCategoryModel(BaseModel):
@@ -528,6 +528,7 @@ class StorageCleanupPreviewRequest(BaseModel):
     project_ids: list[str] = Field(default_factory=list)
     model_ids: list[str] = Field(default_factory=list)
     runtime_ids: list[str] = Field(default_factory=list)
+    other_paths: list[str] = Field(default_factory=list)
 
 
 class StorageCleanupEntryModel(BaseModel):
@@ -577,3 +578,7 @@ class StorageOpenModelRequest(BaseModel):
 
 class StorageOpenRuntimeRequest(BaseModel):
     runtime_id: str
+
+
+class StorageOpenOtherRequest(BaseModel):
+    relative_path: str

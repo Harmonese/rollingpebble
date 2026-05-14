@@ -61,14 +61,12 @@ class RollerService:
         self,
         *,
         projects_root: Path,
-        outputs_root: Path,
         project_service: ProjectService,
         jobs: JobManager,
         settings_provider: Callable[[], RuntimeSettingsModel] | None = None,
         runtime_manager: RuntimeManager | None = None,
     ) -> None:
         self.projects_root = projects_root
-        self.outputs_root = outputs_root
         self.project_service = project_service
         self.jobs = jobs
         self.settings_provider = settings_provider

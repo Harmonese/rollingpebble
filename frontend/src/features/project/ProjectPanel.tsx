@@ -101,21 +101,21 @@ export const ProjectPanel: React.FC<{
         next.add(projectId);
         setHiddenProjects(next);
         writeHiddenRecentProjects(next);
-        setMessage("Removed from Recent projects. Project files were not deleted.");
+        setMessage("");
     };
 
     const clearRecent = () => {
         const next = new Set(projects.map((item) => item.project_id));
         setHiddenProjects(next);
         writeHiddenRecentProjects(next);
-        setMessage("Recent projects cleared. Project files were not deleted.");
+        setMessage("");
     };
 
     const restoreRecent = () => {
         const next = new Set<string>();
         setHiddenProjects(next);
         writeHiddenRecentProjects(next);
-        setMessage("Recent projects restored.");
+        setMessage("");
     };
 
     return (

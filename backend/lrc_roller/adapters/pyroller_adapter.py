@@ -6,6 +6,7 @@ import shlex
 import shutil
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 from lrc_roller.models import RollRequest
 
@@ -30,6 +31,19 @@ _PROXY_ENV_KEYS = (
 )
 
 
+def _proxy_can_be_exported_to_stdlib_env(proxy: str) -> bool:
+    """Return whether the proxy is safe for stdlib urllib/torch.hub.
+
+    Hugging Face downloads receive --transcriber-hf-proxy directly from
+    py-roller, but Demucs uses torch.hub -> urllib.request for model
+    downloads. urllib understands HTTP(S) proxy CONNECT, but it does not
+    implement SOCKS. Exporting socks5/socks5h as HTTPS_PROXY makes urllib
+    talk HTTP CONNECT to a SOCKS server, which fails with connection reset.
+    """
+    scheme = urlparse(proxy).scheme.lower()
+    return scheme in {"http", "https"}
+
+
 def build_pyroller_env(request: RollRequest, base_env: dict[str, str] | None = None) -> dict[str, str] | None:
     """Return subprocess environment overrides for py-roller downloads.
 
@@ -48,7 +62,7 @@ def build_pyroller_env(request: RollRequest, base_env: dict[str, str] | None = N
     changed = False
 
     proxy = str(request.transcriber_hf_proxy or "").strip()
-    if proxy:
+    if proxy and _proxy_can_be_exported_to_stdlib_env(proxy):
         for key in _PROXY_ENV_KEYS:
             env[key] = proxy
         changed = True
@@ -120,7 +134,7 @@ def artifacts_for(project_root: Path) -> dict[str, Path]:
 
 
 def normalize_stages(stages: str | None) -> list[str]:
-    items = [item.strip() for item in (stages or "t,p,a,w").split(",") if item.strip()]
+    items = [item.strip() for item in (stages or "s,f,t,p,a,w").split(",") if item.strip()]
     if not items:
         items = ["s", "f", "t", "p", "a", "w"]
     unknown = [stage for stage in items if stage not in PIPELINE_INDEX]

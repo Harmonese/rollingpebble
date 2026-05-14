@@ -49,6 +49,7 @@ from lrc_roller.models import (
     StorageCleanupRunRequest,
     StorageCleanupRunResponse,
     StorageOpenModelRequest,
+    StorageOpenOtherRequest,
     StorageOpenRuntimeRequest,
     StorageUsageResponse,
 )
@@ -86,7 +87,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     runtime = RuntimeService(data_dir=paths["root"], jobs=jobs, manager=runtime_manager)
     roller = RollerService(
         projects_root=paths["projects"],
-        outputs_root=paths["outputs"],
         project_service=projects,
         jobs=jobs,
         settings_provider=runtime.get_settings,
@@ -372,6 +372,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         folder.mkdir(parents=True, exist_ok=True)
         return open_folder(folder)
 
+    @app.post("/api/storage/open-folder")
+    def open_storage_folder() -> dict[str, str]:
+        folder = paths["root"]
+        folder.mkdir(parents=True, exist_ok=True)
+        return open_folder(folder)
+
     @app.get("/api/storage/usage", response_model=StorageUsageResponse)
     def storage_usage() -> StorageUsageResponse:
         return storage.usage()
@@ -389,6 +395,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def open_runtime_folder(request: StorageOpenRuntimeRequest) -> dict[str, str]:
         try:
             return open_folder(storage.runtime_item_path(request.runtime_id))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/storage/other/open-folder")
+    def open_other_folder(request: StorageOpenOtherRequest) -> dict[str, str]:
+        try:
+            return open_folder(storage.other_item_open_path(request.relative_path))
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception as exc:

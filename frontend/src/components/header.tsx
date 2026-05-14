@@ -1,4 +1,4 @@
-import { PreferencesSVG } from "./svg.js";
+import { InfoSVG, PreferencesSVG } from "./svg.js";
 
 export const Header: React.FC<{ onAbout: () => void; onSettings: () => void }> = ({ onAbout, onSettings }) => {
     return (
@@ -7,7 +7,7 @@ export const Header: React.FC<{ onAbout: () => void; onSettings: () => void }> =
                 <span className="app-title-text">lrc-roller</span>
             </a>
             <nav className="app-nav" aria-label="Application settings">
-                <button className="app-tab text-tab" title="About" type="button" onClick={onAbout}>About</button>
+                <button className="app-tab icon-tab" title="About" aria-label="About" type="button" onClick={onAbout}><InfoSVG /></button>
                 <button className="app-tab icon-tab" title="Settings" type="button" onClick={onSettings}>
                     <PreferencesSVG />
                 </button>

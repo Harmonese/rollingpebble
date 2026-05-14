@@ -18,7 +18,7 @@ The Settings drawer has a **Storage & Cleanup** section at the bottom. The curre
 - **Other**
 - **Browser Storage**
 
-Application cache/log folders and pip/XDG tool caches are no longer exposed as first-class cleanup sections. They will show under **Other** if they contain files.
+External tool cache data is no longer exposed as a first-class cleanup section. If present, it appears under **Other** as **External Cache** and is included in **Safe Cleanup**.
 
 ## Overview
 
@@ -27,13 +27,24 @@ The overview shows total disk usage and these categories:
 - **Projects**: all project folders under `projects/`.
 - **Models**: the whole `models/` directory.
 - **Runtime Environments**: the whole `envs/` directory.
-- **Other**: first-level files/folders under the data directory that are not `projects/`, `models/`, or `envs/`.
+- **Other**: known app data and first-level files/folders under the data directory that are not `projects/`, `models/`, or `envs/`.
 
-The **Other** section also lists its first-level items, such as `settings.json`, `cache/`, `logs/`, `uploads/`, or `outputs/`.
+The **Other** section also lists its first-level items. Known entries get readable names:
+
+- **Settings File**: `settings.json`.
+- **External Cache**: `cache/`, currently used for redirected pip/XDG cache paths.
+
+System noise such as `.DS_Store` is ignored. Unknown first-level files or folders are shown by their own names so they can be noticed and removed intentionally from **Other**.
+
+Each **Other** row can open its location. Folder rows open that folder; file rows open the parent folder. **Settings File** can be opened but is protected from deletion.
+
+## Safe Cleanup
+
+The top-level **Safe Cleanup** action removes project `intermediate/` directories and **External Cache**. These files can be recreated or downloaded again when needed. External Cache is locked while Auto Timing or runtime maintenance is running.
 
 ## Projects
 
-Projects are filtered by **Older Than**. The project list only shows projects whose `updated_at` is older than the selected value. **Clear All Intermediate** and **Delete All** only operate on the projects currently shown by this filter.
+Projects are filtered by **Older Than**. The project list only shows projects whose `updated_at` is older than the selected value. **Clear Intermediates** and **Delete** only operate on the projects currently shown by this filter.
 
 Each project row shows:
 
@@ -42,7 +53,7 @@ Each project row shows:
 
 Per-project actions:
 
-- **Clear Intermediate**: deletes only `projects/<project_id>/intermediate/`.
+- **Clear Intermediates**: deletes only `projects/<project_id>/intermediate/`.
 - **Delete**: deletes the whole `projects/<project_id>/` folder.
 
 A project with a running job is blocked from deletion and intermediate cleanup.
@@ -93,4 +104,6 @@ The cleanup backend enforces these rules:
 - running projects cannot be deleted or modified;
 - model and runtime cleanup are locked while Auto Timing or runtime maintenance is running;
 - the active runtime is protected;
-- frontend requests do not pass arbitrary paths for deletion; the backend maps selected project/model/runtime IDs to known paths.
+- `settings.json` is protected;
+- Other cleanup is limited to first-level data directory items already reported by the backend;
+- frontend requests do not pass arbitrary paths for deletion; the backend maps selected IDs or reported Other paths to known paths.

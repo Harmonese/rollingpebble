@@ -184,14 +184,14 @@ export const RollerPanel: React.FC<{
   onImportText: (text: string) => void;
 }> = ({ project, plainLyrics, syncedLyrics, editorMeta, onProject, onImportText }) => {
   const [language, setLanguage] = useState<Language>("zh");
-  const [stages, setStages] = useState("t,p,a,w");
+  const [stages, setStages] = useState("s,f,t,p,a,w");
   const [writerBackend, setWriterBackend] = useState("lrc_ms");
   const [writerSpacing, setWriterSpacing] = useState("keep");
   const [alignerRepetition, setAlignerRepetition] = useState<Repetition>("none");
   const [transcriberModelPath, setTranscriberModelPath] = useState("");
   const [transcriberModelStoreDefault, setTranscriberModelStoreDefault] = useState("");
 
-  const [cleanup, setCleanup] = useState("never");
+  const [cleanup, setCleanup] = useState("on-success");
   const [logLevel, setLogLevel] = useState("INFO");
   const [parserEncoding, setParserEncoding] = useState("auto");
 
@@ -245,10 +245,10 @@ export const RollerPanel: React.FC<{
       const nextBackend = normalizeTranscriberBackend(nextLanguage, settings.auto_timing_transcriber_backend || "faster_whisper");
       const nextModel = settings.auto_timing_transcriber_model_name || defaultModelFor(nextLanguage, nextBackend);
       setLanguage(nextLanguage);
-      setStages(normalizeStages(settings.auto_timing_default_stages || "t,p,a,w"));
+      setStages(normalizeStages(settings.auto_timing_default_stages || "s,f,t,p,a,w"));
       setWriterBackend(settings.auto_timing_default_writer_backend || "lrc_ms");
       setWriterSpacing(settings.auto_timing_default_writer_spacing || "keep");
-      setCleanup(settings.auto_timing_default_cleanup || "never");
+      setCleanup(settings.auto_timing_default_cleanup || "on-success");
       setLogLevel(settings.auto_timing_default_log_level || "INFO");
       setAlignerRepetition(settings.auto_timing_aligner_repetition || "none");
       setSplitterBackend(settings.auto_timing_splitter_backend || "demucs");
@@ -519,7 +519,7 @@ export const RollerPanel: React.FC<{
       </div>
       {!inputState.ready && <p className="roller-warning">{inputState.reason}</p>}
 
-      <div className="roller-section-title">Basic settings</div>
+      <div className="roller-section-title">Basic</div>
       <div className="roller-form two-col">
         <label>Lyrics language
           <select value={language} onChange={(ev) => setLanguage(ev.target.value as Language)}>
@@ -541,8 +541,8 @@ export const RollerPanel: React.FC<{
             {optionNodes(REPETITION_OPTIONS)}
           </select>
         </label>
-        <label className="field-with-browse">Transcriber Model Store
-          <span className="browse-row"><input placeholder={transcriberModelStoreDefault || "lrc-roller transcriber model store"} value={transcriberModelPath} onChange={(ev) => setTranscriberModelPath(ev.target.value)} disabled={!includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!includesTranscriber}>Browse</button></span>
+        <label className="field-with-browse">Model Store
+          <span className="browse-row"><input placeholder={transcriberModelStoreDefault || "lrc-roller model store"} value={transcriberModelPath} onChange={(ev) => setTranscriberModelPath(ev.target.value)} disabled={!includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!includesTranscriber}>Browse</button></span>
         </label>
         <label>Spacing
           <select value={writerSpacing} onChange={(ev) => setWriterSpacing(ev.target.value)} disabled={!includesWriter}>
@@ -563,7 +563,7 @@ export const RollerPanel: React.FC<{
             <div className="roller-section-title">Model download</div>
             <div className="roller-form two-col">
               <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
-              <label>Proxy URL<input placeholder="socks5h://127.0.0.1:9909" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
+              <label>Proxy URL<input placeholder="http://127.0.0.1:7890" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
               <label>Metadata timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
               <label>File download timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
               <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>

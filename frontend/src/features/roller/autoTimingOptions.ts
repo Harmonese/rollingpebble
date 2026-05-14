@@ -35,7 +35,7 @@ export const LOCAL_CACHE_OPTIONS: Option[] = [
 
 export function normalizeStages(stages: string): string {
   const allowed = STAGE_OPTIONS.map((item) => item.value);
-  return allowed.includes(stages) ? stages : "t,p,a,w";
+  return allowed.includes(stages) ? stages : "s,f,t,p,a,w";
 }
 
 export const WRITER_OPTIONS: Option[] = [
@@ -57,8 +57,8 @@ export const REPETITION_OPTIONS: Option[] = [
 ];
 
 export const CLEANUP_OPTIONS: Option[] = [
-  { value: "never", label: "Keep intermediate files" },
   { value: "on-success", label: "Clean on success" },
+  { value: "never", label: "Keep intermediate files" },
 ];
 
 export const LOG_LEVEL_OPTIONS: Option[] = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"].map((value) => ({ value, label: value }));

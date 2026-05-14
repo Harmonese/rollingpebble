@@ -210,6 +210,7 @@ export type StorageOtherItem = {
     bytes: number;
     file_count: number;
     updated_at?: string | null;
+    removable: boolean;
 };
 
 export type StorageCategory = {
@@ -262,11 +263,12 @@ export type StorageCleanupTarget =
     | "clean_runtime_envs"
     | "delete_projects"
     | "clear_intermediate"
-    | "clean_generated"
-    | "clean_tool_caches"
     | "clean_project_generated"
+    | "clean_external_cache"
+    | "delete_other_items"
     | "delete_project_audio"
-    | "delete_project_lyrics_output";
+    | "delete_project_lyrics_output"
+    | "safe";
 
 export type StorageCleanupEntry = {
     id: string;
@@ -433,12 +435,16 @@ export const api = {
         }),
 
     storageUsage: () => request<StorageUsage>("/api/storage/usage"),
-    storageCleanupPreview: (payload: { targets: StorageCleanupTarget[]; older_than_days?: number | null; project_ids?: string[]; model_ids?: string[]; runtime_ids?: string[] }) =>
+    storageCleanupPreview: (payload: { targets: StorageCleanupTarget[]; older_than_days?: number | null; project_ids?: string[]; model_ids?: string[]; runtime_ids?: string[]; other_paths?: string[] }) =>
         request<StorageCleanupPlan>("/api/storage/cleanup/preview", { method: "POST", body: JSON.stringify(payload) }),
+    openStorageFolder: () =>
+        request<{ status: string; path: string }>("/api/storage/open-folder", { method: "POST" }),
     openModelFolder: (modelId: string) =>
         request<{ status: string; path: string }>("/api/storage/models/open-folder", { method: "POST", body: JSON.stringify({ model_id: modelId }) }),
     openRuntimeFolder: (runtimeId: string) =>
         request<{ status: string; path: string }>("/api/storage/runtimes/open-folder", { method: "POST", body: JSON.stringify({ runtime_id: runtimeId }) }),
+    openOtherFolder: (relativePath: string) =>
+        request<{ status: string; path: string }>("/api/storage/other/open-folder", { method: "POST", body: JSON.stringify({ relative_path: relativePath }) }),
     storageCleanupRun: (payload: { plan_id: string; entry_ids?: string[] | null }) =>
         request<StorageCleanupRunResult>("/api/storage/cleanup/run", { method: "POST", body: JSON.stringify(payload) }),
 };

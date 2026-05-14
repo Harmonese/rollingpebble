@@ -1346,6 +1346,7 @@
     width: min(720px, 100%);
     max-height: min(760px, calc(100dvh - 36px));
     overflow: auto;
+    scrollbar-gutter: stable;
     box-sizing: border-box;
     padding: 18px;
     border-radius: 20px;
@@ -1784,9 +1785,39 @@
     max-width: 220px;
 }
 
+.storage-project-toolbar {
+    display: grid;
+    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+    gap: 10px;
+    align-items: end;
+    margin: 8px 0 10px;
+}
+
+.storage-project-controls {
+    margin: 0;
+    max-width: 220px;
+}
+
 .storage-actions {
     flex-wrap: wrap;
     margin-top: 8px;
+}
+
+.storage-project-toolbar .storage-actions {
+    justify-content: flex-end;
+    margin-top: 0;
+}
+
+.storage-root-actions {
+    margin: 10px 0 8px;
+}
+
+.storage-project-actions button {
+    min-height: 36px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 0.84rem;
+    line-height: 1.2;
 }
 
 .storage-plan {
@@ -1867,6 +1898,14 @@
         grid-template-columns: minmax(0, 1fr);
     }
 
+    .storage-project-toolbar {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .storage-project-toolbar .storage-actions {
+        justify-content: flex-start;
+    }
+
     .storage-plan-header {
         flex-direction: column;
     }
@@ -1931,15 +1970,10 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 5px;
-    max-width: 260px;
+    gap: 8px;
+    max-width: none;
 }
 
-.storage-project-actions button {
-    min-height: 26px;
-    padding: 4px 7px;
-    font-size: 0.72rem;
-}
 
 @media (width <= 900px) {
     .storage-project-row {
@@ -1971,10 +2005,6 @@
     border-radius: 11px;
     border: 1px solid rgba(255, 255, 255, 0.075);
     background: rgba(255, 255, 255, 0.018);
-}
-
-.storage-item-row.blocked {
-    opacity: 0.7;
 }
 
 @media (width <= 900px) {
