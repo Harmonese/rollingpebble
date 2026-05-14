@@ -259,7 +259,7 @@ export const LrclibPanel: React.FC<{
 
     return (
         <section className="roller-card lyrics-import-card">
-            <h2>Lyrics Import</h2>
+            <h2>Import Lyrics</h2>
 
             <div className="library-strip" role="tablist" aria-label="Lyric libraries">
                 <button

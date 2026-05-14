@@ -28,7 +28,27 @@ class Settings:
         )
 
 
+def _valid_frontend_dist(candidate: Path | None) -> Path | None:
+    if candidate is None:
+        return None
+    return candidate if (candidate / "index.html").exists() else None
+
+
+def frontend_dist_from_package() -> Path | None:
+    """Return bundled frontend assets from an installed wheel, if present."""
+    return _valid_frontend_dist(Path(__file__).resolve().parent / "frontend_dist")
+
+
 def frontend_dist_from_repo() -> Path | None:
-    root = Path(__file__).resolve().parents[3]
-    candidate = root / "frontend" / "dist"
-    return candidate if candidate.exists() else None
+    """Return Vite build output from a source checkout, if present."""
+    root = Path(__file__).resolve().parents[2]
+    return _valid_frontend_dist(root / "frontend" / "dist")
+
+
+def resolve_frontend_dist(settings: Settings) -> Path | None:
+    """Resolve frontend assets in explicit, bundled, then source-checkout order."""
+    return (
+        _valid_frontend_dist(settings.frontend_dist)
+        or frontend_dist_from_package()
+        or frontend_dist_from_repo()
+    )

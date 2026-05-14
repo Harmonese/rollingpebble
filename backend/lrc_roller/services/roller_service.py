@@ -6,6 +6,7 @@ from pathlib import Path
 from lrc_roller.adapters.pyroller_adapter import (
     artifacts_for,
     build_pyroller_command,
+    build_pyroller_env,
     command_text,
     default_artifacts_dir,
     normalize_stages,
@@ -217,13 +218,15 @@ class RollerService:
             warnings.append("Missing alignment_result.json; run an alignment step before rewriting output.")
         return warnings
 
-    def _runtime_command_options(self) -> tuple[list[str] | None, Path | None]:
+    def _runtime_command_options(self) -> tuple[list[str] | None, Path | None, dict[str, str] | None]:
         settings = self.settings_provider() if self.settings_provider is not None else RuntimeSettingsModel()
         if self.runtime_manager is None:
-            return None, None
+            return None, None, None
+        runtime = self.runtime_manager.active_runtime(settings)
         return (
             self.runtime_manager.command_prefix(settings.auto_roller_profile),
             self.runtime_manager.default_model_store(),
+            self.runtime_manager.runtime_env(runtime.venv_path),
         )
 
     def _runtime_install_running(self) -> bool:
@@ -236,7 +239,7 @@ class RollerService:
         timing_plain = self.project_service.plain_lyrics_for_timing(project_id)
         request = self._effective_request(request)
         audio_path, lyrics_path, output_path, intermediate_dir, artifacts_dir = self._paths_for_project(project_id, str(request.stages))
-        command_prefix, default_model_store = self._runtime_command_options()
+        command_prefix, default_model_store, _runtime_env = self._runtime_command_options()
         command = build_pyroller_command(
             audio_path=audio_path,
             lyrics_path=lyrics_path,
@@ -250,31 +253,6 @@ class RollerService:
         warnings: list[str] = []
         if "p" in set(normalize_stages(request.stages)) and not timing_plain.strip():
             warnings.append("No lyric lines are saved for this project yet. Metadata-only LRC headers are ignored.")
-        elif timing_plain.strip():
-            write_text(self.projects_root, project_id, PLAIN_NAME, timing_plain)
-        if "t" in set(normalize_stages(request.stages)):
-            if request.transcriber_hf_proxy:
-                proxy_text = str(request.transcriber_hf_proxy).strip()
-                if proxy_text.startswith("socks5://"):
-                    warnings.append(
-                        "HF proxy is using socks5://. On restricted networks this often fails because DNS is resolved locally; use socks5h://127.0.0.1:PORT instead."
-                    )
-                elif proxy_text.startswith("socks5h://"):
-                    warnings.append(
-                        "HF proxy is using socks5h://, which sends DNS resolution through the SOCKS proxy. This is usually the right choice on restricted networks."
-                    )
-                else:
-                    warnings.append(
-                        "A Hugging Face proxy is configured. If model download fails, verify the proxy scheme and port; SOCKS proxies usually need socks5h:// on restricted networks."
-                    )
-            if request.transcriber_hf_max_workers == 1:
-                warnings.append(
-                    "HF max download workers is set to 1. This is stable for fragile networks but can look stalled on large model files."
-                )
-            if request.transcriber_hf_xet in (None, "auto"):
-                warnings.append(
-                    "HF XET/CAS is Auto. If your network hangs on large model files, set HF XET/CAS to Off."
-                )
         warnings.extend(self._artifact_warnings(str(request.stages), artifacts_dir))
         return RollPreviewResponse(
             command=command,
@@ -307,7 +285,7 @@ class RollerService:
         artifact_warnings = self._artifact_warnings(str(request.stages), artifacts_dir)
         if artifact_warnings:
             raise ValueError(" ".join(artifact_warnings))
-        command_prefix, default_model_store = self._runtime_command_options()
+        command_prefix, default_model_store, runtime_env = self._runtime_command_options()
         command = build_pyroller_command(
             audio_path=audio_path,
             lyrics_path=lyrics_path,
@@ -339,4 +317,5 @@ class RollerService:
             command=command,
             cwd=root,
             on_success=on_success,
+            env=build_pyroller_env(request, base_env=runtime_env) or runtime_env,
         )

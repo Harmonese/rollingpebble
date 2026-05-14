@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, type AutoRollerRuntime, type JobModel } from "../../shared/api.js";
+import { api, type AutoRollerRuntime, type JobModel, type StorageCleanupTarget, type StorageUsage } from "../../shared/api.js";
 import { notifySettingsUpdated } from "../../shared/settingsEvents.js";
 import { requestEditorLrcCleanup } from "../../shared/editorCleanupEvents.js";
 import {
@@ -84,6 +84,27 @@ function formatDuration(seconds: number | null): string {
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 }
 
+function isOlderThanDays(value: string | null | undefined, days: number): boolean {
+    if (days <= 0) return true;
+    if (!value) return false;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return false;
+    return Date.now() - date.getTime() >= days * 86400 * 1000;
+}
+
+
+function formatBytes(bytes?: number | null): string {
+    const value = typeof bytes === "number" && Number.isFinite(bytes) ? Math.max(0, bytes) : 0;
+    if (value < 1024) return `${value} B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    let size = value / 1024;
+    let index = 0;
+    while (size >= 1024 && index < units.length - 1) {
+        size /= 1024;
+        index += 1;
+    }
+    return `${size >= 10 ? size.toFixed(1) : size.toFixed(2)} ${units[index]}`;
+}
 
 type RuntimeStepStatus = "pending" | "running" | "done" | "failed";
 
@@ -288,6 +309,12 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const [runtimeError, setRuntimeError] = useState("");
     const [busy, setBusy] = useState(false);
 
+    const [storageUsage, setStorageUsage] = useState<StorageUsage | null>(null);
+    const [storageOlderThanDays, setStorageOlderThanDays] = useState("1");
+    const [storageBusy, setStorageBusy] = useState(false);
+    const [storageMessage, setStorageMessage] = useState("");
+    const [storageError, setStorageError] = useState("");
+
     const refresh = useCallback(async () => {
         try {
             setAutoTimingLoaded(false);
@@ -343,9 +370,21 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         }
     }, []);
 
+    const refreshStorage = useCallback(async () => {
+        try {
+            const usage = await api.storageUsage();
+            setStorageUsage(usage);
+        } catch (error) {
+            setStorageError((error as Error).message);
+        }
+    }, []);
+
     useEffect(() => {
-        if (open) void refresh();
-    }, [open, refresh]);
+        if (open) {
+            void refresh();
+            void refreshStorage();
+        }
+    }, [open, refresh, refreshStorage]);
 
     useEffect(() => {
         const normalized = normalizeTranscriberBackend(defaultLanguage, transcriberBackend);
@@ -400,6 +439,22 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const saveProfile = async (value: Profile) => {
         setProfile(value);
         await savePatch({ auto_roller_profile: value });
+    };
+
+    const resetDefaults = async () => {
+        if (!window.confirm("Reset all settings to their defaults? Projects, models, runtimes, and storage files are not affected.")) return;
+        setBusy(true);
+        setMessage("Resetting settings...");
+        try {
+            await api.resetSettingsDefaults();
+            notifySettingsUpdated();
+            await refresh();
+            setMessage("Settings reset to defaults.");
+        } catch (error) {
+            setMessage((error as Error).message);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const saveAutoTimingDefaults = useCallback(async (success = "Auto Timing settings saved automatically.") => {
@@ -547,6 +602,81 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         }
     };
 
+    const runStorageCleanupDirect = async (
+        targets: StorageCleanupTarget[],
+        options: { projectIds?: string[]; modelIds?: string[]; runtimeIds?: string[]; confirmation?: string } = {},
+    ) => {
+        const projectIds = options.projectIds || [];
+        const modelIds = options.modelIds || [];
+        const runtimeIds = options.runtimeIds || [];
+        if (projectIds.length === 0 && targets.some((target) => target === "delete_projects" || target === "clear_intermediate")) {
+            setStorageMessage("No matching projects to clean.");
+            return;
+        }
+        if (modelIds.length === 0 && targets.includes("delete_model_items")) {
+            setStorageMessage("No matching models to clean.");
+            return;
+        }
+        if (runtimeIds.length === 0 && targets.includes("clean_runtime_envs")) {
+            setStorageMessage("No matching runtimes to delete.");
+            return;
+        }
+        if (options.confirmation && !window.confirm(options.confirmation)) {
+            return;
+        }
+        setStorageBusy(true);
+        setStorageError("");
+        setStorageMessage("Cleaning files...");
+        try {
+            const plan = await api.storageCleanupPreview({
+                targets,
+                project_ids: projectIds,
+                model_ids: modelIds,
+                runtime_ids: runtimeIds,
+                older_than_days: 0,
+            });
+            const result = await api.storageCleanupRun({
+                plan_id: plan.plan_id,
+                entry_ids: null,
+            });
+            if (result.usage) setStorageUsage(result.usage);
+            setStorageMessage(`Deleted ${result.deleted_count} entries and reclaimed ${formatBytes(result.deleted_bytes)}${result.failed.length ? `; ${result.failed.length} failed` : ""}.`);
+        } catch (error) {
+            setStorageError((error as Error).message);
+        } finally {
+            setStorageBusy(false);
+        }
+    };
+
+    const clearBrowserState = async () => {
+        if (!window.confirm("Clear local UI state and legacy lrc-maker keys? Project files are not affected.")) return;
+        const localKeys = [
+            "lrc-roller-hidden-recent-projects",
+            "lrc-maker-lyric",
+            "lrc-maker-preferences",
+            "lrc-maker-oauth-token",
+            "lrc-maker-gist-id",
+            "lrc-maker-gist-etag",
+            "lrc-maker-gist-file",
+        ];
+        const sessionKeys = ["audio-src", "editor-details-open", "sync-mode", "select-index", "x-ratelimit"];
+        localKeys.forEach((key) => localStorage.removeItem(key));
+        sessionKeys.forEach((key) => sessionStorage.removeItem(key));
+        if ("caches" in window) {
+            const names = await caches.keys();
+            await Promise.all(names.filter((name) => name.startsWith("lrc-roller")).map((name) => caches.delete(name)));
+        }
+        setStorageMessage("Browser state cleared.");
+    };
+
+    const projectOlderThanDays = Number.isFinite(Number(storageOlderThanDays)) ? Math.max(0, Math.round(Number(storageOlderThanDays))) : 0;
+    const storageProjects = (storageUsage?.projects || []).filter((project) => isOlderThanDays(project.updated_at, projectOlderThanDays));
+    const allStorageProjectIds = storageProjects.filter((project) => !project.active).map((project) => project.project_id);
+    const allIntermediateProjectIds = storageProjects.filter((project) => !project.active && project.has_intermediate).map((project) => project.project_id);
+    const storageModels = storageUsage?.models || [];
+    const storageRuntimes = storageUsage?.runtimes || [];
+    const storageOtherItems = storageUsage?.other_items || [];
+
     if (!open) return null;
 
     return (
@@ -566,6 +696,9 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                         <b>Frontend</b><span>http://127.0.0.1:5173</span>
                         <b>Data dir</b><span>{runtime?.data_dir || "loading"}</span>
                     </div>
+                    <div className="roller-actions settings-general-actions">
+                        <button className="danger-action" type="button" disabled={busy} onClick={() => void resetDefaults()}>Reset Defaults</button>
+                    </div>
                 </section>
 
                 <section className="settings-section">
@@ -576,7 +709,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                 </section>
 
                 <section className="settings-section">
-                    <h3>Lyrics Import</h3>
+                    <h3>Import Lyrics</h3>
                     <label className="settings-check-row"><input type="checkbox" checked={autoFillLibrary} disabled={busy} onChange={(ev) => { setAutoFillLibrary(ev.currentTarget.checked); void savePatch({ auto_fill_lyrics_library_from_project_metadata: ev.currentTarget.checked }); }} /><span><b>Auto-fill from project metadata</b><small>Fill import fields from audio tags when a project is loaded.</small></span></label>
                 </section>
 
@@ -603,7 +736,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                             <b>Runtime folder</b><span>{runtime?.runtime_root || "not created"}</span>
                             <b>Source</b><span>{runtime?.runtime_source || "PyPI compatible package"}</span>
                             <b>Required py-roller</b><span>{runtime?.runtime_requirement || "py-roller>=0.5.6,<0.6"}</span>
-                            <b>Model store</b><span>{modelStore || runtime?.model_store || "unknown"}</span>
+                            <b>Effective Transcriber Model Store</b><span>{modelStore || runtime?.model_store || "unknown"}</span>
                             <b>Last check</b><span>{runtime?.settings.last_doctor_status || "not run"} {runtime?.settings.last_doctor_at ? `· ${runtime.settings.last_doctor_at}` : ""}</span>
                             <b>Last install</b><span>{runtime?.settings.last_install_status || runtime?.settings.last_install_profile || "not run"} {runtime?.settings.last_install_at ? `· ${runtime.settings.last_install_at}` : ""}</span>
                         </div>
@@ -656,7 +789,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                                 <label>Backend<select value={transcriberBackend} onChange={(ev) => setTranscriberBackend(ev.target.value)}>{optionNodes(transcriberBackendOptions(defaultLanguage))}</select></label>
                                 <label>Device<select value={transcriberDevice} onChange={(ev) => setTranscriberDevice(ev.target.value)}>{optionNodes(DEVICE_OPTIONS)}</select></label>
                                 <label>Model name<select value={transcriberModelName} onChange={(ev) => setTranscriberModelName(ev.target.value)}>{optionNodes(transcriberModelOptions(defaultLanguage, transcriberBackend))}</select></label>
-                                <label className="field-with-browse">Model store path<span className="browse-row"><input placeholder={runtime?.model_store || "~/.local/share/lrc-roller/models/transcriber"} value={modelStore} onChange={(ev) => setModelStore(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>Browse</button></span></label>
+                                <label className="field-with-browse">Transcriber Model Store<span className="browse-row"><input placeholder={runtime?.model_store || "~/.local/share/lrc-roller/models/transcriber"} value={modelStore} onChange={(ev) => setModelStore(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>Browse</button></span></label>
                                 <label>Compute type<select value={transcriberComputeType} onChange={(ev) => setTranscriberComputeType(ev.target.value)} disabled={!transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS)}</select></label>
                                 <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
                             </div>
@@ -674,8 +807,140 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                 </section>
 
                 <section className="settings-section">
-                    <h3>Upload</h3>
+                    <h3>Upload Lyrics</h3>
                     <label className="settings-check-row"><input type="checkbox" checked={uploadDerivePlain} disabled={busy} onChange={(ev) => { setUploadDerivePlain(ev.currentTarget.checked); void savePatch({ upload_derive_plain_from_synced: ev.currentTarget.checked }); }} /><span><b>Derive plain lyrics from synced lyrics</b><small>Submit timestamp-stripped plain lyrics when uploading synced LRC.</small></span></label>
+                </section>
+
+
+                <section className="settings-section storage-cleanup-section">
+                    <h3>Storage &amp; Cleanup</h3>
+                    <div className="storage-overview">
+                        <div className="storage-total-card">
+                            <b>Total Data</b>
+                            <strong>{formatBytes(storageUsage?.total_bytes)}</strong>
+                            <small>{storageUsage?.data_dir || runtime?.data_dir || "loading"}</small>
+                        </div>
+                        <div className="storage-category-grid">
+                            {(storageUsage?.categories || []).map((category) => (
+                                <div className="storage-category-card" key={category.id} title={category.description}>
+                                    <b>{category.label}</b>
+                                    <span>{formatBytes(category.bytes)}</span>
+                                    <small>{category.file_count ? `${category.file_count} files` : category.description}</small>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <details open>
+                        <summary>Projects</summary>
+                        <div className="roller-form storage-controls">
+                            <label>Older Than<select value={storageOlderThanDays} onChange={(ev) => setStorageOlderThanDays(ev.target.value)}><option value="0">All</option><option value="1">1 Day</option><option value="7">7 Days</option><option value="30">30 Days</option></select></label>
+                        </div>
+                        <div className="roller-actions storage-actions">
+                            <button type="button" disabled={storageBusy || allIntermediateProjectIds.length === 0} onClick={() => void runStorageCleanupDirect(["clear_intermediate"], { projectIds: allIntermediateProjectIds })}>Clear All Intermediate</button>
+                            <button className="danger-action" type="button" disabled={storageBusy || allStorageProjectIds.length === 0} onClick={() => void runStorageCleanupDirect(["delete_projects"], { projectIds: allStorageProjectIds, confirmation: `Delete all ${allStorageProjectIds.length} displayed project${allStorageProjectIds.length === 1 ? "" : "s"}?` })}>Delete All</button>
+                        </div>
+                        <div className="storage-project-list">
+                            {storageProjects.length === 0 && <p className="roller-message subtle">No projects match this age filter.</p>}
+                            {storageProjects.map((project) => (
+                                <div className={`storage-project-row ${project.active ? "blocked" : ""}`} key={project.project_id}>
+                                    <div className="storage-project-main">
+                                        <b>{project.title || project.project_id}</b>
+                                        <small>{project.artist || "Unknown Artist"} · {project.project_id}{project.active ? " · Running" : ""}</small>
+                                        <div className="storage-project-breakdown">
+                                            <span>Total {formatBytes(project.total_bytes)}</span>
+                                            <span>Intermediate {formatBytes(project.intermediate_bytes)}</span>
+                                        </div>
+                                    </div>
+                                    <div className="storage-project-actions">
+                                        <button type="button" disabled={storageBusy || project.active || !project.has_intermediate} onClick={() => void runStorageCleanupDirect(["clear_intermediate"], { projectIds: [project.project_id] })}>Clear Intermediate</button>
+                                        <button className="danger-action" type="button" disabled={storageBusy || project.active} onClick={() => void runStorageCleanupDirect(["delete_projects"], { projectIds: [project.project_id], confirmation: "Delete this project?" })}>Delete</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Models</summary>
+                        <div className="roller-actions storage-actions">
+                            <button className="danger-action" type="button" disabled={storageBusy || storageModels.length === 0 || storageModels.some((item) => item.active)} onClick={() => void runStorageCleanupDirect(["delete_model_items"], { modelIds: storageModels.map((item) => item.id), confirmation: `Delete all ${storageModels.length} model cache item${storageModels.length === 1 ? "" : "s"}?` })}>Delete All Models</button>
+                        </div>
+                        <div className="storage-item-list">
+                            {storageModels.length === 0 && <p className="roller-message subtle">No model cache items found.</p>}
+                            {storageModels.map((item) => (
+                                <div className="storage-item-row" key={item.id}>
+                                    <div className="storage-project-main">
+                                        <b>{item.label}</b>
+                                        <small>{item.provider || "Model"}{item.backend ? ` · ${item.backend}` : ""} · {item.relative_path}</small>
+                                        <div className="storage-project-breakdown">
+                                            <span>{formatBytes(item.bytes)}</span>
+                                            <span>{item.file_count} files</span>
+                                        </div>
+                                    </div>
+                                    <div className="storage-project-actions">
+                                        <button type="button" disabled={storageBusy} onClick={() => void api.openModelFolder(item.id)}>Open Folder</button>
+                                        <button className="danger-action" type="button" disabled={storageBusy || item.active} onClick={() => void runStorageCleanupDirect(["delete_model_items"], { modelIds: [item.id], confirmation: `Delete model cache ${item.label}?` })}>Delete</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Runtime Environments</summary>
+                        <div className="roller-actions storage-actions">
+                            <button className="danger-action" type="button" disabled={storageBusy || storageRuntimes.every((item) => !item.removable)} onClick={() => void runStorageCleanupDirect(["clean_runtime_envs"], { runtimeIds: storageRuntimes.filter((item) => item.removable).map((item) => item.runtime_id), confirmation: "Delete all inactive runtimes?" })}>Delete Inactive Runtimes</button>
+                        </div>
+                        <div className="storage-item-list">
+                            {storageRuntimes.length === 0 && <p className="roller-message subtle">No runtime environments found.</p>}
+                            {storageRuntimes.map((item) => (
+                                <div className={`storage-item-row ${item.active ? "blocked" : ""}`} key={item.runtime_id}>
+                                    <div className="storage-project-main">
+                                        <b>{item.runtime_id}{item.active ? " · Active" : ""}</b>
+                                        <small>{item.profile || "profile"} · {item.status}{item.pyroller_version ? ` · py-roller ${item.pyroller_version}` : ""}{item.python_version ? ` · Python ${item.python_version}` : ""}</small>
+                                        <div className="storage-project-breakdown">
+                                            <span>{formatBytes(item.bytes)}</span>
+                                            <span>{item.file_count} files</span>
+                                        </div>
+                                    </div>
+                                    <div className="storage-project-actions">
+                                        <button type="button" disabled={storageBusy} onClick={() => void api.openRuntimeFolder(item.runtime_id)}>Open Folder</button>
+                                        <button className="danger-action" type="button" disabled={storageBusy || !item.removable} onClick={() => void runStorageCleanupDirect(["clean_runtime_envs"], { runtimeIds: [item.runtime_id], confirmation: `Delete runtime ${item.runtime_id}?` })}>Delete</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Other</summary>
+                        <div className="storage-item-list">
+                            {storageOtherItems.length === 0 && <p className="roller-message subtle">No unclassified items found.</p>}
+                            {storageOtherItems.map((item) => (
+                                <div className="storage-item-row" key={item.relative_path}>
+                                    <div className="storage-project-main">
+                                        <b>{item.label}</b>
+                                        <small>{item.relative_path}</small>
+                                        <div className="storage-project-breakdown">
+                                            <span>{formatBytes(item.bytes)}</span>
+                                            <span>{item.file_count} files</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </details>
+
+                    <details>
+                        <summary>Browser Storage</summary>
+                        <div className="roller-actions storage-actions">
+                            <button type="button" disabled={storageBusy} onClick={() => void clearBrowserState()}>Clear Browser State</button>
+                        </div>
+                    </details>
+
+                    {storageError && <p className="roller-message error">{storageError}</p>}
+                    {storageMessage && <p className="roller-message">{storageMessage}</p>}
                 </section>
 
                 {message && <p className="roller-message">{message}</p>}

@@ -100,13 +100,28 @@ def _settings_from_args(args: argparse.Namespace) -> Settings:
     return settings
 
 
+def _settings_env(settings: Settings) -> dict[str, str]:
+    env = os.environ.copy()
+    env["LRC_ROLLER_HOST"] = settings.host
+    env["LRC_ROLLER_PORT"] = str(settings.port)
+    env["LRC_ROLLER_DATA_DIR"] = str(settings.data_dir)
+    if settings.frontend_dist is not None:
+        env["LRC_ROLLER_FRONTEND_DIST"] = str(settings.frontend_dist)
+    return env
+
+
+def _apply_settings_env(settings: Settings) -> None:
+    os.environ.update(_settings_env(settings))
+
+
 def _serve(args: argparse.Namespace) -> int:
     settings = _settings_from_args(args)
     if not args.skip_port_check and not _port_available(settings.host, settings.port):
         _print_port_help(settings.host, settings.port)
         return 48
     if args.reload:
-        # Uvicorn reload requires an import string. Runtime settings are passed via env/config defaults.
+        # Uvicorn reload requires an import string; pass CLI settings through env so the reloader child sees them.
+        _apply_settings_env(settings)
         uvicorn.run("lrc_roller.main:app", host=settings.host, port=settings.port, reload=True)
     else:
         uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
@@ -218,17 +233,18 @@ def _doctor(args: argparse.Namespace) -> int:
 
 def _dev(args: argparse.Namespace) -> int:
     root = _repo_root()
+    settings = _settings_from_args(args)
     if shutil.which("pnpm") is None:
         print("pnpm is not on PATH. Run: corepack enable && corepack prepare pnpm@latest --activate", file=sys.stderr)
         return 2
     if not (root / "frontend" / "package.json").exists():
         print("Cannot find frontend/package.json. Run lrc-roller dev from the source checkout.", file=sys.stderr)
         return 2
-    if not args.skip_port_check and not _port_available(args.host, args.port):
-        _print_port_help(args.host, args.port)
+    if not args.skip_port_check and not _port_available(settings.host, settings.port):
+        _print_port_help(settings.host, settings.port)
         return 48
 
-    backend_cmd = [sys.executable, "-m", "uvicorn", "lrc_roller.main:app", "--host", args.host, "--port", str(args.port)]
+    backend_cmd = [sys.executable, "-m", "uvicorn", "lrc_roller.main:app", "--host", settings.host, "--port", str(settings.port)]
     if not args.no_backend_reload:
         backend_cmd.append("--reload")
     frontend_cmd = ["pnpm", "-C", "frontend", "start", "--host", "127.0.0.1", "--port", str(args.frontend_port)]
@@ -236,7 +252,7 @@ def _dev(args: argparse.Namespace) -> int:
     print("Starting lrc-roller dev stack:")
     print("+", _command_text(backend_cmd))
     print("+", _command_text(frontend_cmd))
-    backend = subprocess.Popen(backend_cmd, cwd=str(root))
+    backend = subprocess.Popen(backend_cmd, cwd=str(root), env=_settings_env(settings))
     time.sleep(0.8)
     frontend = subprocess.Popen(frontend_cmd, cwd=str(root))
     try:

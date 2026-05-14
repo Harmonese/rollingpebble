@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import os
 import shlex
 import shutil
 import sys
@@ -17,6 +18,61 @@ FILTERED_AUDIO_NAME = "filtered.wav"
 TIMED_UNITS_NAME = "timed_units.json"
 PARSED_LYRICS_NAME = "parsed_lyrics.json"
 ALIGNMENT_RESULT_NAME = "alignment_result.json"
+
+
+_PROXY_ENV_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+)
+
+
+def build_pyroller_env(request: RollRequest, base_env: dict[str, str] | None = None) -> dict[str, str] | None:
+    """Return subprocess environment overrides for py-roller downloads.
+
+    py-roller accepts Hugging Face download options as CLI flags, but some
+    backends and their dependencies also consult process-level environment
+    variables. In particular Transformers / huggingface_hub based phoneme
+    backends may open their own HTTP clients while resolving model assets.
+    Exporting the same settings here keeps lrc-roller's UI proxy field
+    effective for all py-roller transcriber backends.
+    """
+    stages = set(normalize_stages(request.stages))
+    if "t" not in stages:
+        return None
+
+    env = dict(base_env if base_env is not None else os.environ)
+    changed = False
+
+    proxy = str(request.transcriber_hf_proxy or "").strip()
+    if proxy:
+        for key in _PROXY_ENV_KEYS:
+            env[key] = proxy
+        changed = True
+
+    if request.transcriber_local_files_only:
+        env["HF_HUB_OFFLINE"] = "1"
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        changed = True
+
+    if request.transcriber_hf_xet == "off":
+        env["HF_HUB_DISABLE_XET"] = "1"
+        changed = True
+    elif request.transcriber_hf_xet == "on":
+        env["HF_HUB_DISABLE_XET"] = "0"
+        changed = True
+
+    if request.transcriber_hf_etag_timeout is not None:
+        env["HF_HUB_ETAG_TIMEOUT"] = str(request.transcriber_hf_etag_timeout)
+        changed = True
+    if request.transcriber_hf_download_timeout is not None:
+        env["HF_HUB_DOWNLOAD_TIMEOUT"] = str(request.transcriber_hf_download_timeout)
+        changed = True
+
+    return env if changed else None
 
 
 def dependency_status() -> tuple[bool, str | None, str | None]:

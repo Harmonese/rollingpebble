@@ -4,6 +4,7 @@ import importlib.metadata
 from dataclasses import dataclass
 from typing import Any
 
+from lrc_roller.version import app_version
 from lrc_roller.models import (
     LrclibGetResponse,
     LrclibSearchResponse,
@@ -20,7 +21,7 @@ def _common_options():
         lang="en",
         preview_lines=PREVIEW_LINES_DEFAULT,
         max_http_retries=MAX_HTTP_RETRIES_DEFAULT,
-        user_agent="lrc-roller/0.1.0 pylrclib/embedded",
+        user_agent=f"lrc-roller/{app_version()} pylrclib/embedded",
         lrclib_base=LRCLIB_BASE,
         interactive=False,
         assume_yes=True,

@@ -10,7 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lrc_roller.runtime_constants import PYROLLER_EVENT_PREFIX, PYROLLER_RUNTIME_SPEC
+from lrc_roller.runtime_constants import (
+    PYROLLER_EVENT_PREFIX,
+    PYROLLER_RUNTIME_SPEC,
+    PYROLLER_RUNTIME_SUPPORT_SPECS,
+)
 
 
 class JsonCommandError(RuntimeError):
@@ -84,7 +88,7 @@ def _run_json(command: list[str], *, env: dict[str, str] | None = None) -> dict[
     return report
 
 
-def _runtime_env(venv: Path) -> dict[str, str]:
+def _runtime_env(venv: Path, data_dir: Path) -> dict[str, str]:
     env = os.environ.copy()
     bin_dir = venv / ("Scripts" if platform.system().lower() == "windows" else "bin")
     env.update(
@@ -93,6 +97,11 @@ def _runtime_env(venv: Path) -> dict[str, str]:
             "PYTHONNOUSERSITE": "1",
             "PIP_DISABLE_PIP_VERSION_CHECK": "1",
             "PIP_PROGRESS_BAR": "off",
+            "PIP_CACHE_DIR": str(data_dir / "cache" / "pip"),
+            "XDG_CACHE_HOME": str(data_dir / "cache" / "xdg"),
+            "TORCH_HOME": str(data_dir / "models" / "torch"),
+            "HF_HOME": str(data_dir / "models" / "transcriber" / "providers" / "huggingface"),
+            "HUGGINGFACE_HUB_CACHE": str(data_dir / "models" / "transcriber" / "providers" / "huggingface" / "hub"),
             "VIRTUAL_ENV": str(venv),
             "PATH": f"{bin_dir}{os.pathsep}{env.get('PATH', '')}",
         }
@@ -155,7 +164,7 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
         else:
             print(f"Reusing existing virtual environment: {venv}", flush=True)
 
-        env = _runtime_env(venv)
+        env = _runtime_env(venv, data_dir)
         _run([str(python), "-m", "pip", "install", "-U", "pip", "setuptools", "wheel"], env=env)
 
         source = os.environ.get("LRC_ROLLER_PYROLLER_SOURCE", "").strip()
@@ -168,6 +177,11 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
             print(f"Installing/upgrading py-roller runtime package: {PYROLLER_RUNTIME_SPEC}", flush=True)
             _run([str(python), "-m", "pip", "install", "--upgrade", PYROLLER_RUNTIME_SPEC], env=env)
             source_label = PYROLLER_RUNTIME_SPEC
+
+        if PYROLLER_RUNTIME_SUPPORT_SPECS:
+            support_specs = list(PYROLLER_RUNTIME_SUPPORT_SPECS)
+            print(f"Installing/upgrading py-roller runtime support packages: {', '.join(support_specs)}", flush=True)
+            _run([str(python), "-m", "pip", "install", "--upgrade", *support_specs], env=env)
 
         install_report = _run_json(
             [

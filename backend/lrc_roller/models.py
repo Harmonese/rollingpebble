@@ -39,6 +39,41 @@ class HealthResponse(BaseModel):
     pyroller: HealthDependency
 
 
+
+
+class NeteaseSongSearchRequest(BaseModel):
+    query: str | None = None
+    track: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    limit: int = 10
+
+
+class NeteaseResolveRequest(BaseModel):
+    value: str
+
+
+class NeteaseSongModel(BaseModel):
+    id: int
+    name: str = ""
+    artists: str = ""
+    album: str = ""
+    duration: int = 0
+    label: str = ""
+    song_url: str = ""
+    wiki_url: str = ""
+    outer_audio_url: str = ""
+    playback_url: str = ""
+
+
+class NeteaseSearchResponse(BaseModel):
+    results: list[NeteaseSongModel] = Field(default_factory=list)
+
+
+class NeteaseResolveResponse(BaseModel):
+    song: NeteaseSongModel
+
+
 class LrclibSearchRequest(BaseModel):
     query: str | None = None
     title: str | None = None
@@ -383,3 +418,162 @@ class UploadRunRequest(UploadPlanRequest):
 class UploadRunResponse(BaseModel):
     success: bool
     message: str
+
+
+CleanupTarget = Literal[
+    "clean_models",
+    "delete_model_items",
+    "clean_runtime_envs",
+    "delete_projects",
+    "clear_intermediate",
+    # Backward-compatible target names used by older frontends/tests.
+    "clean_generated",
+    "clean_tool_caches",
+    "clean_project_generated",
+    "delete_project_audio",
+    "delete_project_lyrics_output",
+    "safe",
+    "job_intermediates",
+    "project_artifacts",
+    "model_cache",
+    "runtime_envs",
+    "external_caches",
+]
+
+
+class StorageProjectModel(BaseModel):
+    project_id: str
+    title: str = ""
+    artist: str = ""
+    album: str = ""
+    audio_name: str | None = None
+    updated_at: str | None = None
+    audio_bytes: int = 0
+    lyrics_output_bytes: int = 0
+    generated_bytes: int = 0
+    intermediate_bytes: int = 0
+    total_bytes: int = 0
+    file_count: int = 0
+    audio_file_count: int = 0
+    lyrics_output_file_count: int = 0
+    generated_file_count: int = 0
+    intermediate_file_count: int = 0
+    has_audio: bool = False
+    has_lyrics_output: bool = False
+    has_generated: bool = False
+    has_intermediate: bool = False
+    active: bool = False
+
+
+
+
+class StorageModelItemModel(BaseModel):
+    id: str
+    label: str
+    provider: str = ""
+    backend: str = ""
+    model_name: str = ""
+    relative_path: str
+    bytes: int = 0
+    file_count: int = 0
+    updated_at: str | None = None
+    active: bool = False
+
+
+class StorageRuntimeItemModel(BaseModel):
+    runtime_id: str
+    profile: str = ""
+    status: str = "unknown"
+    pyroller_version: str | None = None
+    python_version: str | None = None
+    relative_path: str
+    bytes: int = 0
+    file_count: int = 0
+    updated_at: str | None = None
+    active: bool = False
+    removable: bool = True
+
+
+class StorageOtherItemModel(BaseModel):
+    label: str
+    relative_path: str
+    bytes: int = 0
+    file_count: int = 0
+    updated_at: str | None = None
+
+
+class StorageCategoryModel(BaseModel):
+    id: str
+    label: str
+    bytes: int = 0
+    file_count: int = 0
+    path: str = ""
+    description: str = ""
+
+
+class StorageUsageResponse(BaseModel):
+    data_dir: str
+    total_bytes: int = 0
+    file_count: int = 0
+    categories: list[StorageCategoryModel] = Field(default_factory=list)
+    projects: list[StorageProjectModel] = Field(default_factory=list)
+    models: list[StorageModelItemModel] = Field(default_factory=list)
+    runtimes: list[StorageRuntimeItemModel] = Field(default_factory=list)
+    other_items: list[StorageOtherItemModel] = Field(default_factory=list)
+
+
+class StorageCleanupPreviewRequest(BaseModel):
+    targets: list[CleanupTarget] = Field(default_factory=lambda: ["clean_models"])
+    older_than_days: int | None = 1
+    project_ids: list[str] = Field(default_factory=list)
+    model_ids: list[str] = Field(default_factory=list)
+    runtime_ids: list[str] = Field(default_factory=list)
+
+
+class StorageCleanupEntryModel(BaseModel):
+    id: str
+    category: str
+    label: str
+    relative_path: str
+    bytes: int = 0
+    file_count: int = 0
+    risk: Literal["safe", "caution", "danger", "blocked"] = "safe"
+    reason: str = ""
+    removable: bool = True
+
+
+class StorageCleanupPlanResponse(BaseModel):
+    plan_id: str
+    targets: list[str] = Field(default_factory=list)
+    total_reclaimable_bytes: int = 0
+    entry_count: int = 0
+    entries: list[StorageCleanupEntryModel] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class StorageCleanupRunRequest(BaseModel):
+    plan_id: str
+    entry_ids: list[str] | None = None
+
+
+class StorageCleanupFailureModel(BaseModel):
+    entry_id: str
+    relative_path: str
+    error: str
+
+
+class StorageCleanupRunResponse(BaseModel):
+    plan_id: str
+    deleted_bytes: int = 0
+    deleted_count: int = 0
+    skipped_count: int = 0
+    failed: list[StorageCleanupFailureModel] = Field(default_factory=list)
+    usage: StorageUsageResponse | None = None
+
+
+class StorageOpenModelRequest(BaseModel):
+    model_id: str
+
+
+class StorageOpenRuntimeRequest(BaseModel):
+    runtime_id: str

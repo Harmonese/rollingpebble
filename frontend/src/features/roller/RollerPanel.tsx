@@ -56,7 +56,7 @@ function optionalPositiveIntValue(value: string): number | null {
 }
 
 function formatCommandPreview(commandText?: string | null): string {
-  if (!commandText) return "Preview the command before running.";
+  if (!commandText) return "Command preview will appear here.";
   return commandText.replace(/\s--/g, " \\\n  --");
 }
 
@@ -189,6 +189,7 @@ export const RollerPanel: React.FC<{
   const [writerSpacing, setWriterSpacing] = useState("keep");
   const [alignerRepetition, setAlignerRepetition] = useState<Repetition>("none");
   const [transcriberModelPath, setTranscriberModelPath] = useState("");
+  const [transcriberModelStoreDefault, setTranscriberModelStoreDefault] = useState("");
 
   const [cleanup, setCleanup] = useState("never");
   const [logLevel, setLogLevel] = useState("INFO");
@@ -221,6 +222,8 @@ export const RollerPanel: React.FC<{
 
   const [job, setJob] = useState<JobModel | null>(null);
   const [preview, setPreview] = useState<RollPreview | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -231,7 +234,13 @@ export const RollerPanel: React.FC<{
 
   const loadDefaults = async () => {
     try {
-      const settings = await api.settings();
+      const [settings, runtime] = await Promise.all([
+        api.settings(),
+        api.autoRollerRuntime().catch(() => null),
+      ]);
+      if (runtime?.model_store) {
+        setTranscriberModelStoreDefault(runtime.model_store);
+      }
       const nextLanguage = settings.auto_timing_default_language || "zh";
       const nextBackend = normalizeTranscriberBackend(nextLanguage, settings.auto_timing_transcriber_backend || "faster_whisper");
       const nextModel = settings.auto_timing_transcriber_model_name || defaultModelFor(nextLanguage, nextBackend);
@@ -350,6 +359,35 @@ export const RollerPanel: React.FC<{
   }, [alignerBackend, alignerMinGap, alignerRepetition, cleanup, filterChain, hfDownloadTimeout, hfEtagTimeout, hfMaxWorkers, hfProxy, hfXet, includesAligner, includesFilter, includesParser, includesSplitter, includesTranscriber, includesWriter, language, localOnly, logLevel, parserEncoding, splitterBackend, splitterDevice, splitterJobs, splitterModel, splitterOverlap, splitterSegment, stages, transcriberBackend, transcriberBatchSize, transcriberComputeType, transcriberDevice, transcriberIsFasterWhisper, transcriberModel, transcriberModelPath, writerBackend, writerByTag, writerIsAss, writerKaraokeTag, writerSpacing]);
 
   useEffect(() => {
+    if (!project) {
+      setPreview(null);
+      setPreviewError("");
+      setPreviewBusy(false);
+      return;
+    }
+    let canceled = false;
+    setPreviewBusy(true);
+    setPreviewError("");
+    const timer = window.setTimeout(async () => {
+      try {
+        const next = await api.rollPreview(project.project_id, rollPayload);
+        if (!canceled) setPreview(next);
+      } catch (error) {
+        if (!canceled) {
+          setPreview(null);
+          setPreviewError((error as Error).message);
+        }
+      } finally {
+        if (!canceled) setPreviewBusy(false);
+      }
+    }, 350);
+    return () => {
+      canceled = true;
+      window.clearTimeout(timer);
+    };
+  }, [project?.project_id, rollPayload]);
+
+  useEffect(() => {
     if (!job || !["queued", "running"].includes(job.status)) return;
     const timer = window.setInterval(async () => {
       try {
@@ -377,24 +415,8 @@ export const RollerPanel: React.FC<{
     await api.saveEditor(project.project_id, { plain_lyrics: plainLyrics, synced_lyrics: syncedLyrics, metadata: editorMeta });
     const next = await api.rollPreview(project.project_id, rollPayload);
     setPreview(next);
+    setPreviewError("");
     return next;
-  };
-
-  const refreshPreview = async () => {
-    if (!project) {
-      setMessage("Create or open a project first.");
-      return;
-    }
-    setBusy(true);
-    setMessage("Preparing command preview...");
-    try {
-      await saveAndPreview();
-      setMessage("Command preview is ready.");
-    } catch (error) {
-      setMessage((error as Error).message);
-    } finally {
-      setBusy(false);
-    }
   };
 
   const start = async () => {
@@ -452,29 +474,22 @@ export const RollerPanel: React.FC<{
     setMessage("Task log copied.");
   };
 
-  const openProjectFolder = async () => {
-    if (!project) return;
+  const openJobFolder = async () => {
+    if (!job) return;
     try {
-      const result = await api.openProjectFolder(project.project_id);
+      const result = await api.openJobFolder(job.job_id);
       setMessage(`Opened ${result.path}`);
     } catch (error) {
       setMessage((error as Error).message);
     }
   };
 
-  const importResult = () => {
-    if (job?.result?.synced_lyrics) {
-      onImportText(String(job.result.synced_lyrics));
-      setMessage("Generated LRC imported into the editor.");
-    }
-  };
-
   const browseModelPath = async () => {
     try {
-      const result = await api.selectLocalPath({ mode: "directory", title: "Select model folder", initial_path: transcriberModelPath || null });
+      const result = await api.selectLocalPath({ mode: "directory", title: "Select transcriber model store", initial_path: transcriberModelPath || transcriberModelStoreDefault || null });
       if (!result.canceled && result.path) {
         setTranscriberModelPath(result.path);
-        setMessage("Model folder selected.");
+        setMessage("Transcriber model store selected.");
       }
     } catch (error) {
       setMessage((error as Error).message);
@@ -526,8 +541,8 @@ export const RollerPanel: React.FC<{
             {optionNodes(REPETITION_OPTIONS)}
           </select>
         </label>
-        <label className="field-with-browse">Model folder
-          <span className="browse-row"><input placeholder="py-roller model store" value={transcriberModelPath} onChange={(ev) => setTranscriberModelPath(ev.target.value)} disabled={!includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!includesTranscriber}>Browse</button></span>
+        <label className="field-with-browse">Transcriber Model Store
+          <span className="browse-row"><input placeholder={transcriberModelStoreDefault || "lrc-roller transcriber model store"} value={transcriberModelPath} onChange={(ev) => setTranscriberModelPath(ev.target.value)} disabled={!includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!includesTranscriber}>Browse</button></span>
         </label>
         <label>Spacing
           <select value={writerSpacing} onChange={(ev) => setWriterSpacing(ev.target.value)} disabled={!includesWriter}>
@@ -644,28 +659,32 @@ export const RollerPanel: React.FC<{
       )}
 
       <div className="roller-section-title">Run</div>
-      <div className="roller-actions">
-        <button type="button" disabled={startDisabled} onClick={() => void start()}>Start automatic timing</button>
-        <button type="button" disabled={busy || !project} onClick={() => void refreshPreview()}>Preview command</button>
-        <button type="button" disabled={!running || busy} onClick={() => void cancel()}>Cancel</button>
-        <button type="button" disabled={busy || running || !project} onClick={() => void retry()}>Retry</button>
-        <button type="button" disabled={!preview && !job} onClick={() => void copyCommand()}>Copy command</button>
-        <button type="button" disabled={!job} onClick={() => void copyLog()}>Copy log</button>
-        <button type="button" disabled={!project} onClick={() => void openProjectFolder()}>Open folder</button>
-        <button type="button" disabled={!job?.result?.synced_lyrics} onClick={importResult}>Import result</button>
+      <div className="roller-actions roller-run-actions">
+        <button type="button" className="roller-action-start" disabled={startDisabled} onClick={() => void start()}>Start</button>
+        <button type="button" className="roller-action-cancel" disabled={!running || busy} onClick={() => void cancel()}>Cancel</button>
+        <button type="button" className="roller-action-retry" disabled={busy || running || !project} onClick={() => void retry()}>Retry</button>
       </div>
       {startDisabled && !running && <p className="roller-warning">{inputState.reason}</p>}
       {message && <p className="roller-message">{message}</p>}
 
-      <details open={!!preview}>
-        <summary>Command preview</summary>
+      <details>
+        <summary>Command Preview</summary>
+        <div className="roller-actions compact">
+          <button type="button" disabled={!preview && !job} onClick={() => void copyCommand()}>Copy Command</button>
+        </div>
+        {previewBusy && <p className="roller-muted">Updating command preview...</p>}
+        {previewError && <p className="roller-warning">{previewError}</p>}
         {preview?.warnings?.map((warning) => <p key={warning} className="roller-warning">{warning}</p>)}
         <pre className="roller-command" aria-label="Command preview"><code>{commandPreviewText}</code></pre>
       </details>
 
       {job && (
         <details open={logsOpen}>
-          <summary>{job.job_id} · {job.status}</summary>
+          <summary>{`Job ${job.status.charAt(0).toUpperCase()}${job.status.slice(1)}`} · {job.job_id}</summary>
+          <div className="roller-actions compact">
+            <button type="button" disabled={!job} onClick={() => void copyLog()}>Copy Log</button>
+            <button type="button" disabled={!job.project_id} onClick={() => void openJobFolder()}>Open Job Folder</button>
+          </div>
           {job.error && <p className="roller-warning">{job.error}</p>}
           <pre className="roller-log">{job.logs.join("\n") || job.command.join(" ")}</pre>
         </details>

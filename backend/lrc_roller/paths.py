@@ -11,6 +11,8 @@ def ensure_data_dirs(data_dir: Path) -> dict[str, Path]:
         "outputs": data_dir / "outputs",
         "cache": data_dir / "cache",
         "logs": data_dir / "logs",
+        "envs": data_dir / "envs",
+        "models": data_dir / "models",
     }
     for path in paths.values():
         path.mkdir(parents=True, exist_ok=True)

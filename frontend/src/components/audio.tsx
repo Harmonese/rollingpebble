@@ -41,11 +41,22 @@ const Slider: React.FC<ISliderProps> = ({ min, max, step, value, onInput, classN
     );
 };
 
+
+const supportsWaveformPreview = (src: string): boolean => {
+    if (src.startsWith("blob:")) return true;
+    try {
+        const url = new URL(src, window.location.href);
+        return url.origin === window.location.origin && url.pathname.startsWith("/api/projects/");
+    } catch {
+        return false;
+    }
+};
+
 const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, paused }) => {
     const self = useRef(Symbol(TimeLine.name));
     const [currentTime, setCurrentTime] = useState(audioRef.currentTime);
     const [rate, setRate] = useState(audioRef.playbackRate);
-    const [waveformPreviewAvailable, setWaveformPreviewAvailable] = useState(false);
+    const [localAudioMode, setLocalAudioMode] = useState(false);
 
     useEffect(() => {
         return audioStatePubSub.sub(self.current, (data) => {
@@ -55,7 +66,7 @@ const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, p
                     break;
                 }
                 case AudioActionType.getDuration: {
-                    setWaveformPreviewAvailable(Boolean(audioRef.src));
+                    setLocalAudioMode(supportsWaveformPreview(audioRef.src));
                     break;
                 }
             }
@@ -110,7 +121,7 @@ const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, p
 
     const { prefState } = useContext(appContext, ChangBits.prefState);
 
-    const showWaveform = prefState.showWaveform && waveformPreviewAvailable;
+    const showWaveform = prefState.showWaveform && localAudioMode;
 
     const fixed = showWaveform ? prefState.fixed : 0;
 

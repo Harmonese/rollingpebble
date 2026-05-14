@@ -175,6 +175,11 @@ class RuntimeManager:
                 "PYTHONNOUSERSITE": "1",
                 "PIP_DISABLE_PIP_VERSION_CHECK": "1",
                 "PIP_PROGRESS_BAR": "off",
+                "PIP_CACHE_DIR": str(self.data_dir / "cache" / "pip"),
+                "XDG_CACHE_HOME": str(self.data_dir / "cache" / "xdg"),
+                "TORCH_HOME": str(self.data_dir / "models" / "torch"),
+                "HF_HOME": str(self.data_dir / "models" / "transcriber" / "providers" / "huggingface"),
+                "HUGGINGFACE_HUB_CACHE": str(self.data_dir / "models" / "transcriber" / "providers" / "huggingface" / "hub"),
                 "VIRTUAL_ENV": str(venv),
                 "PATH": f"{bin_dir}{os.pathsep}{env.get('PATH', '')}",
             }

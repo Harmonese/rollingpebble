@@ -1,2 +1,3 @@
 include CHANGELOG.md
 include README.md
+recursive-include backend/lrc_roller/frontend_dist *

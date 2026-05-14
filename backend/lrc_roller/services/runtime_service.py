@@ -93,6 +93,9 @@ class RuntimeService:
                 setattr(settings, field, value)
         return self.settings_store.write(settings)
 
+    def reset_settings_defaults(self) -> RuntimeSettingsModel:
+        return self.settings_store.reset_defaults(preserve_runtime_history=True)
+
     def _capture_doctor_report(self, profile: str) -> dict[str, Any] | None:
         try:
             runtime = self.manager.inspect(profile)
@@ -133,6 +136,10 @@ class RuntimeService:
         }
 
     def run_doctor(self) -> JobModel:
+        if self._has_running_job("auto-roller-runtime-install"):
+            raise RuntimeError("Runtime installation is already running. Wait for it to finish before running Runtime Check.")
+        if self._has_running_job("auto-roller-doctor"):
+            raise RuntimeError("Runtime Check is already running.")
         settings = self.settings_store.read()
         runtime = self.manager.active_runtime(settings)
         if not runtime.ready:
@@ -159,6 +166,10 @@ class RuntimeService:
     def run_install(self, request: RuntimeInstallRequest) -> JobModel:
         if self._has_running_job("auto-timing"):
             raise RuntimeError("Auto Timing is running. Cancel or wait for it before repairing the runtime.")
+        if self._has_running_job("auto-roller-runtime-install"):
+            raise RuntimeError("Runtime installation is already running.")
+        if self._has_running_job("auto-roller-doctor"):
+            raise RuntimeError("Runtime Check is running. Wait for it before repairing the runtime.")
         settings = self.settings_store.read()
         settings.auto_roller_profile = request.profile
         settings.last_install_profile = request.profile

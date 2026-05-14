@@ -67,3 +67,37 @@ def test_build_command_can_use_isolated_runtime_python_and_model_store() -> None
 
     assert command[:4] == ["/runtime/bin/python", "-m", "pyroller.cli.main", "run"]
     assert command[command.index("--transcriber-model-path") + 1] == "/models/transcriber"
+
+
+def test_build_pyroller_env_exports_hf_proxy_for_phoneme_backends() -> None:
+    request = RollRequest(
+        stages="t,p,a,w",
+        language="mul",
+        transcriber_backend="wav2vec2_phoneme",
+        transcriber_hf_proxy="socks5h://127.0.0.1:9909",
+        transcriber_hf_xet="off",
+        transcriber_hf_etag_timeout=30,
+        transcriber_hf_download_timeout=120,
+    )
+
+    from lrc_roller.adapters.pyroller_adapter import build_pyroller_env
+
+    env = build_pyroller_env(request, base_env={})
+
+    assert env is not None
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        assert env[key] == "socks5h://127.0.0.1:9909"
+    assert env["HF_HUB_DISABLE_XET"] == "1"
+    assert env["HF_HUB_ETAG_TIMEOUT"] == "30"
+    assert env["HF_HUB_DOWNLOAD_TIMEOUT"] == "120"
+
+
+def test_build_pyroller_env_ignores_non_transcriber_stage() -> None:
+    from lrc_roller.adapters.pyroller_adapter import build_pyroller_env
+
+    env = build_pyroller_env(
+        RollRequest(stages="p,a,w", transcriber_hf_proxy="socks5h://127.0.0.1:9909"),
+        base_env={},
+    )
+
+    assert env is None

@@ -41,6 +41,20 @@ export type LyricsRecord = {
     label: string;
 };
 
+
+export type NeteaseSong = {
+    id: number;
+    name: string;
+    artists: string;
+    album: string;
+    duration: number;
+    label: string;
+    song_url: string;
+    wiki_url: string;
+    outer_audio_url: string;
+    playback_url: string;
+};
+
 export type HealthResponse = {
     ok: boolean;
     port: number;
@@ -162,6 +176,128 @@ export type RuntimeSettings = {
     last_install_status?: string | null;
 };
 
+
+export type StorageModelItem = {
+    id: string;
+    label: string;
+    provider: string;
+    backend: string;
+    model_name: string;
+    relative_path: string;
+    bytes: number;
+    file_count: number;
+    updated_at?: string | null;
+    active: boolean;
+};
+
+export type StorageRuntimeItem = {
+    runtime_id: string;
+    profile: string;
+    status: string;
+    pyroller_version?: string | null;
+    python_version?: string | null;
+    relative_path: string;
+    bytes: number;
+    file_count: number;
+    updated_at?: string | null;
+    active: boolean;
+    removable: boolean;
+};
+
+export type StorageOtherItem = {
+    label: string;
+    relative_path: string;
+    bytes: number;
+    file_count: number;
+    updated_at?: string | null;
+};
+
+export type StorageCategory = {
+    id: string;
+    label: string;
+    bytes: number;
+    file_count: number;
+    path: string;
+    description: string;
+};
+
+export type StorageProject = {
+    project_id: string;
+    title: string;
+    artist: string;
+    album: string;
+    audio_name?: string | null;
+    updated_at?: string | null;
+    audio_bytes: number;
+    lyrics_output_bytes: number;
+    generated_bytes: number;
+    intermediate_bytes: number;
+    total_bytes: number;
+    file_count: number;
+    audio_file_count: number;
+    lyrics_output_file_count: number;
+    generated_file_count: number;
+    intermediate_file_count: number;
+    has_audio: boolean;
+    has_lyrics_output: boolean;
+    has_generated: boolean;
+    has_intermediate: boolean;
+    active: boolean;
+};
+
+export type StorageUsage = {
+    data_dir: string;
+    total_bytes: number;
+    file_count: number;
+    categories: StorageCategory[];
+    projects: StorageProject[];
+    models: StorageModelItem[];
+    runtimes: StorageRuntimeItem[];
+    other_items: StorageOtherItem[];
+};
+
+export type StorageCleanupTarget =
+    | "clean_models"
+    | "delete_model_items"
+    | "clean_runtime_envs"
+    | "delete_projects"
+    | "clear_intermediate"
+    | "clean_generated"
+    | "clean_tool_caches"
+    | "clean_project_generated"
+    | "delete_project_audio"
+    | "delete_project_lyrics_output";
+
+export type StorageCleanupEntry = {
+    id: string;
+    category: string;
+    label: string;
+    relative_path: string;
+    bytes: number;
+    file_count: number;
+    risk: "safe" | "caution" | "danger" | "blocked";
+    reason: string;
+    removable: boolean;
+};
+
+export type StorageCleanupPlan = {
+    plan_id: string;
+    targets: string[];
+    total_reclaimable_bytes: number;
+    entry_count: number;
+    entries: StorageCleanupEntry[];
+    warnings: string[];
+};
+
+export type StorageCleanupRunResult = {
+    plan_id: string;
+    deleted_bytes: number;
+    deleted_count: number;
+    skipped_count: number;
+    failed: { entry_id: string; relative_path: string; error: string }[];
+    usage?: StorageUsage | null;
+};
+
 export type AutoRollerRuntime = {
     engine: string;
     mode: string;
@@ -247,6 +383,8 @@ export const api = {
     projectAudioUrl: (projectId: string) => `/api/projects/${projectId}/audio`,
     openProjectFolder: (projectId: string) =>
         request<{ status: string; path: string }>(`/api/projects/${projectId}/open-folder`, { method: "POST" }),
+    openProjectsFolder: () =>
+        request<{ status: string; path: string }>("/api/storage/projects/open-folder", { method: "POST" }),
     selectLocalPath: (payload: { mode?: "file" | "directory"; title?: string; initial_path?: string | null }) =>
         request<{ path: string; canceled: boolean }>("/api/local/select-path", { method: "POST", body: JSON.stringify(payload) }),
     applyLyrics: (projectId: string, payload: Partial<ProjectModel>) =>
@@ -262,6 +400,10 @@ export const api = {
         ),
     lrclibGetById: (lrclib_id: number) =>
         request<LyricsRecord | null>("/api/lrclib/id", { method: "POST", body: JSON.stringify({ lrclib_id }) }),
+    neteaseSearch: (payload: { query?: string; track?: string; artist?: string; album?: string; limit?: number }) =>
+        request<{ results: NeteaseSong[] }>("/api/netease/search", { method: "POST", body: JSON.stringify(payload) }),
+    neteaseResolve: (value: string) =>
+        request<{ song: NeteaseSong }>("/api/netease/resolve", { method: "POST", body: JSON.stringify({ value }) }),
     cleanLrc: (payload: { text: string; remove_translations?: boolean }) =>
         request<LrcCleanseResponse>("/api/lrc/cleanse", { method: "POST", body: JSON.stringify(payload) }),
     rollPreview: (projectId: string, payload: Record<string, unknown>) =>
@@ -270,9 +412,12 @@ export const api = {
         request<JobModel>(`/api/projects/${projectId}/roll`, { method: "POST", body: JSON.stringify(payload) }),
     getJob: (jobId: string) => request<JobModel>(`/api/jobs/${jobId}`),
     cancelJob: (jobId: string) => request<JobModel>(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
+    openJobFolder: (jobId: string) =>
+        request<{ status: string; path: string }>(`/api/jobs/${jobId}/open-folder`, { method: "POST" }),
     settings: () => request<RuntimeSettings>("/api/settings"),
     updateSettings: (payload: Partial<RuntimeSettings>) =>
         request<RuntimeSettings>("/api/settings", { method: "POST", body: JSON.stringify(payload) }),
+    resetSettingsDefaults: () => request<RuntimeSettings>("/api/settings/reset-defaults", { method: "POST" }),
     autoRollerRuntime: () => request<AutoRollerRuntime>("/api/runtime/auto-roller"),
     updateAutoRollerSettings: (payload: Partial<RuntimeSettings>) =>
         request<RuntimeSettings>("/api/runtime/auto-roller/settings", { method: "POST", body: JSON.stringify(payload) }),
@@ -286,4 +431,14 @@ export const api = {
             method: "POST",
             body: JSON.stringify(payload),
         }),
+
+    storageUsage: () => request<StorageUsage>("/api/storage/usage"),
+    storageCleanupPreview: (payload: { targets: StorageCleanupTarget[]; older_than_days?: number | null; project_ids?: string[]; model_ids?: string[]; runtime_ids?: string[] }) =>
+        request<StorageCleanupPlan>("/api/storage/cleanup/preview", { method: "POST", body: JSON.stringify(payload) }),
+    openModelFolder: (modelId: string) =>
+        request<{ status: string; path: string }>("/api/storage/models/open-folder", { method: "POST", body: JSON.stringify({ model_id: modelId }) }),
+    openRuntimeFolder: (runtimeId: string) =>
+        request<{ status: string; path: string }>("/api/storage/runtimes/open-folder", { method: "POST", body: JSON.stringify({ runtime_id: runtimeId }) }),
+    storageCleanupRun: (payload: { plan_id: string; entry_ids?: string[] | null }) =>
+        request<StorageCleanupRunResult>("/api/storage/cleanup/run", { method: "POST", body: JSON.stringify(payload) }),
 };

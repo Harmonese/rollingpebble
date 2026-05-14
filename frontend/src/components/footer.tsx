@@ -1,5 +1,7 @@
+import SSK from "#const/session_key.json" with { type: "json" };
 import { useCallback, useContext, useEffect, useReducer, useRef } from "react";
 import { useKeyBindings } from "../hooks/useKeyBindings.js";
+import { prepareAudioFile } from "../shared/audioDecode.js";
 import { LOAD_PROJECT_AUDIO_EVENT, type ProjectAudioLoadDetail } from "../shared/audioEvents.js";
 import { AudioActionType, audioRef, audioStatePubSub, currentTimePubSub } from "../utils/audiomodule.js";
 import { InputAction } from "../utils/input-action.js";
@@ -22,6 +24,7 @@ export const Footer: React.FC = () => {
         },
         "",
     );
+    const fallbackAudioUrlRef = useRef("");
 
     useEffect(() => {
         function onKeydown(ev: KeyboardEvent) {
@@ -75,10 +78,14 @@ export const Footer: React.FC = () => {
         const onProjectAudio = (ev: Event) => {
             const detail = (ev as CustomEvent<ProjectAudioLoadDetail>).detail;
             if (detail?.file) {
+                fallbackAudioUrlRef.current = "";
+                sessionStorage.removeItem(SSK.audioSrc);
                 receiveFile(detail.file, setAudioSrc);
                 return;
             }
             if (detail?.url) {
+                fallbackAudioUrlRef.current = detail.fallbackUrl || "";
+                sessionStorage.setItem(SSK.audioSrc, detail.url);
                 setAudioSrc(detail.url);
             }
         };
@@ -89,6 +96,7 @@ export const Footer: React.FC = () => {
     const rafId = useRef(0);
 
     const onAudioLoadedMetadata = useCallback(() => {
+        fallbackAudioUrlRef.current = "";
         cancelAnimationFrame(rafId.current);
         audioStatePubSub.pub({
             type: AudioActionType.getDuration,
@@ -144,6 +152,14 @@ export const Footer: React.FC = () => {
 
     const onAudioError = useCallback(
         (ev: React.SyntheticEvent<HTMLAudioElement>) => {
+            const fallbackUrl = fallbackAudioUrlRef.current;
+            const fallbackHref = fallbackUrl ? new URL(fallbackUrl, window.location.href).href : "";
+            if (fallbackUrl && audioRef.currentSrc !== fallbackHref) {
+                fallbackAudioUrlRef.current = "";
+                sessionStorage.setItem(SSK.audioSrc, fallbackUrl);
+                setAudioSrc(fallbackUrl);
+                return;
+            }
             const audio = ev.target as HTMLAudioElement;
             const error = audio.error!;
             const message = lang.audio.error[error.code] || error.message || lang.audio.error[0];
@@ -162,6 +178,7 @@ export const Footer: React.FC = () => {
                 src={audioSrc}
                 controls={prefState.builtInAudio}
                 hidden={!prefState.builtInAudio}
+                preload="metadata"
                 onLoadedMetadata={onAudioLoadedMetadata}
                 onPlay={onAudioPlay}
                 onPause={onAudioPause}
@@ -178,96 +195,16 @@ export const Footer: React.FC = () => {
 type TsetAudioSrc = (src: string) => void;
 
 const receiveFile = (file: File, setAudioSrc: TsetAudioSrc): void => {
-    if (file) {
-        if (file.type.startsWith("audio/") || /\.(?:mp3|flac|wav|m4a|aac|ogg|opus)$/i.test(file.name)) {
-            setAudioSrc(URL.createObjectURL(file));
-            return;
-        }
-        if (file.name.endsWith(".ncm")) {
-            const worker = new Worker(new URL("/worker/ncmc-worker.js", import.meta.url));
-            worker.addEventListener(
-                "message",
-                (ev: IMessageEvent<IMessage>) => {
-                    if (ev.data.type === "success") {
-                        const dataArray = ev.data.payload;
-                        const musicFile = new Blob([dataArray], {
-                            type: detectMimeType(dataArray),
-                        });
-
-                        setAudioSrc(URL.createObjectURL(musicFile));
-                    }
-                    if (ev.data.type === "error") {
-                        toastPubSub.pub({
-                            type: "warning",
-                            text: ev.data.payload,
-                        });
-                    }
-                },
-                { once: true },
-            );
-
-            worker.addEventListener(
-                "error",
-                (ev) => {
-                    toastPubSub.pub({
-                        type: "warning",
-                        text: ev.message,
-                    });
-                    worker.terminate();
-                },
-                { once: true },
-            );
-
-            worker.postMessage(file);
-
-            return;
-        }
-        if (/\.qmc(?:flac|0|1|2|3)$/.test(file.name)) {
-            const worker = new Worker(new URL("/worker/qmc-worker.js", import.meta.url));
-            worker.addEventListener(
-                "message",
-                (ev: IMessageEvent<IMessage>) => {
-                    if (ev.data.type === "success") {
-                        const dataArray = ev.data.payload;
-                        const musicFile = new Blob([dataArray], {
-                            type: detectMimeType(dataArray),
-                        });
-
-                        setAudioSrc(URL.createObjectURL(musicFile));
-                    }
-                },
-                { once: true },
-            );
-
-            worker.postMessage(file);
-        }
-    }
-};
-
-const MimeType = {
-    fLaC: 0x664c6143,
-    OggS: 0x4f676753,
-    RIFF: 0x52494646,
-    WAVE: 0x57415645,
-};
-
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-const detectMimeType = (dataArray: Uint8Array) => {
-    const magicNumber = new DataView(dataArray.buffer).getUint32(0, false);
-    switch (magicNumber) {
-        case MimeType.fLaC:
-            return "audio/flac";
-
-        case MimeType.OggS:
-            return "audio/ogg";
-
-        case MimeType.RIFF:
-        case MimeType.WAVE:
-            return "audio/wav";
-
-        default:
-            return "audio/mpeg";
-    }
+    void prepareAudioFile(file)
+        .then(({ file: prepared }) => {
+            setAudioSrc(URL.createObjectURL(prepared));
+        })
+        .catch((error: Error) => {
+            toastPubSub.pub({
+                type: "warning",
+                text: error.message,
+            });
+        });
 };
 
 // side effect

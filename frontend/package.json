@@ -1,6 +1,6 @@
 {
   "name": "lrc-roller-frontend",
-  "version": "0.5.5",
+  "version": "0.6.0",
   "description": "Local WebUI for pylrclib and py-roller lyrics timing workflow",
   "repository": "https://github.com/Harmonese/lrc-roller",
   "author": "Harmonese",
@@ -15,16 +15,17 @@
   "homepage": "https://github.com/Harmonese/lrc-roller#readme",
   "files": [
     "src",
-    "build"
+    "dist"
   ],
   "packageManager": "pnpm@10.11.0",
   "type": "module",
   "scripts": {
     "start": "vite",
-    "build": "vite build",
+    "build": "tsc -b --noEmit && vite build",
     "fix:fmt": "dprint fmt",
     "check:fmt": "dprint check",
-    "check:lint": "oxlint src -D correctness"
+    "check:lint": "oxlint src -D correctness",
+    "check:type": "tsc -b --noEmit"
   },
   "imports": {
     "#const/*": "./src/const/*"

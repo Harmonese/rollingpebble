@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, type ProjectModel } from "../../shared/api.js";
-import { loadProjectAudioForPlayback, loadProjectAudioUrlForPlayback } from "../../shared/audioEvents.js";
+import { loadProjectAudioUrlForPlayback } from "../../shared/audioEvents.js";
 import { SETTINGS_UPDATED_EVENT } from "../../shared/settingsEvents.js";
 
 const HIDDEN_RECENT_PROJECTS_KEY = "lrc-roller.hiddenRecentProjects";
@@ -31,7 +31,6 @@ export const ProjectPanel: React.FC<{
     project: ProjectModel | null;
     onProject: (project: ProjectModel, applyToEditor?: boolean) => void;
 }> = ({ project, onProject }) => {
-    const inputRef = useRef<HTMLInputElement | null>(null);
     const [projects, setProjects] = useState<ProjectModel[]>([]);
     const [hiddenProjects, setHiddenProjects] = useState<Set<string>>(() => readHiddenRecentProjects());
     const [recentLimit, setRecentLimit] = useState(DEFAULT_RECENT_PROJECTS_LIMIT);
@@ -64,35 +63,22 @@ export const ProjectPanel: React.FC<{
         return () => window.removeEventListener(SETTINGS_UPDATED_EVENT, onSettingsUpdated);
     }, []);
 
+    useEffect(() => {
+        if (!project?.project_id) return;
+        const nextHidden = new Set(hiddenProjects);
+        if (nextHidden.delete(project.project_id)) {
+            setHiddenProjects(nextHidden);
+            writeHiddenRecentProjects(nextHidden);
+        }
+        refresh().catch((error: Error) => setMessage(error.message));
+    }, [project?.project_id]);
+
     const visibleProjects = useMemo(
         () => projects.filter((item) => !hiddenProjects.has(item.project_id)).slice(0, recentLimit),
         [projects, hiddenProjects, recentLimit],
     );
 
     const hiddenCount = projects.filter((item) => hiddenProjects.has(item.project_id)).length;
-
-    const onAudioUpload = async (ev: React.ChangeEvent<HTMLInputElement>) => {
-        const file = ev.target.files?.[0];
-        if (!file) return;
-        loadProjectAudioForPlayback(file);
-        setBusy(true);
-        setMessage("Creating local project...");
-        try {
-            const created = await api.createProject(file);
-            onProject(created, true);
-            const nextHidden = new Set(hiddenProjects);
-            nextHidden.delete(created.project_id);
-            setHiddenProjects(nextHidden);
-            writeHiddenRecentProjects(nextHidden);
-            await refresh();
-            setMessage(`Project created: ${created.project_id}`);
-        } catch (error) {
-            setMessage((error as Error).message);
-        } finally {
-            setBusy(false);
-            ev.target.value = "";
-        }
-    };
 
     const loadProject = async (projectId: string) => {
         setBusy(true);
@@ -135,26 +121,6 @@ export const ProjectPanel: React.FC<{
     return (
         <section className="roller-card">
             <h2>Project</h2>
-            <button
-                className="roller-import-button"
-                type="button"
-                disabled={busy}
-                onClick={() => inputRef.current?.click()}
-            >
-                <span className="roller-import-icon">+</span>
-                <span>
-                    <b>Import Audio</b>
-                    <small>Create project with local file.</small>
-                </span>
-            </button>
-            <input
-                ref={inputRef}
-                className="roller-hidden-file"
-                type="file"
-                accept="audio/*,.mp3,.flac,.wav,.m4a,.aac,.ogg,.opus,.ncm,.qmcflac,.qmc0,.qmc1,.qmc2,.qmc3"
-                onChange={onAudioUpload}
-                disabled={busy}
-            />
             {project && (
                 <div className="roller-kv">
                     <b>ID</b><span>{project.project_id}</span>

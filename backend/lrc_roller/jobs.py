@@ -16,6 +16,8 @@ from typing import Callable, Iterable, Any
 from lrc_roller.models import JobModel, JobProgressModel, JobStatus
 
 _PYROLLER_EVENT_PREFIX = "PYROLLER_EVENT "
+_MAX_RETAINED_JOBS = 100
+_CANCEL_GRACE_SECONDS = 8
 
 
 def _utc_now_iso() -> str:
@@ -378,6 +380,49 @@ class JobManager:
         self._jobs: dict[str, ManagedJob] = {}
         self._lock = threading.Lock()
 
+    def _prune_finished_jobs_locked(self) -> None:
+        overflow = len(self._jobs) - _MAX_RETAINED_JOBS
+        if overflow <= 0:
+            return
+        removable: list[tuple[str, str]] = []
+        for job_id, managed in self._jobs.items():
+            status = managed.model.status
+            if status not in {JobStatus.queued, JobStatus.running}:
+                removable.append((managed.model.updated_at or managed.model.started_at or "", job_id))
+        removable.sort()
+        for _, job_id in removable[:overflow]:
+            self._jobs.pop(job_id, None)
+
+    def _request_process_stop(self, managed: ManagedJob, process: subprocess.Popen[str]) -> None:
+        def stopper() -> None:
+            try:
+                if process.poll() is not None:
+                    return
+                if os.name != "nt":
+                    os.killpg(process.pid, signal.SIGTERM)
+                else:
+                    process.terminate()
+                try:
+                    process.wait(timeout=_CANCEL_GRACE_SECONDS)
+                    return
+                except subprocess.TimeoutExpired:
+                    pass
+                with managed.lock:
+                    managed.model.logs.append("Process did not exit after cancellation; forcing termination.")
+                    managed.model.updated_at = _utc_now_iso()
+                if os.name != "nt":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except ProcessLookupError:
+                return
+            except Exception as exc:
+                with managed.lock:
+                    managed.model.logs.append(f"Failed to terminate canceled process: {exc}")
+                    managed.model.updated_at = _utc_now_iso()
+
+        threading.Thread(target=stopper, name=f"cancel-{managed.model.job_id}", daemon=True).start()
+
     def create_subprocess_job(
         self,
         *,
@@ -404,6 +449,7 @@ class JobManager:
         )
         with self._lock:
             self._jobs[job_id] = managed
+            self._prune_finished_jobs_locked()
 
         def run_callback(callback: Callable[..., dict] | None, snapshot: JobModel) -> dict[str, Any]:
             if callback is None:
@@ -580,15 +626,6 @@ class JobManager:
                 managed.model.progress.message = "Cancellation requested"
             process = managed.process
         if process is not None and process.poll() is None:
-            try:
-                if os.name != "nt":
-                    os.killpg(process.pid, signal.SIGTERM)
-                else:
-                    process.terminate()
-            except Exception:
-                try:
-                    process.terminate()
-                except Exception:
-                    pass
+            self._request_process_stop(managed, process)
         with managed.lock:
             return managed.model.model_copy(deep=True)

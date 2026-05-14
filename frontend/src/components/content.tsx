@@ -3,6 +3,7 @@ import SSK from "#const/session_key.json" with { type: "json" };
 import STRINGS from "#const/strings.json" with { type: "json" };
 import { convertTimeToTag } from "@lrc-maker/lrc-parser";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ImportAudioPanel } from "../features/project/ImportAudioPanel.js";
 import { ProjectPanel } from "../features/project/ProjectPanel.js";
 import { LrclibPanel } from "../features/lrclib/LrclibPanel.js";
 import { RollerPanel } from "../features/roller/RollerPanel.js";
@@ -139,6 +140,7 @@ export const Content: React.FC = () => {
         <main className="roller-main">
             <aside className="roller-side left">
                 <ProjectPanel project={project} onProject={onProject} />
+                <ImportAudioPanel project={project} onProject={onProject} />
                 <LrclibPanel project={project} editorMeta={editorMeta} onProject={onProject} onImportText={importText} />
             </aside>
 

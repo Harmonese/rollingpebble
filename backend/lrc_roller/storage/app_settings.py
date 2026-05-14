@@ -28,3 +28,14 @@ class SettingsStore:
     def write(self, settings: RuntimeSettingsModel) -> RuntimeSettingsModel:
         self.path.write_text(settings.model_dump_json(indent=2), encoding="utf-8")
         return settings
+
+    def reset_defaults(self, *, preserve_runtime_history: bool = True) -> RuntimeSettingsModel:
+        current = self.read()
+        defaults = RuntimeSettingsModel()
+        if preserve_runtime_history:
+            defaults.last_doctor_status = current.last_doctor_status
+            defaults.last_doctor_at = current.last_doctor_at
+            defaults.last_install_profile = current.last_install_profile
+            defaults.last_install_at = current.last_install_at
+            defaults.last_install_status = current.last_install_status
+        return self.write(defaults)
