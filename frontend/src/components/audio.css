@@ -4,14 +4,16 @@ audio {
     width: 100%;
     height: 32px;
     margin-bottom: env(safe-area-inset-bottom);
-    background-color: var(--semi-black-color);
+    background-color: rgba(12, 14, 16, 0.96);
 }
 
 audio::-webkit-media-controls-enclosure {
     border-radius: 0;
 }
 
-[disabled] {
+audio[disabled],
+.lrc-audio [disabled],
+.lrc-audio button[disabled] {
     opacity: 0.5;
     pointer-events: none;
 }
@@ -20,12 +22,13 @@ audio::-webkit-media-controls-enclosure {
     display: flex;
     align-items: center;
     justify-content: space-around;
+    min-height: var(--app-footer-height);
     padding-right: env(safe-area-inset-right);
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
-    color: var(--white);
+    color: var(--roller-text);
     font-size: 14px;
-    background-color: var(--semi-black-color);
+    background: transparent;
     user-select: none;
 }
 
@@ -72,7 +75,7 @@ audio::-webkit-media-controls-enclosure {
         margin: 0;
         padding: 0 8px;
         width: 100%;
-        background-color: var(--semi-black-color);
+        background-color: rgba(12, 14, 16, 0.96);
     }
 
     .app-main {
@@ -82,7 +85,7 @@ audio::-webkit-media-controls-enclosure {
 
 .lrc-audio > button {
     height: 32px;
-    color: #eeeeee;
+    color: var(--roller-text);
 }
 
 audio + .lrc-audio > .loadaudio-button > svg {
@@ -99,7 +102,7 @@ audio[src] + .lrc-audio > .loadaudio-button > svg {
     }
 
     50% {
-        filter: var(--drop-shadow);
+        filter: drop-shadow(0 0 4px currentColor);
     }
 }
 
@@ -158,14 +161,14 @@ input[type="range"]::-webkit-slider-thumb {
     background-color: currentColor;
     border: 0;
     border-radius: 50%;
-    box-shadow: 0 0 4px 1px var(--black);
+    box-shadow: 0 0 4px 1px var(--roller-bg);
     filter: brightness(120%);
     transition: box-shadow var(--transition-duration) ease-in-out;
     -webkit-appearance: none;
 }
 
 input[type="range"]:hover::-webkit-slider-thumb {
-    box-shadow: 0 0 4px 1px var(--white);
+    box-shadow: 0 0 4px 1px var(--roller-text);
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -176,14 +179,14 @@ input[type="range"]::-moz-range-thumb {
     background-color: currentColor;
     border: 0;
     border-radius: 50%;
-    box-shadow: 0 0 4px 1px var(--black);
+    box-shadow: 0 0 4px 1px var(--roller-bg);
     filter: brightness(120%);
     transition: box-shadow var(--transition-duration) ease-in-out;
     -moz-appearance: none;
 }
 
 input[type="range"]:hover::-moz-range-thumb {
-    box-shadow: 0 0 4px var(--white);
+    box-shadow: 0 0 4px var(--roller-text);
 }
 
 input[type="range"]::-ms-fill-upper, input[type="range"]::-ms-fill-lower {
@@ -212,66 +215,35 @@ input[type="range"]::-ms-tooltip {
     margin: calc(var(--slider-height) / 2 - 2px) 0;
     color: var(--progress-meter-color);
     vertical-align: 0;
-    background: var(--white);
+    background: var(--roller-surface-2);
     border: none;
     border-radius: 2px;
-    box-shadow: 0 0 4px var(--black);
+    box-shadow: none;
     transition: box-shadow var(--transition-duration) ease-in-out;
     appearance: none;
 }
 
 .slider:hover progress {
-    box-shadow: 0 0 4px var(--white);
+    box-shadow: 0 0 4px var(--roller-text);
 }
 
 progress::-moz-progress-bar {
-    background-color: var(--progress-meter-color);
-    background-image: linear-gradient(-45deg, #ffffff00 0, #ffffff00 50%, #ffffffcc 62.5%, #ffffff00 75%);
+    background-color: var(--theme-color);
+    background-image: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0));
     background-size: 35px 20px, 100% 100%, 100% 100%;
     border-radius: 2px;
 }
 
 progress::-webkit-progress-bar {
-    background-color: #eeeeee;
+    background-color: var(--roller-surface-2);
     border-radius: 2px;
-    box-shadow: 0 2px 5px #00000044 inset;
-}
-
-progress::-webkit-progress-value {
-    background-color: var(--progress-meter-color);
-    background-image: linear-gradient(-45deg, #ffffff00 0, #ffffff00 50%, #ffffffcc 62.5%, #ffffff00 75%);
-    background-repeat: repeat-x;
-    background-size: 40px 40px, 100% 100%, 100% 100%;
-    border-radius: 2px;
-}
-
-/* lrc-roller transport styling */
-.lrc-audio {
-    min-height: var(--app-footer-height);
-    color: var(--roller-text);
-    background: transparent;
-}
-
-.lrc-audio > button {
-    color: var(--roller-text);
-}
-
-input[type="range"] {
-    color: var(--theme-color);
-}
-
-.slider > progress {
-    background: #2c3238;
-    box-shadow: none;
-}
-
-progress::-webkit-progress-bar {
-    background-color: #2c3238;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
-progress::-webkit-progress-value,
-progress::-moz-progress-bar {
+progress::-webkit-progress-value {
     background-color: var(--theme-color);
     background-image: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0));
+    background-repeat: repeat-x;
+    background-size: 40px 40px, 100% 100%, 100% 100%;
+    border-radius: 2px;
 }

@@ -355,3 +355,15 @@ class NeteaseService:
         if model is None:
             model = _model_from_raw(_RawSong(song_id=song_id))
         return NeteaseResolveResponse(song=model)
+
+    def fetch_lyrics(self, song_id: int) -> NeteaseLyricResponse:
+        from lrc_roller.models import NeteaseLyricResponse
+
+        url = f"https://music.163.com/api/song/lyric?id={song_id}&lv=1&kv=1&tv=-1"
+        data = _request_json(url, timeout=10.0)
+        lrc_obj = data.get("lrc") if isinstance(data.get("lrc"), dict) else {}
+        tlyric_obj = data.get("tlyric") if isinstance(data.get("tlyric"), dict) else {}
+        return NeteaseLyricResponse(
+            lyric=lrc_obj.get("lyric") if isinstance(lrc_obj.get("lyric"), str) and lrc_obj.get("lyric") else None,
+            tlyric=tlyric_obj.get("lyric") if isinstance(tlyric_obj.get("lyric"), str) and tlyric_obj.get("lyric") else None,
+        )

@@ -1,7 +1,7 @@
 import LSK from "#const/local_key.json" with { type: "json" };
 import STRINGS from "#const/strings.json" with { type: "json" };
 import type { TrimOptios } from "@lrc-maker/lrc-parser";
-import { createContext, useEffect, useMemo } from "react";
+import { createContext, useEffect, useMemo, type RefObject } from "react";
 import { useLang } from "../hooks/useLang.js";
 import { type Action as PrefAction, type State as PrefState, usePref } from "../hooks/usePref.js";
 import { toastPubSub } from "./toast.js";
@@ -68,24 +68,30 @@ export const appContext = createContext<IAppContext>(undefined, (prev, next) => 
     return bits;
 });
 
+export const AudioContext = createContext<RefObject<HTMLAudioElement> | null>(null);
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [prefState, prefDispatch] = usePref(() => localStorage.getItem(LSK.preferences) || STRINGS.emptyString);
 
     const [lang, setLang] = useLang();
 
     useEffect(() => {
-        setLang("en-US").catch((error: Error) => {
+        setLang(prefState.lang).catch((error: Error) => {
             toastPubSub.pub({
                 type: "warning",
                 text: error.message,
             });
         });
-    }, [setLang]);
+    }, [setLang, prefState.lang]);
+
+    useEffect(() => {
+        localStorage.setItem(LSK.preferences, JSON.stringify(prefState));
+    }, [prefState]);
 
     useEffect(() => {
         document.title = "lrc-roller";
-        document.documentElement.lang = "en-US";
-    }, [lang]);
+        document.documentElement.lang = prefState.lang;
+    }, [lang, prefState.lang]);
 
     const value = useMemo(() => {
         return {

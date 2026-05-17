@@ -10,6 +10,6 @@
     height: 1px;
     left: 0;
     right: 0;
-    background-color: #eeeeee;
+    background-color: var(--roller-muted);
     opacity: 0.5;
 }

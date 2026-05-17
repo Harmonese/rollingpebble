@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { readdirSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
 const jsonSuffix = ".json";
@@ -14,13 +14,16 @@ const langMap = langFiles.map((filename) => {
     return [langCode, content.languageName || langCode] as const;
 });
 
+const rootDir = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf-8")) as { version: string };
+
 export default defineConfig({
     plugins: [react()],
     define: {
         "import.meta.env.app": JSON.stringify({
             hash: "dev",
             updateTime: new Date().toISOString(),
-            version: "0.5.5",
+            version: pkg.version,
         }),
         "i18n.langCodeList": JSON.stringify(langCodeList),
         "i18n.langMap": JSON.stringify(langMap),

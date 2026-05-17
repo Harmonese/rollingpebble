@@ -1,0 +1,298 @@
+.about-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 520;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    box-sizing: border-box;
+}
+
+.about-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.58);
+}
+
+.about-modal {
+    position: relative;
+    z-index: 1;
+    width: min(720px, 100%);
+    max-height: min(760px, calc(100dvh - 36px));
+    overflow: auto;
+    scrollbar-gutter: stable;
+    box-sizing: border-box;
+    padding: 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(var(--theme-rgb), 0.30);
+    background: linear-gradient(180deg, var(--roller-surface) 0%, var(--roller-bg) 100%);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+.about-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.about-header h2 {
+    margin: 0;
+    color: var(--roller-text);
+    font-size: 1.35rem;
+    letter-spacing: -0.03em;
+}
+
+.about-kicker {
+    margin: 0 0 4px;
+    color: var(--theme-color);
+    font-size: 0.74rem;
+    font-weight: 760;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.about-tagline {
+    max-width: 42rem;
+    margin: 6px 0 0;
+    color: var(--roller-muted);
+    line-height: 1.45;
+}
+
+.about-version {
+    display: inline-flex;
+    margin-top: 14px;
+    padding: 5px 10px;
+    border-radius: var(--radius-pill);
+    color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.12);
+    border: 1px solid rgba(var(--theme-rgb), 0.28);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.about-section {
+    margin-top: 16px;
+}
+
+.about-section h3 {
+    margin: 0 0 8px;
+    color: var(--roller-text);
+    font-size: 0.95rem;
+}
+
+.about-section p,
+.about-section li,
+.about-hotkeys dd,
+.about-hotkeys dt {
+    color: var(--roller-muted);
+    font-size: 0.86rem;
+    line-height: 1.5;
+}
+
+.about-section p,
+.about-section ul,
+.about-hotkeys {
+    margin: 0;
+}
+
+.about-section ul {
+    padding-left: 1.1rem;
+}
+
+.about-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.about-links a,
+.about-header button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(var(--theme-rgb), 0.34);
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--theme-color);
+    font-weight: 650;
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.about-links a:hover,
+.about-header button:hover {
+    transform: translateY(-1px);
+    background: rgba(var(--theme-rgb), 0.16);
+    border-color: rgba(var(--theme-rgb), 0.58);
+}
+
+.about-hotkeys {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px 12px;
+}
+
+.about-hotkeys dt {
+    color: var(--roller-text);
+    font-weight: 740;
+}
+
+/* LRC Utilities panel (reuses .about-overlay / .about-modal shell) */
+.lrc-utils-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.lrc-utils-grid > button,
+.lrc-utils-grid > label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    border: 1px solid rgba(var(--theme-rgb), 0.2);
+    border-radius: var(--radius-md);
+    background: rgba(var(--theme-rgb), 0.04);
+}
+
+.lrc-utils-grid > button {
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.lrc-utils-grid > button:hover {
+    background: rgba(var(--theme-rgb), 0.1);
+    border-color: rgba(var(--theme-rgb), 0.45);
+    transform: translateY(-1px);
+}
+
+.lrc-utils-grid b {
+    color: var(--theme-color);
+    font-size: 0.86rem;
+    font-weight: 750;
+}
+
+.lrc-utils-grid small {
+    color: var(--roller-muted);
+    font-size: 0.74rem;
+    font-weight: 400;
+    line-height: 1.35;
+}
+
+.lrc-utils-grid > button:hover {
+    background: rgba(var(--theme-rgb), 0.14);
+    border-color: rgba(var(--theme-rgb), 0.55);
+    transform: translateY(-1px);
+}
+
+.lrc-utils-grid > label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: var(--roller-text);
+    font-size: 0.84rem;
+    font-weight: 650;
+}
+
+.lrc-utils-grid > label:nth-child(7) {
+    grid-column: 1 / -1;
+}
+
+.lrc-utils-grid textarea {
+    width: 100%;
+    min-height: 80px;
+    resize: vertical;
+    box-sizing: border-box;
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    background: var(--roller-surface-2);
+    color: var(--roller-text);
+    border: 1px solid #3b444d;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    outline: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.lrc-utils-grid textarea:focus {
+    border-color: rgba(var(--theme-rgb), 0.7);
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
+}
+
+.lrc-utils-grid input[type="number"] {
+    width: 80px;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid #3b444d;
+    background: var(--roller-surface-2);
+    color: var(--roller-text);
+    font-size: 0.84rem;
+    outline: none;
+    text-align: center;
+}
+
+.lrc-utils-grid input[type="number"]:focus {
+    border-color: rgba(var(--theme-rgb), 0.7);
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
+}
+
+.utils-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.utils-input-row button,
+.lrc-utils-grid > label > button {
+    min-height: 30px;
+    padding: 4px 12px;
+    border: 1px solid rgba(var(--theme-rgb), 0.3);
+    border-radius: var(--radius-pill);
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--theme-color);
+    font-size: 0.8rem;
+    font-weight: 650;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+.utils-input-row button:hover,
+.lrc-utils-grid > label > button:hover {
+    background: rgba(var(--theme-rgb), 0.16);
+    border-color: rgba(var(--theme-rgb), 0.55);
+}
+
+.transform-expr {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--roller-muted);
+    font-size: 0.84rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+@media (max-width: 680px) {
+    .about-header {
+        flex-direction: column;
+    }
+
+    .about-header button {
+        align-self: flex-end;
+    }
+
+    .about-hotkeys {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+
+    .about-hotkeys dd {
+        margin: 0 0 8px;
+    }
+}

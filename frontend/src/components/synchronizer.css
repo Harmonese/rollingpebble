@@ -17,7 +17,7 @@
     width: 100px;
     height: 100px;
     margin-bottom: env(safe-area-inset-bottom);
-    color: var(--white);
+    color: var(--roller-text);
     background-color: var(--theme-color);
     border: none;
     border-radius: 50%;
@@ -56,14 +56,6 @@
 .line::after {
     display: inline-block;
     content: "";
-}
-
-.line:nth-child(even) {
-    background-color: #00000022;
-}
-
-.line:nth-child(odd) {
-    background-color: #ffffff22;
 }
 
 .line > .line-time, .line > .line-text {
@@ -115,4 +107,51 @@
     .error::before {
         left: 4rem;
     }
+}
+
+/* lrc-roller overrides: synchronizer styling */
+.lyric-list {
+    background: none;
+}
+
+.line {
+    box-sizing: border-box;
+    padding-top: 9px;
+    padding-bottom: 9px;
+    color: var(--roller-text);
+    border-top: solid 1px transparent;
+    border-bottom: solid 1px transparent;
+    border-left: 1px solid transparent;
+    border-right: 1px solid transparent;
+}
+
+.line:nth-child(even) {
+    background-color: rgba(30, 34, 39, 0.6);
+}
+
+.line:nth-child(odd) {
+    background-color: rgba(21, 24, 27, 0.6);
+}
+
+[data-theme="light"] .line:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .line:nth-child(odd) {
+    background-color: rgba(0, 0, 0, 0.015);
+}
+
+.select {
+    border-color: var(--theme-color);
+    box-shadow: none;
+}
+
+.line.highlight {
+    color: var(--theme-contrast-color);
+    background: linear-gradient(90deg, rgba(var(--theme-rgb), 0.95), rgba(94, 197, 255, 0.86));
+}
+
+.space-button {
+    background-color: var(--theme-color);
+    color: var(--theme-contrast-color);
 }

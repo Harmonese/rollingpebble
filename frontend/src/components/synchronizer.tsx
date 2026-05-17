@@ -1,12 +1,13 @@
 import SSK from "#const/session_key.json" with { type: "json" };
 import STRINGS from "#const/strings.json" with { type: "json" };
 import { convertTimeToTag, formatText, type ILyric } from "@lrc-maker/lrc-parser";
-import { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useKeyBindings } from "../hooks/useKeyBindings.js";
 import type { IState } from "../hooks/useLrc.js";
 import { type Action, ActionType } from "../hooks/useLrc.js";
 import { type State as PrefState } from "../hooks/usePref.js";
-import { audioRef, currentTimePubSub } from "../utils/audiomodule.js";
+import { currentTimePubSub } from "../utils/audiomodule.js";
+import { useAudio } from "../hooks/useAudio.js";
 import { InputAction } from "../utils/input-action.js";
 import { isKeyboardElement } from "../utils/is-keyboard-element.js";
 import { getMatchedAction } from "../utils/keybindings.js";
@@ -33,6 +34,7 @@ interface ISynchronizerProps {
 }
 
 export const Synchronizer: React.FC<ISynchronizerProps> = ({ state, dispatch }) => {
+    const audio = useAudio();
     const self = useRef(Symbol(Synchronizer.name));
 
     const { selectIndex, currentIndex: highlightIndex, lyric } = state;
@@ -83,19 +85,19 @@ export const Synchronizer: React.FC<ISynchronizerProps> = ({ state, dispatch }) 
     }, [dispatch]);
 
     const sync = useCallback(() => {
-        if (!audioRef.duration) {
+        if (!audio.duration) {
             return;
         }
 
         dispatch({
             type: ActionType.next,
-            payload: audioRef.currentTime,
+            payload: audio.currentTime,
         });
     }, [dispatch]);
 
     const adjust = useCallback(
         (ev: KeyboardEvent | React.MouseEvent, offset: number, index: number) => {
-            if (!audioRef.duration) {
+            if (!audio.duration) {
                 return;
             }
 
@@ -107,7 +109,7 @@ export const Synchronizer: React.FC<ISynchronizerProps> = ({ state, dispatch }) 
 
             dispatch({
                 type: ActionType.time,
-                payload: audioRef.step(ev, offset, selectTime),
+                payload: audio.step(ev, offset, selectTime),
             });
         },
         [dispatch, lyric],
@@ -195,7 +197,7 @@ export const Synchronizer: React.FC<ISynchronizerProps> = ({ state, dispatch }) 
         (ev: React.MouseEvent<HTMLUListElement | HTMLLIElement>) => {
             ev.stopPropagation();
 
-            if (!audioRef.duration) {
+            if (!audio.duration) {
                 return;
             }
 
@@ -265,7 +267,7 @@ interface ILyricLineProps {
     prefState: PrefState;
 }
 
-const LyricLine: React.FC<ILyricLineProps> = ({ line, index, select, className, prefState }) => {
+const LyricLine: React.FC<ILyricLineProps> = memo(({ line, index, select, className, prefState }) => {
     const lineTime = convertTimeToTag(line.time, prefState.fixed);
 
     const lineText = formatText(line.text, prefState.spaceStart, prefState.spaceEnd);
@@ -277,4 +279,12 @@ const LyricLine: React.FC<ILyricLineProps> = ({ line, index, select, className, 
             <span className="line-text">{lineText}</span>
         </li>
     );
-};
+}, (prev, next) => {
+    return prev.line === next.line
+        && prev.index === next.index
+        && prev.select === next.select
+        && prev.className === next.className
+        && prev.prefState.fixed === next.prefState.fixed
+        && prev.prefState.spaceStart === next.prefState.spaceStart
+        && prev.prefState.spaceEnd === next.prefState.spaceEnd;
+});

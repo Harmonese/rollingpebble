@@ -12,11 +12,11 @@
 }
 
 :root {
-    color: var(--font-color);
+    color: var(--roller-text);
     font-family:
         -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
-    background-color: var(--background-color);
+    background-color: var(--roller-bg);
     font-feature-settings: "kern" 1;
     font-kerning: normal;
     caret-color: var(--theme-color);
@@ -76,8 +76,9 @@ svg {
     }
 }
 
-:focus {
-    outline: none;
+:focus-visible {
+    outline: 2px solid var(--theme-color);
+    outline-offset: 2px;
 }
 
 a {
@@ -121,9 +122,9 @@ a > * {
 
 .button {
     padding: 8px;
-    color: var(--black);
+    color: #0b0d0f;
     background-color: white;
-    border-radius: var(--border-radius);
+    border-radius: var(--radius-md);
     opacity: 0.8;
 }
 
@@ -144,7 +145,7 @@ a > * {
 }
 
 .glow:hover > svg {
-    filter: var(--drop-shadow);
+    filter: drop-shadow(0 0 4px currentColor);
 }
 
 .ripple {
@@ -183,7 +184,7 @@ a > * {
 .page-loading::before {
     position: fixed;
     inset: 0;
-    background-color: var(--background-color);
+    background-color: var(--roller-bg);
     opacity: 0.5;
     content: "";
 }
@@ -218,7 +219,7 @@ a > * {
     max-height: 80vh;
     margin-top: auto;
     opacity: 0.2;
-    filter: var(--drop-shadow);
+    filter: drop-shadow(0 0 4px currentColor);
 }
 
 /* lrc-roller shell refinements */
@@ -229,17 +230,23 @@ html {
 }
 
 body {
-    min-width: 1120px;
+    min-width: 0;
     min-height: 100dvh;
     background:
         radial-gradient(circle at 15% 0%, rgba(var(--theme-rgb), 0.08), transparent 32rem),
-        linear-gradient(180deg, #101316 0%, #0b0d0f 100%);
+        linear-gradient(180deg, var(--roller-surface-2) 0%, var(--roller-bg) 100%);
     overflow: hidden;
+}
+
+@media (width >= 1120px) {
+    body {
+        min-width: 1120px;
+    }
 }
 
 * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(var(--theme-rgb), 0.42) rgba(255, 255, 255, 0.035);
+    scrollbar-color: rgba(var(--theme-rgb), 0.42) var(--overlay-subtle);
 }
 
 *::-webkit-scrollbar {
@@ -249,7 +256,7 @@ body {
 
 *::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.026);
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
 }
 
 *::-webkit-scrollbar-thumb {
@@ -258,7 +265,7 @@ body {
         linear-gradient(180deg, rgba(var(--theme-rgb), 0.46), rgba(94, 197, 255, 0.28)),
         rgba(255, 255, 255, 0.08);
     border: 3px solid transparent;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background-clip: padding-box;
 }
 
@@ -286,7 +293,7 @@ select, input, textarea, button {
 .page-loading::before {
     background:
         radial-gradient(circle at 50% 45%, rgba(var(--theme-rgb), 0.12), transparent 32vmin),
-        linear-gradient(180deg, #161a1f 0%, #0b0e10 100%);
+        linear-gradient(180deg, var(--roller-surface) 0%, var(--roller-bg) 100%);
     opacity: 1;
 }
 
@@ -309,7 +316,7 @@ select, input, textarea, button {
     border: 0;
     box-shadow:
         0 0 46px rgba(var(--theme-rgb), 0.26),
-        0 24px 70px rgba(0, 0, 0, 0.38);
+        0 24px 70px rgba(0, 0, 0, 0.15);
     animation: roller-splash-float 2.8s ease-in-out infinite alternate;
 }
 
@@ -365,4 +372,21 @@ select, input, textarea, button {
     to {
         transform: rotate(360deg);
     }
+}
+
+.roller-drag-over::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(var(--theme-rgb), 0.08);
+    border: 3px dashed rgba(var(--theme-rgb), 0.35);
+    border-radius: 0;
+    pointer-events: none;
+    animation: drag-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes drag-pulse {
+    0%, 100% { border-color: rgba(var(--theme-rgb), 0.25); }
+    50% { border-color: rgba(var(--theme-rgb), 0.55); }
 }

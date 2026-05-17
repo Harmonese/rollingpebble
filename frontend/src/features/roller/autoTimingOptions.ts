@@ -42,7 +42,7 @@ export const WRITER_OPTIONS: Option[] = [
   { value: "lrc_ms", label: "LRC, millisecond tags" },
   { value: "lrc_cs", label: "LRC, centisecond tags" },
   { value: "lrc_compressed", label: "LRC, compressed" },
-  { value: "ass_karaoke", label: "ASS karaoke" },
+  { value: "ass_karaoke", label: "ASS Karaoke" },
 ];
 
 export const SPACING_OPTIONS: Option[] = [
@@ -77,22 +77,22 @@ export const DEMUCS_MODEL_OPTIONS: Option[] = [
 ];
 
 export const DEMUCS_DEVICE_OPTIONS: Option[] = [
-  { value: "", label: "Let Demucs choose" },
+  { value: "", label: "Auto-detect" },
   { value: "cpu", label: "CPU" },
   { value: "cuda", label: "CUDA" },
   { value: "mps", label: "Apple Silicon / MPS" },
 ];
 
 export const FILTER_CHAIN_OPTIONS: Option[] = [
-  { value: "", label: "No filter chain" },
+  { value: "", label: "None" },
   { value: "noise_gate", label: "Noise gate" },
   { value: "dereverb", label: "Dereverb" },
-  { value: "noise_gate,dereverb", label: "Noise gate -> dereverb" },
-  { value: "dereverb,noise_gate", label: "Dereverb -> noise gate" },
+  { value: "noise_gate,dereverb", label: "Noise gate -> Dereverb" },
+  { value: "dereverb,noise_gate", label: "Dereverb -> Noise gate" },
 ];
 
 export const DEVICE_OPTIONS: Option[] = [
-  { value: "", label: "Auto / py-roller default" },
+  { value: "", label: "Auto-detect" },
   { value: "cpu", label: "CPU" },
   { value: "cuda", label: "CUDA" },
   { value: "mps", label: "Apple Silicon / MPS (Torch backends)" },
@@ -111,9 +111,14 @@ export const COMPUTE_TYPE_OPTIONS: Option[] = [
   { value: "int8_float16", label: "int8_float16" },
 ];
 
+export const VAD_FILTER_OPTIONS: Option[] = [
+  { value: "off", label: "Off" },
+  { value: "on", label: "On" },
+];
+
 export const HF_XET_OPTIONS: Option[] = [
   { value: "auto", label: "Auto" },
-  { value: "off", label: "Off, safer network path" },
+  { value: "off", label: "Off" },
   { value: "on", label: "On" },
 ];
 

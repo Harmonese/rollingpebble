@@ -16,17 +16,20 @@ import { ActionType as LrcActionType, useLrc } from "../hooks/useLrc.js";
 import { ThemeMode } from "../hooks/usePref.js";
 import { AudioActionType, audioStatePubSub } from "../utils/audiomodule.js";
 import { appContext } from "./app.context.js";
-import { Eidtor } from "./editor.js";
+import { Editor } from "./editor.js";
 import { Synchronizer } from "./synchronizer.js";
+import { LrcUtilsPanel } from "../features/utils/LrcUtilsPanel.js";
 import { LrcRollerEmptyState } from "./svg.img.js";
 import "./roller.css";
 
 export const Content: React.FC = () => {
     const self = useRef(Symbol(Content.name));
-    const { prefState, trimOptions } = useContext(appContext);
+    const { prefState, lang, trimOptions } = useContext(appContext);
     const [active, setActive] = useState<"sync" | "editor">("sync");
     const [project, setProject] = useState<ProjectModel | null>(null);
     const [includeMetadataTags, setIncludeMetadataTags] = useState(true);
+    const [utilsOpen, setUtilsOpen] = useState(false);
+    const [bgVersion, setBgVersion] = useState(Date.now());
 
 
     useEffect(() => {
@@ -80,7 +83,27 @@ export const Content: React.FC = () => {
     }, [lrcState, prefState, includeMetadataTags]);
 
     useEffect(() => {
+        let dragCounter = 0;
+        const onDragOver = (ev: DragEvent) => {
+            ev.preventDefault();
+        };
+        const onDragEnter = (ev: DragEvent) => {
+            ev.preventDefault();
+            dragCounter++;
+            document.body.classList.add("roller-drag-over");
+        };
+        const onDragLeave = (ev: DragEvent) => {
+            ev.preventDefault();
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                document.body.classList.remove("roller-drag-over");
+            }
+        };
         const onDrop = (ev: DragEvent) => {
+            ev.preventDefault();
+            dragCounter = 0;
+            document.body.classList.remove("roller-drag-over");
             const file = ev.dataTransfer?.files[0];
             if (file && (file.type.startsWith("text/") || /(?:\.lrc|\.txt)$/i.test(file.name))) {
                 const fileReader = new FileReader();
@@ -90,8 +113,16 @@ export const Content: React.FC = () => {
                 fileReader.readAsText(file, "utf-8");
             }
         };
+        document.documentElement.addEventListener("dragover", onDragOver);
+        document.documentElement.addEventListener("dragenter", onDragEnter);
+        document.documentElement.addEventListener("dragleave", onDragLeave);
         document.documentElement.addEventListener("drop", onDrop);
-        return () => document.documentElement.removeEventListener("drop", onDrop);
+        return () => {
+            document.documentElement.removeEventListener("dragover", onDragOver);
+            document.documentElement.removeEventListener("dragenter", onDragEnter);
+            document.documentElement.removeEventListener("dragleave", onDragLeave);
+            document.documentElement.removeEventListener("drop", onDrop);
+        };
     }, []);
 
     useEffect(() => {
@@ -111,9 +142,33 @@ export const Content: React.FC = () => {
         document.documentElement.style.setProperty("--theme-contrast-color", con * con > 0.0525 ? "var(--black)" : "var(--white)");
     }, [prefState.themeColor]);
 
+    useEffect(() => {
+        let el = document.getElementById("workspace-bg-style") as HTMLStyleElement | null;
+        if (!el) {
+            el = document.createElement("style");
+            el.id = "workspace-bg-style";
+            document.head.appendChild(el);
+        }
+        el.textContent = `.roller-editor-host { background: radial-gradient(circle at 58% 46%, rgba(var(--theme-rgb), 0.08), transparent 38%), var(--editor-bg-overlay), url(/api/settings/workspace-bg?v=${bgVersion}), var(--roller-bg); background-repeat: no-repeat, no-repeat, no-repeat, repeat; background-position: center center, center center, center center, center center; background-size: auto, auto, cover, auto; }`;
+        return () => {
+            const existing = document.getElementById("workspace-bg-style");
+            if (existing) existing.remove();
+        };
+    }, [bgVersion]);
+
+    useEffect(() => {
+        const handler = () => setBgVersion(Date.now());
+        window.addEventListener("lrc-roller:workspace-bg-changed", handler);
+        return () => window.removeEventListener("lrc-roller:workspace-bg-changed", handler);
+    }, []);
+
     const importText = useCallback((text: string) => {
         lrcDispatch({ type: LrcActionType.parse, payload: { text, options: trimOptions } });
         setActive("sync");
+    }, [lrcDispatch, trimOptions]);
+
+    const applyText = useCallback((text: string) => {
+        lrcDispatch({ type: LrcActionType.parse, payload: { text, options: trimOptions } });
     }, [lrcDispatch, trimOptions]);
 
     const onProject = useCallback((next: ProjectModel, applyToEditor = false) => {
@@ -146,13 +201,13 @@ export const Content: React.FC = () => {
 
             <section className="roller-center">
                 <div className="roller-tabs">
-                    <button className={active === "sync" ? "active" : ""} type="button" onClick={() => setActive("sync")}>Synchronizer</button>
-                    <button className={active === "editor" ? "active" : ""} type="button" onClick={() => setActive("editor")}>Editor</button>
+                    <button className={active === "sync" ? "active" : ""} type="button" onClick={() => setActive("sync")}>{lang.ui?.synchronizer || "Synchronizer"}</button>
+                    <button className={active === "editor" ? "active" : ""} type="button" onClick={() => setActive("editor")}>{lang.ui?.editor || "Editor"}</button>
                 </div>
                 <div className="roller-editor-host">
                     {active === "sync"
                         ? (lrcState.lyric.length ? <Synchronizer state={lrcState} dispatch={lrcDispatch} /> : <LrcRollerEmptyState />)
-                        : <Eidtor lrcState={lrcState} lrcDispatch={lrcDispatch} includeMetadataTags={includeMetadataTags} />}
+                        : <Editor lrcState={lrcState} lrcDispatch={lrcDispatch} includeMetadataTags={includeMetadataTags} onOpenUtils={() => setUtilsOpen(true)} />}
                 </div>
             </section>
 
@@ -173,6 +228,15 @@ export const Content: React.FC = () => {
                     onProject={onProject}
                 />
             </aside>
+            <LrcUtilsPanel
+                open={utilsOpen}
+                text={syncedLyrics}
+                onClose={() => setUtilsOpen(false)}
+                onApply={(newText) => {
+                    applyText(newText);
+                    setUtilsOpen(false);
+                }}
+            />
         </main>
     );
 };

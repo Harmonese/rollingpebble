@@ -17,16 +17,6 @@ export type ProjectModel = {
     lrclib_id?: number | null;
 };
 
-export type LrcCleanseResponse = {
-    status: string;
-    cleaned_text?: string | null;
-    plain_lyrics: string;
-    is_instrumental: boolean;
-    has_valid_timestamps: boolean;
-    warnings: string[];
-    reason?: string | null;
-};
-
 export type LyricsRecord = {
     id?: number | null;
     track_name: string;
@@ -41,6 +31,11 @@ export type LyricsRecord = {
     label: string;
 };
 
+
+export type NeteaseLyricResponse = {
+    lyric?: string | null;
+    tlyric?: string | null;
+};
 
 export type NeteaseSong = {
     id: number;
@@ -168,6 +163,9 @@ export type RuntimeSettings = {
     auto_timing_writer_ass_karaoke_tag_type: "" | "k" | "K" | "kf" | "ko";
 
     recent_projects_limit: number;
+
+    audio_filename_regex: string;
+    audio_filename_regex_enabled: boolean;
 
     last_doctor_status?: string | null;
     last_doctor_at?: string | null;
@@ -356,7 +354,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
         ...init,
         headers: init?.body instanceof FormData
             ? init.headers
-            : { "Content-Type": "application/json", ...(init?.headers || {}) },
+            : { "Content-Type": "application/json", ...init?.headers },
     });
 
     // A fetch response body can only be consumed once. Read it as text once,
@@ -382,6 +380,7 @@ export const api = {
     },
     listProjects: () => request<ProjectModel[]>("/api/projects"),
     getProject: (projectId: string) => request<ProjectModel>(`/api/projects/${projectId}`),
+    deleteProject: (projectId: string) => request<{ deleted: string }>(`/api/projects/${projectId}`, { method: "DELETE" }),
     projectAudioUrl: (projectId: string) => `/api/projects/${projectId}/audio`,
     openProjectFolder: (projectId: string) =>
         request<{ status: string; path: string }>(`/api/projects/${projectId}/open-folder`, { method: "POST" }),
@@ -406,12 +405,16 @@ export const api = {
         request<{ results: NeteaseSong[] }>("/api/netease/search", { method: "POST", body: JSON.stringify(payload) }),
     neteaseResolve: (value: string) =>
         request<{ song: NeteaseSong }>("/api/netease/resolve", { method: "POST", body: JSON.stringify({ value }) }),
-    cleanLrc: (payload: { text: string; remove_translations?: boolean }) =>
-        request<LrcCleanseResponse>("/api/lrc/cleanse", { method: "POST", body: JSON.stringify(payload) }),
+    neteaseLyrics: (songId: number) =>
+        request<NeteaseLyricResponse>(`/api/netease/lyrics/${songId}`),
     rollPreview: (projectId: string, payload: Record<string, unknown>) =>
         request<RollPreview>(`/api/projects/${projectId}/roll/preview`, { method: "POST", body: JSON.stringify(payload) }),
     roll: (projectId: string, payload: Record<string, unknown>) =>
         request<JobModel>(`/api/projects/${projectId}/roll`, { method: "POST", body: JSON.stringify(payload) }),
+    batchPreview: (payload: Record<string, unknown>) =>
+        request<{ project_count: number; projects: string[]; manifest: string; warnings: string[] }>("/api/batch/preview", { method: "POST", body: JSON.stringify(payload) }),
+    batchRoll: (payload: Record<string, unknown>) =>
+        request<JobModel>("/api/batch/roll", { method: "POST", body: JSON.stringify(payload) }),
     getJob: (jobId: string) => request<JobModel>(`/api/jobs/${jobId}`),
     cancelJob: (jobId: string) => request<JobModel>(`/api/jobs/${jobId}/cancel`, { method: "POST" }),
     openJobFolder: (jobId: string) =>
@@ -420,12 +423,21 @@ export const api = {
     updateSettings: (payload: Partial<RuntimeSettings>) =>
         request<RuntimeSettings>("/api/settings", { method: "POST", body: JSON.stringify(payload) }),
     resetSettingsDefaults: () => request<RuntimeSettings>("/api/settings/reset-defaults", { method: "POST" }),
+    uploadWorkspaceBg: (file: File) => {
+        const form = new FormData();
+        form.append("bg", file);
+        return fetch("/api/settings/workspace-bg", { method: "POST", body: form });
+    },
+    deleteWorkspaceBg: () => request<{ ok: string }>("/api/settings/workspace-bg", { method: "DELETE" }),
+    workspaceBgUrl: () => "/api/settings/workspace-bg",
     autoRollerRuntime: () => request<AutoRollerRuntime>("/api/runtime/auto-roller"),
-    updateAutoRollerSettings: (payload: Partial<RuntimeSettings>) =>
-        request<RuntimeSettings>("/api/runtime/auto-roller/settings", { method: "POST", body: JSON.stringify(payload) }),
     runAutoRollerDoctor: () => request<JobModel>("/api/runtime/auto-roller/doctor", { method: "POST" }),
     runAutoRollerInstall: (payload: { profile: "auto" | "cpu" | "cu124"; skip_doctor?: boolean; dry_run?: boolean }) =>
         request<JobModel>("/api/runtime/auto-roller/install", { method: "POST", body: JSON.stringify(payload) }),
+    upgradeAutoRoller: (payload: { profile: "auto" | "cpu" | "cu124" }) =>
+        request<JobModel>("/api/runtime/auto-roller/upgrade", { method: "POST", body: JSON.stringify(payload) }),
+    cacheModel: (payload: { language: "zh" | "en" | "mul"; transcriber_backend?: string | null; transcriber_model_name?: string | null; transcriber_model_path?: string | null }) =>
+        request<JobModel>("/api/runtime/auto-roller/cache-model", { method: "POST", body: JSON.stringify(payload) }),
     uploadPlan: (projectId: string, payload: Record<string, unknown>) =>
         request<UploadPlan>(`/api/projects/${projectId}/upload/plan`, { method: "POST", body: JSON.stringify(payload) }),
     uploadRun: (projectId: string, payload: Record<string, unknown>) =>

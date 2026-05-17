@@ -8,7 +8,7 @@ export const Header: React.FC<{ onAbout: () => void; onSettings: () => void }> =
             </a>
             <nav className="app-nav" aria-label="Application settings">
                 <button className="app-tab icon-tab" title="About" aria-label="About" type="button" onClick={onAbout}><InfoSVG /></button>
-                <button className="app-tab icon-tab" title="Settings" type="button" onClick={onSettings}>
+                <button className="app-tab icon-tab" title="Settings" aria-label="Settings" type="button" onClick={onSettings}>
                     <PreferencesSVG />
                 </button>
             </nav>

@@ -2,11 +2,11 @@ import { convertTimeToTag } from "@lrc-maker/lrc-parser";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
     AudioActionType,
-    audioRef,
     type AudioState,
     audioStatePubSub,
     currentTimePubSub,
 } from "../utils/audiomodule.js";
+import { useAudio } from "../hooks/useAudio.js";
 import { appContext, ChangBits } from "./app.context";
 import { Forward5sSVG, PauseSVG, PlaySVG, Replay5sSVG } from "./svg.js";
 import { Waveform } from "./waveform";
@@ -53,9 +53,10 @@ const supportsWaveformPreview = (src: string): boolean => {
 };
 
 const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, paused }) => {
+    const audio = useAudio();
     const self = useRef(Symbol(TimeLine.name));
-    const [currentTime, setCurrentTime] = useState(audioRef.currentTime);
-    const [rate, setRate] = useState(audioRef.playbackRate);
+    const [currentTime, setCurrentTime] = useState(audio.currentTime);
+    const [rate, setRate] = useState(audio.playbackRate);
     const [localAudioMode, setLocalAudioMode] = useState(false);
 
     useEffect(() => {
@@ -66,7 +67,7 @@ const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, p
                     break;
                 }
                 case AudioActionType.getDuration: {
-                    setLocalAudioMode(supportsWaveformPreview(audioRef.src));
+                    setLocalAudioMode(supportsWaveformPreview(audio.src));
                     break;
                 }
             }
@@ -76,14 +77,14 @@ const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, p
     useEffect(() => {
         if (paused) {
             // update the value once when paused to reflect the exact time
-            setCurrentTime(audioRef.currentTime);
+            setCurrentTime(audio.currentTime);
             // paused but user changing the time
             return currentTimePubSub.sub(self.current, (data) => {
                 setCurrentTime(data);
             });
         } else {
             const id = setInterval(() => {
-                setCurrentTime(audioRef.currentTime);
+                setCurrentTime(audio.currentTime);
             }, 100 / rate); // redraw the waveform cursor faster
 
             return (): void => {
@@ -104,7 +105,7 @@ const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, p
         rafId.current = requestAnimationFrame(() => {
             const time = Number.parseInt(value, 10);
             setCurrentTime(time);
-            audioRef.currentTime = time;
+            audio.currentTime = time;
         });
     }, []);
 
@@ -115,7 +116,7 @@ const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, p
 
         rafId.current = requestAnimationFrame(() => {
             setCurrentTime(time);
-            audioRef.currentTime = time;
+            audio.currentTime = time;
         });
     }, []);
 
@@ -156,9 +157,10 @@ const TimeLine: React.FC<{ duration: number; paused: boolean }> = ({ duration, p
 };
 
 const RateSlider: React.FC<{ lang: Language }> = ({ lang }) => {
+    const audio = useAudio();
     const self = useRef(Symbol(RateSlider.name));
 
-    const [playbackRate, setPlaybackRate] = useState(audioRef.playbackRate);
+    const [playbackRate, setPlaybackRate] = useState(audio.playbackRate);
 
     useEffect(() => {
         return audioStatePubSub.sub(self.current, (data: AudioState) => {
@@ -180,11 +182,11 @@ const RateSlider: React.FC<{ lang: Language }> = ({ lang }) => {
     const onPlaybackRateChange = useCallback((ev: React.ChangeEvent<HTMLInputElement>) => {
         const value = Math.exp(Number.parseFloat(ev.target.value));
         setPlaybackRate(value);
-        audioRef.playbackRate = value;
+        audio.playbackRate = value;
     }, []);
 
     const onPlaybackRateReset = useCallback(() => {
-        audioRef.playbackRate = 1;
+        audio.playbackRate = 1;
     }, []);
 
     return (
@@ -207,18 +209,19 @@ const RateSlider: React.FC<{ lang: Language }> = ({ lang }) => {
 };
 
 export const LrcAudio: React.FC<{ lang: Language }> = ({ lang }) => {
+    const audio = useAudio();
     const self = useRef(Symbol(LrcAudio.name));
 
-    const [paused, setPaused] = useState(audioRef.paused);
+    const [paused, setPaused] = useState(audio.paused);
 
-    const [duration, setDuration] = useState(audioRef.duration);
+    const [duration, setDuration] = useState(audio.duration);
 
     useEffect(() => {
         return audioStatePubSub.sub(self.current, (data: AudioState) => {
             switch (data.type) {
                 case AudioActionType.getDuration: {
                     setDuration(data.payload);
-                    setPaused(audioRef.paused);
+                    setPaused(audio.paused);
                     break;
                 }
                 case AudioActionType.pause: {
@@ -230,15 +233,15 @@ export const LrcAudio: React.FC<{ lang: Language }> = ({ lang }) => {
     }, []);
 
     const onReplay5s = useCallback((ev: React.MouseEvent<HTMLButtonElement>) => {
-        audioRef.step(ev, -5);
+        audio.step(ev, -5);
     }, []);
 
     const onForward5s = useCallback((ev: React.MouseEvent<HTMLButtonElement>) => {
-        audioRef.step(ev, 5);
+        audio.step(ev, 5);
     }, []);
 
     const onPlayPauseToggle = useCallback(() => {
-        audioRef.toggle();
+        audio.toggle();
     }, []);
 
     return (

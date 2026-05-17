@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
+import { useAutoTimingState } from "../../hooks/useAutoTimingState.js";
+import { useMessage } from "../../hooks/useMessage.js";
+import { toastPubSub } from "../../components/toast.js";
+import { appContext, ChangBits } from "../../components/app.context.js";
 import {
   api,
   type JobModel,
@@ -6,7 +10,9 @@ import {
   type ProjectModel,
   type RollPreview,
 } from "../../shared/api.js";
+import { formatBytes } from "../../shared/format.js";
 import { hasLyricContent } from "../../shared/lrc.js";
+import { optionNodes } from "../../shared/optionNodes.js";
 import { SETTINGS_UPDATED_EVENT } from "../../shared/settingsEvents.js";
 import {
   ALIGNER_BACKEND_OPTIONS,
@@ -26,13 +32,9 @@ import {
   SPACING_OPTIONS,
   SPLITTER_BACKEND_OPTIONS,
   STAGE_OPTIONS,
+  VAD_FILTER_OPTIONS,
   WRITER_OPTIONS,
-  defaultModelFor,
   includesStage,
-  isFasterWhisper,
-  normalizeStages,
-  normalizeTranscriberBackend,
-  normalizeTranscriberDevice,
   transcriberBackendOptions,
   transcriberModelOptions,
   type HfXet,
@@ -41,22 +43,8 @@ import {
   type Repetition,
 } from "./autoTimingOptions.js";
 
-function optionalNumberValue(value: string): number | null {
-  const text = value.trim();
-  if (!text) return null;
-  const parsed = Number(text);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
-function optionalPositiveIntValue(value: string): number | null {
-  const text = value.trim();
-  if (!text) return null;
-  const parsed = Number(text);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.max(1, Math.round(parsed)) : null;
-}
-
-function formatCommandPreview(commandText?: string | null): string {
-  if (!commandText) return "Command preview will appear here.";
+function formatCommandPreview(commandText: string | null | undefined, placeholder: string): string {
+  if (!commandText) return placeholder;
   return commandText.replace(/\s--/g, " \\\n  --");
 }
 
@@ -74,26 +62,22 @@ function computeInputState(
   plainLyrics: string,
   syncedLyrics: string,
   stages: string,
+  msgs: { noProject: string; noAudio: string; noLyrics: string; ready: string },
 ): InputState {
   const needsAudio = includesStage(stages, "s") || includesStage(stages, "f") || includesStage(stages, "t");
   const needsLyrics = includesStage(stages, "p");
   const audioReady = !needsAudio || Boolean(project?.audio_path);
   const lyricsReady = !needsLyrics || hasLyricContent(plainLyrics) || hasLyricContent(syncedLyrics);
   if (!project) {
-    return { ready: false, audioReady, lyricsReady, reason: "Create or open a project first." };
+    return { ready: false, audioReady, lyricsReady, reason: msgs.noProject };
   }
   if (!audioReady) {
-    return { ready: false, audioReady, lyricsReady, reason: "This project has no audio file." };
+    return { ready: false, audioReady, lyricsReady, reason: msgs.noAudio };
   }
   if (!lyricsReady) {
-    return {
-      ready: false,
-      audioReady,
-      lyricsReady,
-      reason: "Import or paste real lyric lines before automatic timing. LRC metadata headers are ignored.",
-    };
+    return { ready: false, audioReady, lyricsReady, reason: msgs.noLyrics };
   }
-  return { ready: true, audioReady, lyricsReady, reason: "Ready." };
+  return { ready: true, audioReady, lyricsReady, reason: msgs.ready };
 }
 
 function normalizeProgressStage(stage: string): string {
@@ -103,12 +87,11 @@ function normalizeProgressStage(stage: string): string {
   return normalized;
 }
 
-function progressStageLabel(stage: string): string {
+function progressStageLabel(stage: string, labels: Record<string, string>, fallbacks: { preparing: string; complete: string }): string {
   const normalizedStage = normalizeProgressStage(stage);
-  if (!normalizedStage) return "Preparing";
-  const known = STAGE_SEQUENCE.find((item) => item.key === normalizedStage);
-  if (known) return known.label;
-  if (normalizedStage === "complete") return "Complete";
+  if (!normalizedStage) return fallbacks.preparing;
+  if (labels[normalizedStage]) return labels[normalizedStage];
+  if (normalizedStage === "complete") return fallbacks.complete;
   return normalizedStage
     .split(/[\s_-]+/)
     .filter(Boolean)
@@ -116,20 +99,9 @@ function progressStageLabel(stage: string): string {
     .join(" ");
 }
 
-function formatBytes(value?: number | null): string {
-  if (value == null || !Number.isFinite(value)) return "unknown";
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  let size = Math.max(0, value);
-  let index = 0;
-  while (size >= 1024 && index < units.length - 1) {
-    size /= 1024;
-    index += 1;
-  }
-  return index === 0 ? `${Math.round(size)} ${units[index]}` : `${size.toFixed(2)} ${units[index]}`;
-}
 
-function progressMessage(progress: JobModel["progress"]): string {
-  if (!progress) return "Waiting for the automatic timing task to report progress.";
+function progressMessage(progress: JobModel["progress"], msg: { waiting: string; working: string }): string {
+  if (!progress) return msg.waiting;
   if (progress.bytes_downloaded != null || progress.bytes_total != null) {
     const pieces = [`${formatBytes(progress.bytes_downloaded)} / ${formatBytes(progress.bytes_total)}`];
     if (progress.bytes_per_second != null) pieces.push(`${formatBytes(progress.bytes_per_second)}/s`);
@@ -146,34 +118,33 @@ function progressMessage(progress: JobModel["progress"]): string {
     if (segments != null) parts.push(`${segments} segments`);
     return parts.join(" · ");
   }
-  return progress.message || "Working...";
+  return progress.message || msg.working;
 }
 
-const STAGE_SEQUENCE = [
-  { key: "preflight", label: "Model preflight" },
-  { key: "model_download", label: "Model download" },
-  { key: "splitter", label: "Vocal separation" },
-  { key: "filter", label: "Filtering" },
-  { key: "transcriber", label: "Transcription" },
-  { key: "parser", label: "Lyrics parsing" },
-  { key: "aligner", label: "Alignment" },
-  { key: "writer", label: "Writer" },
-];
+function buildStageSequence(labels: Record<string, string>) {
+  return [
+    { key: "preflight", label: labels.preflight },
+    { key: "model_download", label: labels.modelDownload },
+    { key: "splitter", label: labels.splitter },
+    { key: "filter", label: labels.filter },
+    { key: "transcriber", label: labels.transcriber },
+    { key: "parser", label: labels.parser },
+    { key: "aligner", label: labels.aligner },
+    { key: "writer", label: labels.writer },
+  ];
+}
 
-function stageStatus(stage: string, currentStage: string, jobStatus?: string, completedStages: string[] = []): "done" | "active" | "idle" | "failed" {
+function stageStatus(stage: string, currentStage: string, sequence: { key: string; label: string }[], jobStatus?: string, completedStages: string[] = []): "done" | "active" | "idle" | "failed" {
   const normalizedCurrent = normalizeProgressStage(currentStage);
   const normalizedCompleted = completedStages.map(normalizeProgressStage);
   if (normalizedCompleted.includes(stage)) return "done";
-  const currentIndex = STAGE_SEQUENCE.findIndex((item) => item.key === normalizedCurrent);
-  const index = STAGE_SEQUENCE.findIndex((item) => item.key === stage);
+  const currentIndex = sequence.findIndex((item) => item.key === normalizedCurrent);
+  const index = sequence.findIndex((item) => item.key === stage);
   if (normalizedCurrent === stage) return jobStatus === "failed" ? "failed" : "active";
   if (currentIndex >= 0 && index >= 0 && index < currentIndex) return "done";
   if (jobStatus === "succeeded") return "done";
   return "idle";
 }
-
-const optionNodes = (options: { value: string; label: string; disabled?: boolean }[]) =>
-  options.map((option) => <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>);
 
 export const RollerPanel: React.FC<{
   project: ProjectModel | null;
@@ -183,53 +154,26 @@ export const RollerPanel: React.FC<{
   onProject: (project: ProjectModel, applyToEditor?: boolean) => void;
   onImportText: (text: string) => void;
 }> = ({ project, plainLyrics, syncedLyrics, editorMeta, onProject, onImportText }) => {
-  const [language, setLanguage] = useState<Language>("zh");
-  const [stages, setStages] = useState("s,f,t,p,a,w");
-  const [writerBackend, setWriterBackend] = useState("lrc_ms");
-  const [writerSpacing, setWriterSpacing] = useState("keep");
-  const [alignerRepetition, setAlignerRepetition] = useState<Repetition>("none");
-  const [transcriberModelPath, setTranscriberModelPath] = useState("");
+  const at = useAutoTimingState();
   const [transcriberModelStoreDefault, setTranscriberModelStoreDefault] = useState("");
 
-  const [cleanup, setCleanup] = useState("on-success");
-  const [logLevel, setLogLevel] = useState("INFO");
-  const [parserEncoding, setParserEncoding] = useState("auto");
-
-  const [splitterBackend, setSplitterBackend] = useState("demucs");
-  const [splitterModel, setSplitterModel] = useState("htdemucs");
-  const [splitterDevice, setSplitterDevice] = useState("");
-  const [splitterJobs, setSplitterJobs] = useState("");
-  const [splitterOverlap, setSplitterOverlap] = useState("");
-  const [splitterSegment, setSplitterSegment] = useState("");
-  const [filterChain, setFilterChain] = useState("");
-
-  const [transcriberBackend, setTranscriberBackend] = useState("faster_whisper");
-  const [transcriberDevice, setTranscriberDevice] = useState("cpu");
-  const [transcriberModel, setTranscriberModel] = useState("large-v2");
-  const [transcriberComputeType, setTranscriberComputeType] = useState("int8");
-  const [transcriberBatchSize, setTranscriberBatchSize] = useState("8");
-  const [localOnly, setLocalOnly] = useState<LocalOnly>("off");
-  const [hfXet, setHfXet] = useState<HfXet>("auto");
-  const [hfProxy, setHfProxy] = useState("");
-  const [hfEtagTimeout, setHfEtagTimeout] = useState("");
-  const [hfDownloadTimeout, setHfDownloadTimeout] = useState("");
-  const [hfMaxWorkers, setHfMaxWorkers] = useState("");
-
-  const [alignerBackend, setAlignerBackend] = useState("global_dp_v1");
-  const [alignerMinGap, setAlignerMinGap] = useState("0.5");
-  const [writerByTag, setWriterByTag] = useState("LRC Roller");
-  const [writerKaraokeTag, setWriterKaraokeTag] = useState("kf");
-
+  const [batchMode, setBatchMode] = useState<"single" | "batch">("single");
+  const [batchProjects, setBatchProjects] = useState<ProjectModel[]>([]);
+  const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
   const [job, setJob] = useState<JobModel | null>(null);
   const [preview, setPreview] = useState<RollPreview | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewError, setPreviewError] = useState("");
-  const [message, setMessage] = useState("");
+  const [message, setMessage, , messageFading, messageType] = useMessage();
   const [busy, setBusy] = useState(false);
+  const { lang } = useContext(appContext, ChangBits.lang);
+  const u = lang.ui;
+  const s = lang.settings;
+  const trOpt = (key: string) => lang.optionLabels?.[key] || key;
 
   const inputState = useMemo(
-    () => computeInputState(project, plainLyrics, syncedLyrics, stages),
-    [project, plainLyrics, syncedLyrics, stages],
+    () => computeInputState(project, plainLyrics, syncedLyrics, at.stages, { noProject: u.selectProject, noAudio: u.noAudio, noLyrics: u.noLyrics, ready: u.ready }),
+    [project, plainLyrics, syncedLyrics, at.stages, u.selectProject, u.noAudio, u.noLyrics, u.ready],
   );
 
   const loadDefaults = async () => {
@@ -241,40 +185,7 @@ export const RollerPanel: React.FC<{
       if (runtime?.model_store) {
         setTranscriberModelStoreDefault(runtime.model_store);
       }
-      const nextLanguage = settings.auto_timing_default_language || "zh";
-      const nextBackend = normalizeTranscriberBackend(nextLanguage, settings.auto_timing_transcriber_backend || "faster_whisper");
-      const nextModel = settings.auto_timing_transcriber_model_name || defaultModelFor(nextLanguage, nextBackend);
-      setLanguage(nextLanguage);
-      setStages(normalizeStages(settings.auto_timing_default_stages || "s,f,t,p,a,w"));
-      setWriterBackend(settings.auto_timing_default_writer_backend || "lrc_ms");
-      setWriterSpacing(settings.auto_timing_default_writer_spacing || "keep");
-      setCleanup(settings.auto_timing_default_cleanup || "on-success");
-      setLogLevel(settings.auto_timing_default_log_level || "INFO");
-      setAlignerRepetition(settings.auto_timing_aligner_repetition || "none");
-      setSplitterBackend(settings.auto_timing_splitter_backend || "demucs");
-      setSplitterModel(settings.auto_timing_splitter_demucs_model || "htdemucs");
-      setSplitterDevice(settings.auto_timing_splitter_demucs_device || "");
-      setSplitterJobs(settings.auto_timing_splitter_demucs_jobs == null ? "" : String(settings.auto_timing_splitter_demucs_jobs));
-      setSplitterOverlap(settings.auto_timing_splitter_demucs_overlap == null ? "" : String(settings.auto_timing_splitter_demucs_overlap));
-      setSplitterSegment(settings.auto_timing_splitter_demucs_segment == null ? "" : String(settings.auto_timing_splitter_demucs_segment));
-      setFilterChain(settings.auto_timing_filter_chain || "");
-      setTranscriberBackend(nextBackend);
-      setTranscriberDevice(normalizeTranscriberDevice(settings.auto_timing_transcriber_device || "cpu"));
-      setTranscriberModel(nextModel);
-      setTranscriberModelPath(settings.auto_timing_model_store || "");
-      setTranscriberComputeType(settings.auto_timing_transcriber_compute_type || "int8");
-      setTranscriberBatchSize(settings.auto_timing_transcriber_batch_size == null ? "8" : String(settings.auto_timing_transcriber_batch_size));
-      setLocalOnly(settings.auto_timing_local_files_only_default ? "on" : "off");
-      setHfXet(settings.auto_timing_hf_xet || "auto");
-      setHfProxy(settings.auto_timing_hf_proxy || "");
-      setHfEtagTimeout(settings.auto_timing_hf_etag_timeout == null ? "" : String(settings.auto_timing_hf_etag_timeout));
-      setHfDownloadTimeout(settings.auto_timing_hf_download_timeout == null ? "" : String(settings.auto_timing_hf_download_timeout));
-      setHfMaxWorkers(settings.auto_timing_hf_max_workers == null ? "" : String(settings.auto_timing_hf_max_workers));
-      setParserEncoding(settings.auto_timing_parser_lyrics_encoding || "auto");
-      setAlignerBackend(settings.auto_timing_aligner_backend || "global_dp_v1");
-      setAlignerMinGap(settings.auto_timing_aligner_min_gap == null ? "0.5" : String(settings.auto_timing_aligner_min_gap));
-      setWriterByTag(settings.auto_timing_writer_by_tag === "py-roller" ? "LRC Roller" : (settings.auto_timing_writer_by_tag || "LRC Roller"));
-      setWriterKaraokeTag(settings.auto_timing_writer_ass_karaoke_tag_type || "kf");
+      at.loadFromSettings(settings);
     } catch {
       // Settings are optional for initial rendering. Keep built-in defaults.
     }
@@ -288,77 +199,6 @@ export const RollerPanel: React.FC<{
   }, []);
 
   useEffect(() => {
-    const normalized = normalizeTranscriberBackend(language, transcriberBackend);
-    if (normalized !== transcriberBackend) {
-      setTranscriberBackend(normalized);
-      setTranscriberModel(defaultModelFor(language, normalized));
-      return;
-    }
-    const allowedModels = transcriberModelOptions(language, normalized).map((option) => option.value);
-    if (!allowedModels.includes(transcriberModel)) {
-      setTranscriberModel(defaultModelFor(language, normalized));
-    }
-  }, [language, transcriberBackend, transcriberModel]);
-
-  const includesSplitter = includesStage(stages, "s");
-  const includesFilter = includesStage(stages, "f");
-  const includesTranscriber = includesStage(stages, "t");
-  const includesParser = includesStage(stages, "p");
-  const includesAligner = includesStage(stages, "a");
-  const includesWriter = includesStage(stages, "w");
-  const transcriberIsFasterWhisper = isFasterWhisper(transcriberBackend);
-  const writerIsAss = writerBackend === "ass_karaoke";
-
-  const rollPayload = useMemo(() => {
-    const payload: Record<string, unknown> = {
-      language,
-      stages,
-      cleanup,
-      log_level: logLevel,
-    };
-    if (includesWriter) {
-      payload.writer_backend = writerBackend;
-      payload.writer_spacing = writerSpacing;
-      payload.writer_by_tag = writerByTag.trim() || null;
-      payload.writer_ass_karaoke_tag_type = writerIsAss ? writerKaraokeTag : null;
-    }
-    if (includesSplitter) {
-      payload.splitter_backend = splitterBackend || null;
-      payload.splitter_demucs_model = splitterModel || null;
-      payload.splitter_demucs_device = splitterDevice || null;
-      payload.splitter_demucs_jobs = optionalPositiveIntValue(splitterJobs);
-      payload.splitter_demucs_overlap = optionalNumberValue(splitterOverlap);
-      payload.splitter_demucs_segment = optionalNumberValue(splitterSegment);
-    }
-    if (includesFilter) {
-      payload.filter_chain = filterChain || null;
-    }
-    if (includesTranscriber) {
-      payload.transcriber_backend = transcriberBackend || null;
-      payload.transcriber_device = transcriberDevice || null;
-      payload.transcriber_model_name = transcriberModel || null;
-      payload.transcriber_model_path = transcriberModelPath.trim() || null;
-      payload.transcriber_local_files_only = localOnly === "on";
-      payload.transcriber_hf_xet = hfXet;
-      payload.transcriber_hf_proxy = hfProxy.trim() || null;
-      payload.transcriber_hf_etag_timeout = optionalPositiveIntValue(hfEtagTimeout);
-      payload.transcriber_hf_download_timeout = optionalPositiveIntValue(hfDownloadTimeout);
-      payload.transcriber_hf_max_workers = optionalPositiveIntValue(hfMaxWorkers);
-      payload.transcriber_compute_type = transcriberIsFasterWhisper ? transcriberComputeType : null;
-      payload.transcriber_batch_size = transcriberIsFasterWhisper ? optionalPositiveIntValue(transcriberBatchSize) : null;
-    }
-    if (includesParser) {
-      payload.parser_lyrics_encoding = parserEncoding || "auto";
-    }
-    if (includesAligner) {
-      payload.aligner_backend = alignerBackend || null;
-      payload.aligner_min_gap = optionalNumberValue(alignerMinGap);
-      payload.aligner_repetition = alignerRepetition;
-    }
-    return payload;
-  }, [alignerBackend, alignerMinGap, alignerRepetition, cleanup, filterChain, hfDownloadTimeout, hfEtagTimeout, hfMaxWorkers, hfProxy, hfXet, includesAligner, includesFilter, includesParser, includesSplitter, includesTranscriber, includesWriter, language, localOnly, logLevel, parserEncoding, splitterBackend, splitterDevice, splitterJobs, splitterModel, splitterOverlap, splitterSegment, stages, transcriberBackend, transcriberBatchSize, transcriberComputeType, transcriberDevice, transcriberIsFasterWhisper, transcriberModel, transcriberModelPath, writerBackend, writerByTag, writerIsAss, writerKaraokeTag, writerSpacing]);
-
-  useEffect(() => {
     if (!project) {
       setPreview(null);
       setPreviewError("");
@@ -370,7 +210,7 @@ export const RollerPanel: React.FC<{
     setPreviewError("");
     const timer = window.setTimeout(async () => {
       try {
-        const next = await api.rollPreview(project.project_id, rollPayload);
+        const next = await api.rollPreview(project.project_id, at.buildRollPayload());
         if (!canceled) setPreview(next);
       } catch (error) {
         if (!canceled) {
@@ -385,7 +225,7 @@ export const RollerPanel: React.FC<{
       canceled = true;
       window.clearTimeout(timer);
     };
-  }, [project?.project_id, rollPayload]);
+  }, [project?.project_id, at.buildRollPayload]);
 
   useEffect(() => {
     if (!job || !["queued", "running"].includes(job.status)) return;
@@ -399,12 +239,12 @@ export const RollerPanel: React.FC<{
             const refreshed = await api.getProject(project.project_id);
             onProject(refreshed, false);
           }
-          setMessage("Automatic timing finished and imported the generated LRC.");
+          toastPubSub.pub({ type: "success", text: s.autoTiming.finished });
         }
-        if (updated.status === "failed") setMessage(updated.error || "Automatic timing failed.");
-        if (updated.status === "canceled") setMessage("Automatic timing was canceled.");
+        if (updated.status === "failed") toastPubSub.pub({ type: "error", text: updated.error || s.autoTiming.failed });
+        if (updated.status === "canceled") toastPubSub.pub({ type: "warning", text: s.autoTiming.canceled });
       } catch (error) {
-        setMessage((error as Error).message);
+        toastPubSub.pub({ type: "error", text: (error as Error).message });
       }
     }, 1500);
     return () => window.clearInterval(timer);
@@ -413,7 +253,7 @@ export const RollerPanel: React.FC<{
   const saveAndPreview = async () => {
     if (!project) throw new Error("Create or open a project first.");
     await api.saveEditor(project.project_id, { plain_lyrics: plainLyrics, synced_lyrics: syncedLyrics, metadata: editorMeta });
-    const next = await api.rollPreview(project.project_id, rollPayload);
+    const next = await api.rollPreview(project.project_id, at.buildRollPayload());
     setPreview(next);
     setPreviewError("");
     return next;
@@ -421,29 +261,29 @@ export const RollerPanel: React.FC<{
 
   const start = async () => {
     if (!project) {
-      setMessage("Create or open a project first.");
+      setMessage(s.autoTiming.selectProject, "warning", 4000);
       return;
     }
     if (!inputState.ready) {
-      setMessage(inputState.reason);
+      setMessage(inputState.reason, "warning", 4000);
       return;
     }
     setBusy(true);
-    setMessage("Starting automatic timing...");
+    setMessage(s.autoTiming.starting, "info", 10000);
     try {
       await saveAndPreview();
-      const created = await api.roll(project.project_id, rollPayload);
+      const created = await api.roll(project.project_id, at.buildRollPayload());
       setJob(created);
-      setMessage(`Started ${created.job_id}`);
+      toastPubSub.pub({ type: "success", text: s.autoTiming.started.replace("{id}", created.job_id) });
     } catch (error) {
-      setMessage((error as Error).message);
+      toastPubSub.pub({ type: "error", text: (error as Error).message });
     } finally {
       setBusy(false);
     }
   };
 
   const retry = async () => {
-    setMessage("Retrying with the current settings...");
+    setMessage(s.autoTiming.retrying, "info", 10000);
     await start();
   };
 
@@ -453,51 +293,101 @@ export const RollerPanel: React.FC<{
     try {
       const canceled = await api.cancelJob(job.job_id);
       setJob(canceled);
-      setMessage("Cancel requested.");
+      toastPubSub.pub({ type: "success", text: s.autoTiming.cancelRequested });
     } catch (error) {
-      setMessage((error as Error).message);
+      toastPubSub.pub({ type: "error", text: (error as Error).message });
     } finally {
       setBusy(false);
     }
   };
 
+  // -- batch ------------------------------------------------------------
+
+  const loadBatchProjects = async () => {
+    try {
+      const list = await api.listProjects();
+      setBatchProjects(list);
+    } catch {
+      setBatchProjects([]);
+    }
+  };
+
+  const toggleBatchProject = (id: string) => {
+    setSelectedBatchIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllBatchProjects = () => {
+    setSelectedBatchIds(new Set(batchProjects.map((p) => p.project_id)));
+  };
+
+  const deselectAllBatchProjects = () => {
+    setSelectedBatchIds(new Set());
+  };
+
+  const startBatch = async () => {
+    if (selectedBatchIds.size === 0) {
+      setMessage(s.autoTiming.selectOneProject, "warning", 4000);
+      return;
+    }
+    setBusy(true);
+    setMessage(s.autoTiming.batchStarting, "info", 10000);
+    try {
+      const payload = { ...at.buildRollPayload(), project_ids: [...selectedBatchIds], continue_on_error: true };
+      const created = await api.batchRoll(payload);
+      setJob(created);
+      toastPubSub.pub({ type: "success", text: s.autoTiming.batchStarted.replace("{id}", created.job_id).replace("{count}", String(selectedBatchIds.size)) });
+    } catch (error) {
+      toastPubSub.pub({ type: "error", text: (error as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // -- rendering --------------------------------------------------------
+
   const copyCommand = async () => {
     const text = preview?.command_text || job?.command.join(" ") || "";
     if (!text) return;
     await navigator.clipboard?.writeText(text);
-    setMessage("Command copied.");
+    toastPubSub.pub({ type: "success", text: s.autoTiming.commandCopied });
   };
 
   const copyLog = async () => {
     if (!job) return;
     await navigator.clipboard?.writeText(job.logs.join("\n") || job.command.join(" "));
-    setMessage("Task log copied.");
+    toastPubSub.pub({ type: "success", text: s.autoTiming.logCopied });
   };
 
   const openJobFolder = async () => {
     if (!job) return;
     try {
       const result = await api.openJobFolder(job.job_id);
-      setMessage(`Opened ${result.path}`);
+      toastPubSub.pub({ type: "success", text: s.autoTiming.openedFolder.replace("{path}", result.path) });
     } catch (error) {
-      setMessage((error as Error).message);
+      toastPubSub.pub({ type: "error", text: (error as Error).message });
     }
   };
 
   const browseModelPath = async () => {
     try {
-      const result = await api.selectLocalPath({ mode: "directory", title: "Select transcriber model store", initial_path: transcriberModelPath || transcriberModelStoreDefault || null });
+      const result = await api.selectLocalPath({ mode: "directory", title: "Select transcriber model store", initial_path: at.transcriberModelPath || transcriberModelStoreDefault || null });
       if (!result.canceled && result.path) {
-        setTranscriberModelPath(result.path);
-        setMessage("Transcriber model store selected.");
+        at.setTranscriberModelPath(result.path);
+        toastPubSub.pub({ type: "success", text: s.autoTiming.modelStoreSelected });
       }
     } catch (error) {
-      setMessage((error as Error).message);
+      toastPubSub.pub({ type: "error", text: (error as Error).message });
     }
   };
 
 
-  const commandPreviewText = formatCommandPreview(preview?.command_text);
+  const stageLabels = { preflight: u.modelPreflight, modelDownload: u.modelDownload, splitter: u.splitter, filter: u.filtering, transcriber: u.transcription, parser: u.lyricsParsing, aligner: u.alignment, writer: u.writer };
+  const stageSequence = useMemo(() => buildStageSequence(stageLabels), [stageLabels]);
+  const commandPreviewText = formatCommandPreview(preview?.command_text, u.commandPreviewPlaceholder);
 
   const running = !!job && ["queued", "running"].includes(job.status);
   const startDisabled = busy || running || !inputState.ready;
@@ -509,126 +399,160 @@ export const RollerPanel: React.FC<{
 
   return (
     <section className="roller-card">
-      <h2>Auto Timing</h2>
-      <p className="roller-muted">Generate synced lyrics from this song.</p>
+      <h2>{u.autoTiming}</h2>
 
-      <div className="roller-section-title">Input status</div>
-      <div className="roller-input-status">
-        <span className={inputState.audioReady ? "status-ok" : "status-missing"}>Audio: {includesTranscriber || includesSplitter || includesFilter ? (inputState.audioReady ? "ready" : "missing") : "not needed"}</span>
-        <span className={inputState.lyricsReady ? "status-ok" : "status-missing"}>Lyrics: {includesParser ? (inputState.lyricsReady ? "ready" : "missing") : "not needed"}</span>
+      <div className="roller-card-tabs">
+        <button className={batchMode === "single" ? "active" : ""} type="button" onClick={() => setBatchMode("single")}>{u.single}</button>
+        <button className={batchMode === "batch" ? "active" : ""} type="button" onClick={() => { setBatchMode("batch"); void loadBatchProjects(); }}>{u.batch}</button>
+        <span className="roller-card-tabs-slider" data-active={batchMode} />
       </div>
-      {!inputState.ready && <p className="roller-warning">{inputState.reason}</p>}
 
-      <div className="roller-section-title">Basic</div>
+      {batchMode === "batch" && (
+        <>
+          <div className="roller-section-title">{u.selectProjects}</div>
+          {batchProjects.length === 0 && <p className="roller-muted">No projects found. Import audio first.</p>}
+          {batchProjects.length > 0 && (
+            <>
+              <div className="roller-actions compact">
+                <button type="button" onClick={selectAllBatchProjects}>{u.selectAll}</button>
+                <button type="button" onClick={deselectAllBatchProjects}>{u.deselectAll}</button>
+              </div>
+              <div className="roller-list" style={{ maxHeight: 160, overflow: "auto", marginTop: 6 }}>
+                {batchProjects.map((p) => (
+                  <label key={p.project_id} className="roller-checkbox" style={{ padding: "5px 8px", minHeight: "auto", fontSize: "0.78rem" }}>
+                    <input type="checkbox" checked={selectedBatchIds.has(p.project_id)} onChange={() => toggleBatchProject(p.project_id)} style={{ marginRight: 8 }} />
+                    {p.audio_name || p.project_id}
+                  </label>
+                ))}
+              </div>
+              <p className="roller-muted">{u.selected.replace("{n}", String(selectedBatchIds.size))}</p>
+            </>
+          )}
+        </>
+      )}
+
+      {batchMode === "single" && (
+        <>
+          <div className="roller-section-title">{u.inputStatus}</div>
+          <div className="roller-input-status">
+            <span className={inputState.audioReady ? "status-ok" : "status-missing"}>{u.audio}: {at.includesTranscriber || at.includesSplitter || at.includesFilter ? (inputState.audioReady ? u.ready : u.missing) : u.notNeeded}</span>
+            <span className={inputState.lyricsReady ? "status-ok" : "status-missing"}>{u.lyrics}: {at.includesParser ? (inputState.lyricsReady ? u.ready : u.missing) : u.notNeeded}</span>
+          </div>
+          {!inputState.ready && <p className="roller-warning">{inputState.reason}</p>}
+        </>
+      )}
+
+      <div className="roller-section-title">{u.parameters}</div>
       <div className="roller-form two-col">
-        <label>Lyrics language
-          <select value={language} onChange={(ev) => setLanguage(ev.target.value as Language)}>
-            {optionNodes(LANGUAGE_OPTIONS)}
+        <label>{s.autoTiming.lyricsLanguage}
+          <select value={at.language} onChange={(ev) => at.setLanguage(ev.target.value as Language)}>
+            {optionNodes(LANGUAGE_OPTIONS, trOpt)}
           </select>
         </label>
-        <label>Processing preset
-          <select value={stages} onChange={(ev) => setStages(ev.target.value)}>
-            {optionNodes(STAGE_OPTIONS)}
+        <label>{s.autoTiming.processingPreset}
+          <select value={at.stages} onChange={(ev) => at.setStages(ev.target.value)}>
+            {optionNodes(STAGE_OPTIONS, trOpt)}
           </select>
         </label>
-        <label>Output format
-          <select value={writerBackend} onChange={(ev) => setWriterBackend(ev.target.value)}>
-            {optionNodes(WRITER_OPTIONS)}
+        <label>{s.autoTiming.outputFormat}
+          <select value={at.writerBackend} onChange={(ev) => at.setWriterBackend(ev.target.value)}>
+            {optionNodes(WRITER_OPTIONS, trOpt)}
           </select>
         </label>
-        <label>Repetition handling
-          <select value={alignerRepetition} onChange={(ev) => setAlignerRepetition(ev.target.value as Repetition)} disabled={!includesAligner}>
-            {optionNodes(REPETITION_OPTIONS)}
+        <label>{s.autoTiming.repetitionHandling}
+          <select value={at.alignerRepetition} onChange={(ev) => at.setAlignerRepetition(ev.target.value as Repetition)} disabled={!at.includesAligner}>
+            {optionNodes(REPETITION_OPTIONS, trOpt)}
           </select>
         </label>
-        <label className="field-with-browse">Model Store
-          <span className="browse-row"><input placeholder={transcriberModelStoreDefault || "lrc-roller model store"} value={transcriberModelPath} onChange={(ev) => setTranscriberModelPath(ev.target.value)} disabled={!includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!includesTranscriber}>Browse</button></span>
+        <label className="field-with-browse">{s.autoTiming.modelStoreLabel}
+          <span className="browse-row"><input placeholder={transcriberModelStoreDefault || "lrc-roller model store"} value={at.transcriberModelPath} onChange={(ev) => at.setTranscriberModelPath(ev.target.value)} disabled={!at.includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!at.includesTranscriber}>{u.browse}</button></span>
         </label>
-        <label>Spacing
-          <select value={writerSpacing} onChange={(ev) => setWriterSpacing(ev.target.value)} disabled={!includesWriter}>
-            {optionNodes(SPACING_OPTIONS)}
+        <label>{s.autoTiming.spacing}
+          <select value={at.writerSpacing} onChange={(ev) => at.setWriterSpacing(ev.target.value)} disabled={!at.includesWriter}>
+            {optionNodes(SPACING_OPTIONS, trOpt)}
           </select>
         </label>
       </div>
       <details>
-        <summary>Advanced Parameters</summary>
-        <div className="roller-section-title">Pipeline runtime</div>
+        <summary>{u.advanced}</summary>
+        <div className="roller-section-title">{u.pipelineRuntime}</div>
         <div className="roller-form two-col">
-          <label>Cleanup policy<select value={cleanup} onChange={(ev) => setCleanup(ev.target.value)}>{optionNodes(CLEANUP_OPTIONS)}</select></label>
-          <label>Log level<select value={logLevel} onChange={(ev) => setLogLevel(ev.target.value)}>{optionNodes(LOG_LEVEL_OPTIONS)}</select></label>
+          <label>{s.autoTiming.cleanupPolicy}<select value={at.cleanup} onChange={(ev) => at.setCleanup(ev.target.value)}>{optionNodes(CLEANUP_OPTIONS, trOpt)}</select></label>
+          <label>{s.autoTiming.logLevel}<select value={at.logLevel} onChange={(ev) => at.setLogLevel(ev.target.value)}>{optionNodes(LOG_LEVEL_OPTIONS, trOpt)}</select></label>
         </div>
 
-        {includesTranscriber && (
+        {at.includesTranscriber && (
           <>
-            <div className="roller-section-title">Model download</div>
+            <div className="roller-section-title">{u.modelDownload}</div>
             <div className="roller-form two-col">
-              <label>HF XET / CAS<select value={hfXet} onChange={(ev) => setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS)}</select></label>
-              <label>Proxy URL<input placeholder="http://127.0.0.1:7890" value={hfProxy} onChange={(ev) => setHfProxy(ev.target.value)} /></label>
-              <label>Metadata timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfEtagTimeout} onChange={(ev) => setHfEtagTimeout(ev.target.value)} /></label>
-              <label>File download timeout, seconds<input inputMode="numeric" placeholder="library built-in" value={hfDownloadTimeout} onChange={(ev) => setHfDownloadTimeout(ev.target.value)} /></label>
-              <label>Max download workers<input inputMode="numeric" placeholder="library built-in" value={hfMaxWorkers} onChange={(ev) => setHfMaxWorkers(ev.target.value)} /></label>
-              <label>Local cache mode<select value={localOnly} onChange={(ev) => setLocalOnly(ev.target.value as LocalOnly)}>{optionNodes(LOCAL_CACHE_OPTIONS)}</select></label>
+              <label>{s.autoTiming.hfXet}<select value={at.hfXet} onChange={(ev) => at.setHfXet(ev.target.value as HfXet)}>{optionNodes(HF_XET_OPTIONS, trOpt)}</select></label>
+              <label>{s.autoTiming.proxyUrl}<input placeholder="http://127.0.0.1:7890" value={at.hfProxy} onChange={(ev) => at.setHfProxy(ev.target.value)} /></label>
+              <label>{s.autoTiming.metadataTimeout}<input inputMode="numeric" placeholder={trOpt("Library built-in")} value={at.hfEtagTimeout} onChange={(ev) => at.setHfEtagTimeout(ev.target.value)} /></label>
+              <label>{s.autoTiming.fileDownloadTimeout}<input inputMode="numeric" placeholder={trOpt("Library built-in")} value={at.hfDownloadTimeout} onChange={(ev) => at.setHfDownloadTimeout(ev.target.value)} /></label>
+              <label>{s.autoTiming.maxDownloadWorkers}<input inputMode="numeric" placeholder={trOpt("Library built-in")} value={at.hfMaxWorkers} onChange={(ev) => at.setHfMaxWorkers(ev.target.value)} /></label>
+              <label>{s.autoTiming.localCacheMode}<select value={at.localOnly} onChange={(ev) => at.setLocalOnly(ev.target.value as LocalOnly)}>{optionNodes(LOCAL_CACHE_OPTIONS, trOpt)}</select></label>
             </div>
           </>
         )}
 
-        {includesSplitter && (
+        {at.includesSplitter && (
           <>
-            <div className="roller-section-title">Splitter</div>
+            <div className="roller-section-title">{u.splitter}</div>
             <div className="roller-form two-col">
-              <label>Backend<select value={splitterBackend} onChange={(ev) => setSplitterBackend(ev.target.value)}>{optionNodes(SPLITTER_BACKEND_OPTIONS)}</select></label>
-              <label>Demucs model<select value={splitterModel} onChange={(ev) => setSplitterModel(ev.target.value)}>{optionNodes(DEMUCS_MODEL_OPTIONS)}</select></label>
-              <label>Device<select value={splitterDevice} onChange={(ev) => setSplitterDevice(ev.target.value)}>{optionNodes(DEMUCS_DEVICE_OPTIONS)}</select></label>
-              <label>Jobs<input inputMode="numeric" placeholder="Let Demucs choose" value={splitterJobs} onChange={(ev) => setSplitterJobs(ev.target.value)} /></label>
-              <label>Overlap<input inputMode="decimal" placeholder="Demucs built-in" value={splitterOverlap} onChange={(ev) => setSplitterOverlap(ev.target.value)} /></label>
-              <label>Segment seconds<input inputMode="decimal" placeholder="Demucs built-in" value={splitterSegment} onChange={(ev) => setSplitterSegment(ev.target.value)} /></label>
+              <label>{s.autoTiming.backend}<select value={at.splitterBackend} onChange={(ev) => at.setSplitterBackend(ev.target.value)}>{optionNodes(SPLITTER_BACKEND_OPTIONS, trOpt)}</select></label>
+              <label>{s.autoTiming.demucsModel}<select value={at.splitterModel} onChange={(ev) => at.setSplitterModel(ev.target.value)}>{optionNodes(DEMUCS_MODEL_OPTIONS, trOpt)}</select></label>
+              <label>{s.autoTiming.device}<select value={at.splitterDevice} onChange={(ev) => at.setSplitterDevice(ev.target.value)}>{optionNodes(DEMUCS_DEVICE_OPTIONS, trOpt)}</select></label>
+              <label>{s.autoTiming.jobs}<input inputMode="numeric" placeholder={trOpt("Auto-detect")} value={at.splitterJobs} onChange={(ev) => at.setSplitterJobs(ev.target.value)} /></label>
+              <label>{s.autoTiming.overlap}<input inputMode="decimal" placeholder={trOpt("Default")} value={at.splitterOverlap} onChange={(ev) => at.setSplitterOverlap(ev.target.value)} /></label>
+              <label>{s.autoTiming.segment}<input inputMode="decimal" placeholder={trOpt("Default")} value={at.splitterSegment} onChange={(ev) => at.setSplitterSegment(ev.target.value)} /></label>
             </div>
           </>
         )}
 
-        {includesFilter && (
+        {at.includesFilter && (
           <>
-            <div className="roller-section-title">Filter</div>
-            <div className="roller-form"><label>Filter chain<select value={filterChain} onChange={(ev) => setFilterChain(ev.target.value)}>{optionNodes(FILTER_CHAIN_OPTIONS)}</select></label></div>
+            <div className="roller-section-title">{u.filter}</div>
+            <div className="roller-form"><label>{u.filterChain}<select value={at.filterChain} onChange={(ev) => at.setFilterChain(ev.target.value)}>{optionNodes(FILTER_CHAIN_OPTIONS, trOpt)}</select></label></div>
           </>
         )}
 
-        {includesTranscriber && (
+        {at.includesTranscriber && (
           <>
-            <div className="roller-section-title">Transcriber</div>
+            <div className="roller-section-title">{u.transcriber}</div>
             <div className="roller-form two-col">
-              <label>Backend<select value={transcriberBackend} onChange={(ev) => setTranscriberBackend(ev.target.value)}>{optionNodes(transcriberBackendOptions(language))}</select></label>
-              <label>Device<select value={transcriberDevice} onChange={(ev) => setTranscriberDevice(ev.target.value)}>{optionNodes(DEVICE_OPTIONS)}</select></label>
-              <label>Model name<select value={transcriberModel} onChange={(ev) => setTranscriberModel(ev.target.value)}>{optionNodes(transcriberModelOptions(language, transcriberBackend))}</select></label>
-              <label>Compute type<select value={transcriberComputeType} onChange={(ev) => setTranscriberComputeType(ev.target.value)} disabled={!transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS)}</select></label>
-              <label>Batch size<input inputMode="numeric" placeholder="8" value={transcriberBatchSize} onChange={(ev) => setTranscriberBatchSize(ev.target.value)} disabled={!transcriberIsFasterWhisper} /></label>
+              <label>{s.autoTiming.backend}<select value={at.transcriberBackend} onChange={(ev) => at.setTranscriberBackend(ev.target.value)}>{optionNodes(transcriberBackendOptions(at.language), trOpt)}</select></label>
+              <label>{s.autoTiming.device}<select value={at.transcriberDevice} onChange={(ev) => at.setTranscriberDevice(ev.target.value)}>{optionNodes(DEVICE_OPTIONS, trOpt)}</select></label>
+              <label>{s.autoTiming.modelName}<select value={at.transcriberModel} onChange={(ev) => at.setTranscriberModel(ev.target.value)}>{optionNodes(transcriberModelOptions(at.language, at.transcriberBackend), trOpt)}</select></label>
+              <label>{s.autoTiming.computeType}<select value={at.transcriberComputeType} onChange={(ev) => at.setTranscriberComputeType(ev.target.value)} disabled={!at.transcriberIsFasterWhisper}>{optionNodes(COMPUTE_TYPE_OPTIONS, trOpt)}</select></label>
+              <label>{s.autoTiming.batchSize}<input inputMode="numeric" placeholder="8" value={at.transcriberBatchSize} onChange={(ev) => at.setTranscriberBatchSize(ev.target.value)} disabled={!at.transcriberIsFasterWhisper} /></label>
+              <label>{s.autoTiming.vadFilter}<select value={at.vadFilter} onChange={(ev) => at.setVadFilter(ev.target.value)}>{optionNodes(VAD_FILTER_OPTIONS, trOpt)}</select></label>
             </div>
           </>
         )}
 
-        {includesParser && (
+        {at.includesParser && (
           <>
-            <div className="roller-section-title">Parser</div>
-            <div className="roller-form"><label>Lyrics encoding<select value={parserEncoding} onChange={(ev) => setParserEncoding(ev.target.value)}>{optionNodes(PARSER_ENCODING_OPTIONS)}</select></label></div>
+            <div className="roller-section-title">{u.parser}</div>
+            <div className="roller-form"><label>{s.autoTiming.lyricsEncoding}<select value={at.parserEncoding} onChange={(ev) => at.setParserEncoding(ev.target.value)}>{optionNodes(PARSER_ENCODING_OPTIONS, trOpt)}</select></label></div>
           </>
         )}
 
-        {includesAligner && (
+        {at.includesAligner && (
           <>
-            <div className="roller-section-title">Aligner</div>
+            <div className="roller-section-title">{u.aligner}</div>
             <div className="roller-form two-col">
-              <label>Backend<select value={alignerBackend} onChange={(ev) => setAlignerBackend(ev.target.value)}>{optionNodes(ALIGNER_BACKEND_OPTIONS)}</select></label>
-              <label>Min gap seconds<input inputMode="decimal" placeholder="0.5" value={alignerMinGap} onChange={(ev) => setAlignerMinGap(ev.target.value)} /></label>
+              <label>{s.autoTiming.backend}<select value={at.alignerBackend} onChange={(ev) => at.setAlignerBackend(ev.target.value)}>{optionNodes(ALIGNER_BACKEND_OPTIONS, trOpt)}</select></label>
+              <label>{s.autoTiming.minGap}<input inputMode="decimal" placeholder="0.5" value={at.alignerMinGap} onChange={(ev) => at.setAlignerMinGap(ev.target.value)} /></label>
             </div>
           </>
         )}
 
-        {includesWriter && (
+        {at.includesWriter && (
           <>
-            <div className="roller-section-title">Writer</div>
+            <div className="roller-section-title">{u.writer}</div>
             <div className="roller-form two-col">
-              <label>BY tag<input placeholder="LRC Roller" value={writerByTag} onChange={(ev) => setWriterByTag(ev.target.value)} /></label>
-              <label>ASS karaoke tag<select value={writerKaraokeTag} onChange={(ev) => setWriterKaraokeTag(ev.target.value)} disabled={!writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS)}</select></label>
+              <label>{s.autoTiming.byTag}<input placeholder="LRC Roller" value={at.writerByTag} onChange={(ev) => at.setWriterByTag(ev.target.value)} /></label>
+              <label>{s.autoTiming.assKaraokeTag}<select value={at.writerKaraokeTag} onChange={(ev) => at.setWriterKaraokeTag(ev.target.value)} disabled={!at.writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS, trOpt)}</select></label>
             </div>
           </>
         )}
@@ -637,19 +561,19 @@ export const RollerPanel: React.FC<{
       {showProgress && (
         <section className="roller-progress-card" aria-live="polite">
           <div className="roller-progress-head">
-            <b>{progressStageLabel(progress?.stage || (job?.status === "queued" ? "queued" : "running"))}</b>
+            <b>{progressStageLabel(progress?.stage || (job?.status === "queued" ? "queued" : "running"), stageLabels, { preparing: u.preparing, complete: u.complete })}</b>
             <span>{typeof progressPercent === "number" ? `${Math.round(progressPercent * 100)}%` : job?.status}</span>
           </div>
           <div className={progressWidth ? "roller-progress-bar" : "roller-progress-bar indeterminate"}>
             <span style={progressWidth ? { width: progressWidth } : undefined} />
           </div>
           <div className="roller-progress-meta">
-            <span>{progressMessage(progress)}</span>
+            <span>{progressMessage(progress, { waiting: u.progressWaiting, working: u.progressWorking })}</span>
             {progress && progress.total > 0 && <em>{progress.completed}/{progress.total} {progress.unit}</em>}
           </div>
           {progress?.cache_dir && <p className="roller-muted progress-cache">Cache: {progress.cache_dir}</p>}
           <ol className="roller-stage-list">
-            {STAGE_SEQUENCE.map((item) => (
+            {stageSequence.map((item) => (
               <li key={item.key} className={`stage-${stageStatus(item.key, progress?.stage || "", job?.status, job?.completed_stages || [])}`}>
                 <span />{item.label}
               </li>
@@ -658,32 +582,42 @@ export const RollerPanel: React.FC<{
         </section>
       )}
 
-      <div className="roller-section-title">Run</div>
+      <div className="roller-section-title">{u.run}</div>
       <div className="roller-actions roller-run-actions">
-        <button type="button" className="roller-action-start" disabled={startDisabled} onClick={() => void start()}>Start</button>
-        <button type="button" className="roller-action-cancel" disabled={!running || busy} onClick={() => void cancel()}>Cancel</button>
-        <button type="button" className="roller-action-retry" disabled={busy || running || !project} onClick={() => void retry()}>Retry</button>
+        {batchMode === "single" ? (
+          <>
+            <button type="button" className="roller-action-start" disabled={startDisabled} onClick={() => void start()}>{u.start}</button>
+            <button type="button" className="roller-action-cancel" disabled={!running || busy} onClick={() => void cancel()}>{u.cancel}</button>
+            <button type="button" className="roller-action-retry" disabled={busy || running || !project} onClick={() => void retry()}>{u.retry}</button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="roller-action-start" disabled={busy || running || selectedBatchIds.size === 0} onClick={() => void startBatch()}>{u.startBatch}</button>
+            <button type="button" className="roller-action-cancel" disabled={!running || busy} onClick={() => void cancel()}>{u.cancel}</button>
+            <button type="button" className="roller-action-retry" disabled={busy || running || selectedBatchIds.size === 0} onClick={() => void startBatch()}>{u.retry}</button>
+          </>
+        )}
       </div>
-      {startDisabled && !running && <p className="roller-warning">{inputState.reason}</p>}
-      {message && <p className="roller-message">{message}</p>}
+      {batchMode === "single" && startDisabled && !running && <p className="roller-warning">{inputState.reason}</p>}
+      {message && <p className={`roller-message ${messageType}${messageFading ? " fading" : ""}`}>{message}</p>}
 
-      <details>
-        <summary>Command Preview</summary>
+      {batchMode === "single" && <details>
+        <summary>{u.commandPreview}</summary>
         <div className="roller-actions compact">
-          <button type="button" disabled={!preview && !job} onClick={() => void copyCommand()}>Copy Command</button>
+          <button type="button" disabled={!preview && !job} onClick={() => void copyCommand()}>{u.copyCommand}</button>
         </div>
         {previewBusy && <p className="roller-muted">Updating command preview...</p>}
         {previewError && <p className="roller-warning">{previewError}</p>}
         {preview?.warnings?.map((warning) => <p key={warning} className="roller-warning">{warning}</p>)}
         <pre className="roller-command" aria-label="Command preview"><code>{commandPreviewText}</code></pre>
-      </details>
+      </details>}
 
-      {job && (
+      {batchMode === "single" && job && (
         <details open={logsOpen}>
           <summary>{`Job ${job.status.charAt(0).toUpperCase()}${job.status.slice(1)}`} · {job.job_id}</summary>
           <div className="roller-actions compact">
-            <button type="button" disabled={!job} onClick={() => void copyLog()}>Copy Log</button>
-            <button type="button" disabled={!job.project_id} onClick={() => void openJobFolder()}>Open Job Folder</button>
+            <button type="button" disabled={!job} onClick={() => void copyLog()}>{u.copyLog}</button>
+            <button type="button" disabled={!job.project_id} onClick={() => void openJobFolder()}>{u.openJobFolder}</button>
           </div>
           {job.error && <p className="roller-warning">{job.error}</p>}
           <pre className="roller-log">{job.logs.join("\n") || job.command.join(" ")}</pre>

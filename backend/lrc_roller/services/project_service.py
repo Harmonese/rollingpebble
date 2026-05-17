@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import UploadFile
 
-from lrc_roller.models import ApplyLyricsRequest, MetaModel, ProjectModel, SaveEditorRequest
+from lrc_roller.models import ApplyLyricsRequest, MetaModel, ProjectModel, RuntimeSettingsModel, SaveEditorRequest
 from lrc_roller.lyrics_utils import merge_lrc_metadata_header
 from lrc_roller.storage.files import (
     PLAIN_NAME,
@@ -29,10 +31,35 @@ class ProjectService:
     def __init__(self, projects_root: Path) -> None:
         self.projects_root = projects_root
 
-    async def create_from_audio(self, upload: UploadFile) -> ProjectModel:
+    async def create_from_audio(
+        self, upload: UploadFile, *, settings: RuntimeSettingsModel | None = None,
+    ) -> ProjectModel:
         project_id = new_project_id()
         audio_path = await save_upload_file(self.projects_root, project_id, upload)
-        meta = self._read_audio_meta(audio_path)
+        meta = self._read_audio_meta(audio_path).model_copy()
+        filename = upload.filename or audio_path.name
+        stem = Path(filename).stem
+
+        if settings and settings.audio_filename_regex_enabled and settings.audio_filename_regex:
+            try:
+                pattern = re.compile(settings.audio_filename_regex)
+                match = pattern.search(stem)
+                if match:
+                    groups = match.groupdict()
+                    if "track" in groups and groups["track"]:
+                        meta.track = groups["track"].strip()
+                    if "artist" in groups and groups["artist"]:
+                        meta.artist = groups["artist"].strip()
+                    if "album" in groups and groups["album"]:
+                        meta.album = groups["album"].strip()
+                    if "duration" in groups and groups["duration"]:
+                        try:
+                            meta.duration = int(groups["duration"].strip())
+                        except ValueError:
+                            pass
+            except re.error:
+                pass
+
         project = ProjectModel(
             project_id=project_id,
             last_opened_at=_utc_now_iso(),
@@ -63,35 +90,45 @@ class ProjectService:
                 projects.append(self.get(candidate.name, touch=False))
             except Exception:
                 continue
-        projects.sort(key=lambda item: item.last_opened_at or "", reverse=True)
+        # Sort by directory modification time (≈ creation time), newest first.
+        projects.sort(key=lambda p: (self.projects_root / p.project_id).stat().st_mtime, reverse=True)
         return projects
 
-    def apply_lyrics(self, project_id: str, request: ApplyLyricsRequest) -> ProjectModel:
+    def _write_lyrics(self, project_id: str, synced: str, *, metadata: MetaModel | None = None) -> ProjectModel:
         project = self.get(project_id)
-        if request.metadata is not None:
-            project.metadata = request.metadata
-        synced = request.synced_lyrics or ""
-        plain = plain_for_timing(request.plain_lyrics, synced)
+        if metadata is not None:
+            project.metadata = metadata
+        plain = plain_for_timing("", synced)
         write_text(self.projects_root, project_id, PLAIN_NAME, plain)
         write_text(self.projects_root, project_id, SYNCED_NAME, synced)
         project.plain_lyrics = plain
         project.synced_lyrics = synced
+        write_project(self.projects_root, project)
+        return project
+
+    def apply_lyrics(self, project_id: str, request: ApplyLyricsRequest) -> ProjectModel:
+        synced = request.synced_lyrics or ""
+        project = self._write_lyrics(project_id, synced, metadata=request.metadata)
+        # _write_lyrics calls plain_for_timing with empty plain since synced is the
+        # source of truth here. Re-derive plain including any explicit plain input.
+        if request.plain_lyrics:
+            composite_plain = plain_for_timing(request.plain_lyrics, synced)
+            if composite_plain != project.plain_lyrics:
+                write_text(self.projects_root, project_id, PLAIN_NAME, composite_plain)
+                project.plain_lyrics = composite_plain
         project.source = request.source
         project.lrclib_id = request.lrclib_id
         write_project(self.projects_root, project)
         return project
 
     def save_editor(self, project_id: str, request: SaveEditorRequest) -> ProjectModel:
-        project = self.get(project_id)
-        if request.metadata is not None:
-            project.metadata = request.metadata
         synced = request.synced_lyrics or ""
-        plain = plain_for_timing(request.plain_lyrics, synced)
-        write_text(self.projects_root, project_id, PLAIN_NAME, plain)
-        write_text(self.projects_root, project_id, SYNCED_NAME, synced)
-        project.plain_lyrics = plain
-        project.synced_lyrics = synced
-        write_project(self.projects_root, project)
+        project = self._write_lyrics(project_id, synced, metadata=request.metadata)
+        if request.plain_lyrics:
+            plain = plain_for_timing(request.plain_lyrics, synced)
+            if plain != project.plain_lyrics:
+                write_text(self.projects_root, project_id, PLAIN_NAME, plain)
+                project.plain_lyrics = plain
         return project
 
     def write_pyroller_result(self, project_id: str, synced: str) -> ProjectModel:
@@ -117,6 +154,11 @@ class ProjectService:
         return plain_for_timing(project.plain_lyrics, project.synced_lyrics)
 
 
+
+    def delete_project(self, project_id: str) -> None:
+        folder = self.project_folder(project_id)
+        if folder.exists():
+            shutil.rmtree(folder)
 
     def project_folder(self, project_id: str) -> Path:
         # Validate project first, then return the on-disk directory used by this project.

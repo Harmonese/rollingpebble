@@ -13,6 +13,9 @@
     --roller-accent: #23d18b;
     --roller-accent-2: #5ec5ff;
     --roller-warn: #ffbe55;
+    --roller-warn-rgb: 255, 190, 85;
+    --roller-danger: #ff6f6f;
+    --roller-danger-rgb: 255, 111, 111;
     --roller-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
     --app-header-height: 56px;
     --app-footer-height: 42px;
@@ -22,20 +25,18 @@
     --theme-color: rgb(var(--theme-rgb));
     --theme-contrast-color: var(--black);
 
-    /* text color */
-    --font-color: var(--roller-text);
-    --background-color: var(--roller-bg);
+    /* overlays — flipped for light/dark via data-theme */
+    --overlay-subtle: rgba(255, 255, 255, 0.03);
+    --overlay-light: rgba(255, 255, 255, 0.05);
+    --overlay-border: rgba(255, 255, 255, 0.08);
+    --card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), var(--roller-surface);
+    --editor-bg-overlay: linear-gradient(180deg, rgba(0, 0, 0, 0.50), rgba(0, 0, 0, 0.72));
 
-    /* semi color */
-    --semi-black-color: rgba(12, 14, 16, 0.96);
-    --semi-white-color: rgba(235, 240, 244, 0.88);
-
-    /* border */
-    --border-radius: 10px;
-
-    /* shadow */
-    --text-shadow: 0 0 2px var(--black);
-    --drop-shadow: drop-shadow(0 0 4px currentColor);
+    /* radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-pill: 999px;
 
     /* duration */
     --transition-duration: 250ms;
@@ -46,25 +47,21 @@
     --animation-out-back: cubic-bezier(0.18, 0.89, 0.32, 1.28);
 }
 
-@media (prefers-color-scheme: light) {
-    :root {
-        --font-color: var(--roller-text);
-        --background-color: var(--roller-bg);
-    }
-}
+[data-theme="light"] {
+    --roller-bg: #f2f4f5;
+    --roller-surface: #fafbfc;
+    --roller-surface-2: #eef0f2;
+    --roller-surface-3: #e4e7eb;
+    --roller-border: #d5d9de;
+    --roller-text: #1a1d22;
+    --roller-muted: #69727d;
+    --roller-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --font-color: var(--roller-text);
-        --background-color: var(--roller-bg);
-    }
-}
-
-[data-theme="light"],
-[data-theme="dark"],
-[data-theme="auto"] {
-    --font-color: var(--roller-text);
-    --background-color: var(--roller-bg);
+    --overlay-subtle: rgba(0, 0, 0, 0.03);
+    --overlay-light: rgba(0, 0, 0, 0.05);
+    --overlay-border: rgba(0, 0, 0, 0.07);
+    --card-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.015), rgba(0, 0, 0, 0.005)), var(--roller-surface);
+    --editor-bg-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.88));
 }
 
 @media (prefers-reduced-motion: reduce) {

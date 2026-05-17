@@ -1,0 +1,248 @@
+.roller-progress-card {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 13px;
+    border: 1px solid rgba(var(--theme-rgb), 0.22);
+    background: linear-gradient(180deg, rgba(var(--theme-rgb), 0.09), rgba(255, 255, 255, 0.018));
+}
+
+.roller-progress-head,
+.roller-progress-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.roller-progress-head {
+    color: var(--roller-text);
+    font-size: 0.86rem;
+    font-weight: 700;
+}
+
+.roller-progress-head b {
+    flex: 0 0 auto;
+    color: var(--theme-color);
+    font-size: 0.78rem;
+    font-weight: 750;
+}
+
+.roller-progress-bar {
+    position: relative;
+    height: 8px;
+    margin: 9px 0 8px;
+    overflow: hidden;
+    border-radius: var(--radius-pill);
+    background: var(--overlay-border);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+.roller-progress-bar span {
+    display: block;
+    height: 100%;
+    min-width: 4px;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(var(--theme-rgb), 0.72), var(--theme-color));
+    box-shadow: 0 0 14px rgba(var(--theme-rgb), 0.32);
+    transition: width 240ms ease;
+}
+
+.roller-progress-bar.indeterminate span {
+    position: absolute;
+    width: 38%;
+    min-width: 38%;
+    animation: roller-progress-indeterminate 1.15s ease-in-out infinite;
+}
+
+.roller-progress-meta {
+    color: var(--roller-muted);
+    font-size: 0.76rem;
+    line-height: 1.35;
+}
+
+.roller-progress-meta em {
+    flex: 0 0 auto;
+    color: var(--roller-muted);
+    font-style: normal;
+    opacity: 0.82;
+}
+
+@keyframes roller-progress-indeterminate {
+    0% {
+        transform: translateX(-110%);
+    }
+    100% {
+        transform: translateX(280%);
+    }
+}
+
+.progress-cache {
+    margin: 6px 0 0;
+    overflow-wrap: anywhere;
+    font-size: 0.74rem;
+}
+
+.roller-stage-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 10px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    color: var(--roller-muted);
+    font-size: 0.76rem;
+}
+
+.roller-stage-list li {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.roller-stage-list li span {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: var(--radius-pill);
+    background: var(--overlay-border);
+    box-shadow: 0 0 0 1px var(--overlay-border);
+}
+
+.roller-stage-list .stage-done {
+    color: var(--roller-text);
+}
+
+.roller-stage-list .stage-done span {
+    background: var(--theme-color);
+    box-shadow: 0 0 10px rgba(var(--theme-rgb), 0.32);
+}
+
+.roller-stage-list .stage-active {
+    color: var(--theme-color);
+    font-weight: 700;
+}
+
+.roller-stage-list .stage-active span {
+    background: var(--theme-color);
+    animation: roller-stage-pulse 1.1s ease-in-out infinite alternate;
+}
+
+.roller-stage-list .stage-failed {
+    color: var(--roller-danger);
+    font-weight: 700;
+}
+
+.roller-stage-list .stage-failed span {
+    background: var(--roller-danger);
+}
+
+@keyframes roller-stage-pulse {
+    from { transform: scale(0.85); opacity: 0.62; }
+    to { transform: scale(1.18); opacity: 1; }
+}
+
+/* Runtime status pills */
+.runtime-status-pill {
+    flex: 0 0 auto;
+    border-radius: var(--radius-pill);
+    padding: 4px 9px;
+    border: 1px solid var(--overlay-border);
+    color: var(--roller-muted);
+    font-size: 0.72rem;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.runtime-status-pill.ok {
+    color: var(--roller-accent-2);
+    background: rgba(var(--theme-rgb), 0.11);
+    border-color: rgba(var(--theme-rgb), 0.22);
+}
+
+.runtime-status-pill.fail {
+    color: var(--roller-warn);
+    background: rgba(var(--roller-warn-rgb), 0.1);
+    border-color: rgba(var(--roller-warn-rgb), 0.22);
+}
+
+.runtime-status-pill.running {
+    color: var(--roller-accent);
+    background: rgba(var(--theme-rgb), 0.08);
+    border-color: rgba(var(--theme-rgb), 0.18);
+}
+
+.runtime-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+}
+
+.runtime-local-notice {
+    margin: 10px 0 0;
+}
+
+.runtime-step-list {
+    display: grid;
+    gap: 8px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.runtime-step {
+    display: grid;
+    grid-template-columns: 12px 1fr;
+    gap: 9px;
+    align-items: start;
+    padding: 8px 10px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.022);
+    border: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.runtime-step-dot {
+    width: 8px;
+    height: 8px;
+    margin-top: 5px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 255, 255, 0.24);
+}
+
+.runtime-step.running .runtime-step-dot {
+    background: var(--roller-accent);
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.12);
+}
+
+.runtime-step.done .runtime-step-dot {
+    background: var(--roller-accent-2);
+}
+
+.runtime-step.failed .runtime-step-dot {
+    background: var(--roller-warn);
+}
+
+.runtime-step b {
+    display: block;
+    color: var(--roller-text);
+    font-size: 0.8rem;
+}
+
+.runtime-step small {
+    display: block;
+    margin-top: 2px;
+    color: var(--roller-muted);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.runtime-raw-log {
+    margin-top: 12px;
+}
+
+.runtime-raw-log summary {
+    color: var(--roller-muted);
+    cursor: pointer;
+    font-size: 0.78rem;
+}

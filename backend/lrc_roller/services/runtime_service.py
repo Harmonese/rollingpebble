@@ -13,6 +13,8 @@ from lrc_roller.models import (
     RuntimeInstallRequest,
     RuntimeSettingsModel,
     RuntimeSettingsUpdateRequest,
+    RuntimeUpgradeRequest,
+    ModelCacheRequest,
 )
 from lrc_roller.runtime_constants import PYROLLER_RUNTIME_SPEC
 from lrc_roller.services.runtime_manager import RuntimeManager
@@ -94,7 +96,11 @@ class RuntimeService:
         return self.settings_store.write(settings)
 
     def reset_settings_defaults(self) -> RuntimeSettingsModel:
-        return self.settings_store.reset_defaults(preserve_runtime_history=True)
+        result = self.settings_store.reset_defaults(preserve_runtime_history=True)
+        bg_path = self.settings_store.path.parent / "workspace-bg"
+        if bg_path.exists():
+            bg_path.unlink()
+        return result
 
     def _capture_doctor_report(self, profile: str) -> dict[str, Any] | None:
         try:
@@ -160,6 +166,81 @@ class RuntimeService:
             cwd=runtime.runtime_root,
             on_success=on_success,
             on_failure=on_failure,
+            env=self.manager.runtime_env(runtime.venv_path),
+        )
+
+    def run_upgrade(self, request: RuntimeUpgradeRequest) -> JobModel:
+        if self._has_running_job("auto-timing"):
+            raise RuntimeError("Auto Timing is running. Cancel or wait for it before upgrading the runtime.")
+        if self._has_running_job("auto-roller-runtime-install"):
+            raise RuntimeError("Runtime installation is already running.")
+        if self._has_running_job("auto-roller-runtime-upgrade"):
+            raise RuntimeError("Runtime upgrade is already running.")
+        settings = self.settings_store.read()
+        runtime = self.manager.active_runtime(settings)
+        if not runtime.ready:
+            raise RuntimeError("Isolated Auto Timing runtime is not ready. Create or repair it before upgrading.")
+
+        def finalize(job_model: JobModel, *, succeeded: bool) -> dict:
+            new_version: str | None = None
+            if succeeded:
+                info = self.manager.inspect(settings.auto_roller_profile)
+                new_version = self.manager._version_from_python(info.python_path)  # noqa: SLF001
+                if new_version:
+                    self.manager.update_metadata(
+                        settings.auto_roller_profile,
+                        {"pyroller_version": new_version, "last_upgrade_status": "passed", "last_upgrade_at": utc_now_iso()},
+                    )
+            return {
+                "profile": request.profile,
+                "succeeded": succeeded,
+                "message": f"py-roller upgraded to {new_version}." if succeeded and new_version
+                else "py-roller upgraded successfully." if succeeded
+                else f"Upgrade failed: {job_model.error or 'unknown error'}",
+            }
+
+        return self.jobs.create_subprocess_job(
+            kind="auto-roller-runtime-upgrade",
+            project_id=None,
+            command=self.manager.upgrade_command(settings.auto_roller_profile),
+            cwd=runtime.runtime_root,
+            on_success=lambda job: finalize(job, succeeded=True),
+            on_failure=lambda job: finalize(job, succeeded=False),
+            env=self.manager.runtime_env(runtime.venv_path),
+        )
+
+    def run_cache_model(self, request: ModelCacheRequest) -> JobModel:
+        if self._has_running_job("auto-timing"):
+            raise RuntimeError("Auto Timing is running. Cancel or wait for it before caching a model.")
+        if self._has_running_job("auto-roller-runtime-install"):
+            raise RuntimeError("Runtime installation is already running.")
+        if self._has_running_job("auto-roller-runtime-cache-model"):
+            raise RuntimeError("Model caching is already running.")
+        settings = self.settings_store.read()
+        runtime = self.manager.active_runtime(settings)
+        if not runtime.ready:
+            raise RuntimeError("Isolated Auto Timing runtime is not ready.")
+
+        def finalize(job_model: JobModel, *, succeeded: bool) -> dict:
+            return {
+                "succeeded": succeeded,
+                "message": "Model cached successfully." if succeeded
+                else f"Model cache failed: {job_model.error or 'unknown error'}",
+            }
+
+        return self.jobs.create_subprocess_job(
+            kind="auto-roller-runtime-cache-model",
+            project_id=None,
+            command=self.manager.cache_model_command(
+                settings.auto_roller_profile,
+                language=request.language,
+                backend=request.transcriber_backend or settings.auto_timing_transcriber_backend,
+                model_name=request.transcriber_model_name or settings.auto_timing_transcriber_model_name,
+                model_path=request.transcriber_model_path or settings.auto_timing_model_store or None,
+            ),
+            cwd=runtime.runtime_root,
+            on_success=lambda job: finalize(job, succeeded=True),
+            on_failure=lambda job: finalize(job, succeeded=False),
             env=self.manager.runtime_env(runtime.venv_path),
         )
 

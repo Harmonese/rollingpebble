@@ -11,9 +11,9 @@
     padding-right: max(14px, env(safe-area-inset-right));
     padding-left: max(14px, env(safe-area-inset-left));
     color: var(--roller-text);
-    background: linear-gradient(180deg, #191d21 0%, #111416 100%);
+    background: linear-gradient(180deg, var(--roller-surface-2) 0%, var(--roller-bg) 100%);
     border-bottom: 1px solid var(--roller-border);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.08);
     animation: none;
     user-select: none;
     box-sizing: border-box;

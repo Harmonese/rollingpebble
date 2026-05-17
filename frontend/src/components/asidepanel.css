@@ -3,7 +3,7 @@
     right: 0;
     bottom: 64px;
     margin-bottom: env(safe-area-inset-bottom);
-    background-color: var(--semi-black-color);
+    background-color: var(--roller-surface);
     border-radius: 8px 0 0 8px;
     transform: translateX(100%);
     animation: slide-in-right var(--animation-duration) ease 1s forwards;
@@ -24,7 +24,7 @@
     margin: 0;
     padding: 0;
     padding-right: env(safe-area-inset-right);
-    color: var(--white);
+    color: var(--roller-text);
     line-height: 1;
 }
 
@@ -40,7 +40,7 @@
 }
 
 .syncmode-button {
-    border-bottom: 1px solid var(--white);
+    border-bottom: 1px solid var(--roller-border);
     border-top-left-radius: 8px;
 }
 

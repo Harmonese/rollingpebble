@@ -5,10 +5,13 @@ import os
 import shlex
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
-from lrc_roller.models import RollRequest
+import yaml
+
+from lrc_roller.models import BatchRollRequest, RollRequest
 
 PIPELINE_ORDER = ("s", "f", "t", "p", "a", "w")
 PIPELINE_INDEX = {stage: index for index, stage in enumerate(PIPELINE_ORDER)}
@@ -241,6 +244,8 @@ def build_pyroller_command(
         _add_option(command, "--transcriber-hf-etag-timeout", request.transcriber_hf_etag_timeout)
         _add_option(command, "--transcriber-hf-download-timeout", request.transcriber_hf_download_timeout)
         _add_option(command, "--transcriber-hf-max-workers", request.transcriber_hf_max_workers)
+        if request.transcriber_vad_filter:
+            command.append("--transcriber-vad-filter")
         command.extend(["--output-timed-units", str(artifacts["timed_units"])])
 
     if "p" in stage_set:
@@ -259,3 +264,85 @@ def build_pyroller_command(
         _add_option(command, "--writer-by-tag", request.writer_by_tag)
         _add_option(command, "--writer-ass-karaoke-tag-type", request.writer_ass_karaoke_tag_type)
     return command
+
+
+def build_pyroller_batch_command(
+    request: BatchRollRequest,
+    tasks: list[dict[str, str]],
+    *,
+    default_model_store: str | None = None,
+) -> tuple[list[str], str]:
+    """Build a py-roller batch command with a YAML manifest.
+
+    Returns (command, manifest_yaml_text) so callers can log the manifest.
+    """
+    manifest = {"tasks": tasks}
+    manifest_text = yaml.safe_dump(manifest, default_flow_style=False, allow_unicode=True,
+                                   sort_keys=False)
+
+    # Write manifest to a temp file alongside the first project's intermediate dir
+    # so it lives in the lrc-roller data directory.
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix="batch_manifest_",
+                                      delete=False, encoding="utf-8")
+    tmp.write(manifest_text)
+    tmp.close()
+    manifest_path = tmp.name
+
+    stage_set = set(normalize_stages(request.stages or "s,f,t,p,a,w"))
+    command = ["py-roller", "batch", "--manifest", manifest_path,
+               "--progress-format", "jsonl",
+               "--stages", ",".join(sorted(stage_set, key=lambda s: PIPELINE_INDEX.get(s, 99))),
+               "--language", request.language or "zh",
+               "--cleanup", request.cleanup or "on-success",
+               "--log-level", request.log_level or "INFO"]
+
+    if request.continue_on_error:
+        command.append("--continue-on-error")
+    if request.skip_existing:
+        command.append("--skip-existing")
+
+    if "s" in stage_set:
+        _add_option(command, "--splitter-backend", request.splitter_backend)
+        _add_option(command, "--splitter-demucs-model", request.splitter_demucs_model)
+        _add_option(command, "--splitter-demucs-device", request.splitter_demucs_device)
+        _add_option(command, "--splitter-demucs-jobs", request.splitter_demucs_jobs)
+        _add_option(command, "--splitter-demucs-overlap", request.splitter_demucs_overlap)
+        _add_option(command, "--splitter-demucs-segment", request.splitter_demucs_segment)
+
+    if "f" in stage_set:
+        _add_option(command, "--filter-chain", request.filter_chain)
+
+    if "t" in stage_set:
+        _add_option(command, "--transcriber-backend", request.transcriber_backend)
+        _add_option(command, "--transcriber-device", request.transcriber_device)
+        _add_option(command, "--transcriber-model-name", request.transcriber_model_name)
+        model_path_value = request.transcriber_model_path or (str(default_model_store) if default_model_store else "")
+        if model_path_value:
+            command.extend(["--transcriber-model-path", str(Path(model_path_value).expanduser())])
+        if request.transcriber_local_files_only:
+            command.append("--transcriber-local-files-only")
+        if request.transcriber_vad_filter:
+            command.append("--transcriber-vad-filter")
+        _add_option(command, "--transcriber-compute-type", request.transcriber_compute_type)
+        _add_option(command, "--transcriber-batch-size", request.transcriber_batch_size)
+        _add_option(command, "--transcriber-hf-xet", request.transcriber_hf_xet)
+        _add_option(command, "--transcriber-hf-proxy", request.transcriber_hf_proxy)
+        _add_option(command, "--transcriber-hf-etag-timeout", request.transcriber_hf_etag_timeout)
+        _add_option(command, "--transcriber-hf-download-timeout", request.transcriber_hf_download_timeout)
+        _add_option(command, "--transcriber-hf-max-workers", request.transcriber_hf_max_workers)
+
+    if "p" in stage_set:
+        _add_option(command, "--parser-lyrics-encoding", request.parser_lyrics_encoding)
+
+    if "a" in stage_set:
+        _add_option(command, "--aligner-backend", request.aligner_backend)
+        _add_option(command, "--aligner-min-gap", request.aligner_min_gap)
+        _add_option(command, "--aligner-repetition", request.aligner_repetition)
+
+    if "w" in stage_set:
+        _add_option(command, "--writer-backend", request.writer_backend)
+        _add_option(command, "--writer-spacing", request.writer_spacing)
+        _add_option(command, "--writer-by-tag", request.writer_by_tag)
+        _add_option(command, "--writer-ass-karaoke-tag-type", request.writer_ass_karaoke_tag_type)
+
+    return command, manifest_text

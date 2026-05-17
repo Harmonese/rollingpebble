@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
 from lrc_roller.adapters.pyroller_adapter import (
     artifacts_for,
+    build_pyroller_batch_command,
     build_pyroller_command,
     build_pyroller_env,
     command_text,
@@ -13,7 +16,7 @@ from lrc_roller.adapters.pyroller_adapter import (
     normalized_stage_text,
 )
 from lrc_roller.jobs import JobManager
-from lrc_roller.models import JobModel, RollPreviewResponse, RollRequest, RuntimeSettingsModel
+from lrc_roller.models import BatchRollRequest, JobModel, RollPreviewResponse, RollRequest, RuntimeSettingsModel
 from lrc_roller.services.project_service import ProjectService
 from lrc_roller.services.runtime_manager import RuntimeManager
 from lrc_roller.storage.files import PLAIN_NAME, PYROLLER_NAME, write_text
@@ -124,6 +127,8 @@ class RollerService:
             data["transcriber_hf_download_timeout"] = settings.auto_timing_hf_download_timeout
         if data.get("transcriber_hf_max_workers") is None:
             data["transcriber_hf_max_workers"] = settings.auto_timing_hf_max_workers
+        if data.get("transcriber_vad_filter") is None:
+            data["transcriber_vad_filter"] = settings.auto_timing_transcriber_vad_filter
 
         # Parser / aligner / writer
         use_default("parser_lyrics_encoding", "auto_timing_parser_lyrics_encoding")
@@ -211,9 +216,9 @@ class RollerService:
         if first_stage == "a":
             for key in ("timed_units", "parsed_lyrics"):
                 if not artifacts[key].exists():
-                    warnings.append(f"Missing {artifacts[key].name}; run Quick or Full once before realigning.")
+                    warnings.append(f"Missing {artifacts[key].name}. Run a full pipeline first.")
         if first_stage == "w" and not artifacts["alignment_result"].exists():
-            warnings.append("Missing alignment_result.json; run an alignment step before rewriting output.")
+            warnings.append("Missing alignment_result.json. Run an alignment step first.")
         return warnings
 
     def _runtime_command_options(self) -> tuple[list[str] | None, Path | None, dict[str, str] | None]:
@@ -250,7 +255,7 @@ class RollerService:
         )
         warnings: list[str] = []
         if "p" in set(normalize_stages(request.stages)) and not timing_plain.strip():
-            warnings.append("No lyric lines are saved for this project yet. Metadata-only LRC headers are ignored.")
+            warnings.append("No lyric lines to time. Import or paste lyrics first.")
         warnings.extend(self._artifact_warnings(str(request.stages), artifacts_dir))
         return RollPreviewResponse(
             command=command,
@@ -270,7 +275,7 @@ class RollerService:
             raise ValueError("Project has no audio file")
         timing_plain = self.project_service.plain_lyrics_for_timing(project_id)
         if "p" in stages and not timing_plain.strip():
-            raise ValueError("Project has no lyric lines. Import or paste real lyrics before starting automatic timing; metadata-only LRC headers are ignored.")
+            raise ValueError("No lyric lines to time. Import or paste lyrics first.")
 
         root = self.projects_root / project_id
         audio_path = Path(project.audio_path) if project.audio_path else root / "audio"
@@ -317,3 +322,92 @@ class RollerService:
             on_success=on_success,
             env=build_pyroller_env(request, base_env=runtime_env) or runtime_env,
         )
+
+    # -- batch ----------------------------------------------------------------
+
+    def preview_batch(self, request: BatchRollRequest) -> dict:
+        effective = self._effective_request(request)
+        tasks = self._build_batch_tasks(request.project_ids, effective)
+        _, manifest_text = build_pyroller_batch_command(effective, tasks)
+        return {
+            "project_count": len(tasks),
+            "projects": [t.get("id", "") for t in tasks],
+            "manifest": manifest_text,
+            "warnings": [],
+        }
+
+    def run_batch(self, request: BatchRollRequest) -> JobModel:
+        if self._has_running_job("auto-timing") or self._has_running_job("batch-auto-timing"):
+            raise RuntimeError("An Auto Timing or Batch job is already running.")
+        settings = self.settings_provider() if self.settings_provider is not None else RuntimeSettingsModel()
+        runtime = self.manager.active_runtime(settings)
+        if not runtime.ready:
+            raise RuntimeError("Isolated Auto Timing runtime is not ready.")
+
+        effective = self._effective_request(request)
+        tasks = self._build_batch_tasks(request.project_ids, effective)
+
+        for task in tasks:
+            audio_path = Path(task["audio"])
+            if not audio_path.exists():
+                raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
+        command, manifest_text = build_pyroller_batch_command(effective, tasks)
+        runtime_env = self.manager.runtime_env(runtime.venv_path)
+        # Prepend py-roller to PATH via the runtime's bin directory
+        bin_dir = runtime.venv_path / ("Scripts" if sys.platform == "win32" else "bin")  # noqa: F821
+        env = build_pyroller_env(effective, base_env=runtime_env) or runtime_env
+        env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"  # noqa: F821
+
+        _project_ids = request.project_ids[:]
+
+        def on_success(job_model: JobModel) -> dict:
+            return {"project_ids": _project_ids, "manifest": manifest_text, "result": "ok"}
+
+        def on_failure(job_model: JobModel) -> dict:
+            return {"project_ids": _project_ids, "manifest": manifest_text, "result": "failed", "error": job_model.error}
+
+        return self.jobs.create_subprocess_job(
+            kind="batch-auto-timing",
+            project_id=None,
+            command=command,
+            cwd=runtime.runtime_root,
+            on_success=on_success,
+            on_failure=on_failure,
+            env=env,
+        )
+
+    def _build_batch_tasks(self, project_ids: list[str], request: RollRequest) -> list[dict[str, str]]:
+        tasks: list[dict[str, str]] = []
+        stage_set = set(normalize_stages(request.stages or "s,f,t,p,a,w"))
+        needs_audio = bool({"s", "f", "t"} & stage_set)
+        needs_lyrics = "p" in stage_set
+
+        for pid in project_ids:
+            project = self.project_service.get(pid)
+            task: dict[str, str] = {"id": pid}
+            folder = self.project_service.project_folder(pid)
+
+            if needs_audio:
+                audio = folder / (project.audio_name or "")
+                if audio.exists():
+                    task["audio"] = str(audio)
+                # fallback: find any audio file
+                if "audio" not in task:
+                    for candidate in folder.iterdir():
+                        if candidate.is_file() and candidate.suffix.lower() in (
+                            ".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".opus",
+                        ):
+                            task["audio"] = str(candidate)
+                            break
+
+            if needs_lyrics:
+                plain = folder / PLAIN_NAME
+                if plain.exists():
+                    task["lyrics"] = str(plain)
+
+            if "w" in stage_set:
+                task["output_roller"] = str(folder / PYROLLER_NAME)
+
+            tasks.append(task)
+        return tasks

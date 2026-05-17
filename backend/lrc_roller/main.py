@@ -25,6 +25,7 @@ from lrc_roller.models import (
     LrclibIdRequest,
     LrclibSearchRequest,
     LrclibSearchResponse,
+    NeteaseLyricResponse,
     NeteaseResolveRequest,
     NeteaseResolveResponse,
     NeteaseSongSearchRequest,
@@ -33,6 +34,7 @@ from lrc_roller.models import (
     LocalPathRequest,
     LocalPathResponse,
     ProjectModel,
+    BatchRollRequest,
     RollRequest,
     SaveEditorRequest,
     UploadPlanRequest,
@@ -42,6 +44,8 @@ from lrc_roller.models import (
     RollPreviewResponse,
     AutoRollerRuntimeResponse,
     RuntimeInstallRequest,
+    RuntimeUpgradeRequest,
+    ModelCacheRequest,
     RuntimeSettingsModel,
     RuntimeSettingsUpdateRequest,
     StorageCleanupPlanResponse,
@@ -123,7 +127,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/projects", response_model=ProjectModel)
     async def create_project(audio: UploadFile = File(...)) -> ProjectModel:
         try:
-            return await projects.create_from_audio(audio)
+            settings = runtime.get_settings()
+            return await projects.create_from_audio(audio, settings=settings)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -176,6 +181,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @app.delete("/api/projects/{project_id}")
+    def delete_project(project_id: str) -> dict[str, str]:
+        try:
+            projects.delete_project(project_id)
+            return {"deleted": project_id}
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.post("/api/lrclib/search", response_model=LrclibSearchResponse)
     def lrclib_search(request: LrclibSearchRequest) -> LrclibSearchResponse:
         try:
@@ -211,40 +224,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-
-    @app.get("/api/netease/audio/{song_id}")
-    def netease_audio(song_id: int, range_header: str | None = Header(default=None, alias="Range")) -> StreamingResponse:
+    @app.get("/api/netease/lyrics/{song_id}", response_model=NeteaseLyricResponse)
+    def netease_lyrics(song_id: int) -> NeteaseLyricResponse:
         try:
-            upstream = netease.open_audio(song_id, range_header=range_header)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        def stream_chunks():
-            try:
-                while True:
-                    chunk = upstream.read(1024 * 256)
-                    if not chunk:
-                        break
-                    yield chunk
-            finally:
-                upstream.close()
-
-        media_type = upstream.headers.get_content_type() or "audio/mpeg"
-        headers = {
-            "Accept-Ranges": upstream.headers.get("Accept-Ranges", "bytes"),
-            "Cache-Control": "no-store",
-        }
-        for header_name in ("Content-Length", "Content-Range"):
-            value = upstream.headers.get(header_name)
-            if value:
-                headers[header_name] = value
-        status_code = getattr(upstream, "status", 200) or 200
-        return StreamingResponse(stream_chunks(), status_code=status_code, media_type=media_type, headers=headers)
-
-    @app.post("/api/lrc/cleanse", response_model=LrcCleanseResponse)
-    def lrc_cleanse(request: LrcCleanseRequest) -> LrcCleanseResponse:
-        try:
-            return lrclib.cleanse_lrc_text(request)
+            return netease.fetch_lyrics(song_id)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -266,9 +249,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    @app.get("/api/jobs", response_model=list[JobModel])
-    def list_jobs() -> list[JobModel]:
-        return jobs.list()
+    @app.post("/api/batch/preview")
+    def batch_preview(request: BatchRollRequest) -> dict:
+        try:
+            return roller.preview_batch(request)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/batch/roll", response_model=JobModel)
+    def batch_roll(request: BatchRollRequest) -> JobModel:
+        try:
+            return roller.run_batch(request)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/jobs/{job_id}/cancel", response_model=JobModel)
     def cancel_job(job_id: str) -> JobModel:
@@ -324,13 +321,48 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def reset_settings_defaults() -> RuntimeSettingsModel:
         return runtime.reset_settings_defaults()
 
+    @app.post("/api/settings/workspace-bg")
+    async def upload_workspace_bg(bg: UploadFile = File(...)) -> dict[str, str]:
+        try:
+            path = settings.data_dir / "workspace-bg"
+            path.write_bytes(await bg.read())
+            return {"ok": "true"}
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.delete("/api/settings/workspace-bg")
+    def delete_workspace_bg() -> dict[str, str]:
+        path = settings.data_dir / "workspace-bg"
+        if path.exists():
+            path.unlink()
+        return {"ok": "true"}
+
+    @app.get("/api/settings/workspace-bg")
+    def get_workspace_bg():
+        path = settings.data_dir / "workspace-bg"
+        if not path.exists():
+            repo_root = Path(__file__).resolve().parent.parent.parent
+            for candidate in [
+                resolve_frontend_dist(settings),
+                repo_root / "frontend" / "dist",
+                repo_root / "frontend" / "public",
+            ]:
+                if candidate is None:
+                    continue
+                default_path = candidate / "img" / "lrc-roller-workspace-bg.webp"
+                if default_path.exists():
+                    return FileResponse(default_path, media_type="image/webp")
+            raise HTTPException(status_code=404, detail="No background available.")
+        media_type, _ = mimetypes.guess_type(path.name)
+        return FileResponse(
+            path,
+            media_type=media_type or "image/png",
+            headers={"Cache-Control": "no-cache"},
+        )
+
     @app.get("/api/runtime/auto-roller", response_model=AutoRollerRuntimeResponse)
     def auto_roller_runtime() -> AutoRollerRuntimeResponse:
         return runtime.get_auto_roller_runtime()
-
-    @app.post("/api/runtime/auto-roller/settings", response_model=RuntimeSettingsModel)
-    def update_auto_roller_settings(request: RuntimeSettingsUpdateRequest) -> RuntimeSettingsModel:
-        return runtime.update_settings(request)
 
     @app.post("/api/runtime/auto-roller/doctor", response_model=JobModel)
     def run_auto_roller_doctor() -> JobModel:
@@ -343,6 +375,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def run_auto_roller_install(request: RuntimeInstallRequest) -> JobModel:
         try:
             return runtime.run_install(request)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/runtime/auto-roller/upgrade", response_model=JobModel)
+    def run_auto_roller_upgrade(request: RuntimeUpgradeRequest) -> JobModel:
+        try:
+            return runtime.run_upgrade(request)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/runtime/auto-roller/cache-model", response_model=JobModel)
+    def run_auto_roller_cache_model(request: ModelCacheRequest) -> JobModel:
+        try:
+            return runtime.run_cache_model(request)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 

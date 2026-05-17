@@ -1,19 +1,22 @@
 import SSK from "#const/session_key.json" with { type: "json" };
 import { useCallback, useContext, useEffect, useReducer, useRef } from "react";
+import { useAudio } from "../hooks/useAudio.js";
 import { useKeyBindings } from "../hooks/useKeyBindings.js";
 import { prepareAudioFile } from "../shared/audioDecode.js";
 import { LOAD_PROJECT_AUDIO_EVENT, type ProjectAudioLoadDetail } from "../shared/audioEvents.js";
-import { AudioActionType, audioRef, audioStatePubSub, currentTimePubSub } from "../utils/audiomodule.js";
+import { AudioActionType, audioStatePubSub, currentTimePubSub } from "../utils/audiomodule.js";
 import { InputAction } from "../utils/input-action.js";
 import { isKeyboardElement } from "../utils/is-keyboard-element.js";
 import { getMatchedAction } from "../utils/keybindings.js";
-import { appContext, ChangBits } from "./app.context.js";
+import { appContext, AudioContext, ChangBits } from "./app.context.js";
 import { LrcAudio } from "./audio.js";
 import { toastPubSub } from "./toast.js";
 
 export const Footer: React.FC = () => {
     const { prefState, lang } = useContext(appContext, ChangBits.lang | ChangBits.builtInAudio);
     const keyBindings = useKeyBindings();
+    const audio = useAudio();
+    const audioElRef = useContext(AudioContext)!;
 
     const [audioSrc, setAudioSrc] = useReducer(
         (oldSrc: string, newSrc: string) => {
@@ -32,7 +35,7 @@ export const Footer: React.FC = () => {
                 return;
             }
 
-            if (!audioRef.src) {
+            if (!audio.src) {
                 return;
             }
 
@@ -41,38 +44,38 @@ export const Footer: React.FC = () => {
             switch (action) {
                 case InputAction.SeekBackward:
                     ev.preventDefault();
-                    audioRef.step(ev, -5);
+                    audio.step(ev, -5);
                     break;
                 case InputAction.SeekForward:
                     ev.preventDefault();
-                    audioRef.step(ev, 5);
+                    audio.step(ev, 5);
                     break;
                 case InputAction.ResetRate:
                     ev.preventDefault();
-                    audioRef.playbackRate = 1;
+                    audio.playbackRate = 1;
                     break;
                 case InputAction.IncreaseRate: {
                     ev.preventDefault();
-                    const rate = audioRef.playbackRate;
-                    audioRef.playbackRate = Math.exp(Math.min(Math.log(rate) + 0.2, 1));
+                    const rate = audio.playbackRate;
+                    audio.playbackRate = Math.exp(Math.min(Math.log(rate) + 0.2, 1));
                     break;
                 }
                 case InputAction.DecreaseRate: {
                     ev.preventDefault();
-                    const rate = audioRef.playbackRate;
-                    audioRef.playbackRate = Math.exp(Math.max(Math.log(rate) - 0.2, -1));
+                    const rate = audio.playbackRate;
+                    audio.playbackRate = Math.exp(Math.max(Math.log(rate) - 0.2, -1));
                     break;
                 }
                 case InputAction.TogglePlay:
                     ev.preventDefault();
-                    audioRef.toggle();
+                    audio.toggle();
                     break;
             }
         }
         document.addEventListener("keydown", onKeydown);
 
         return () => document.removeEventListener("keydown", onKeydown);
-    }, [keyBindings]);
+    }, [keyBindings, audio]);
 
     useEffect(() => {
         const onProjectAudio = (ev: Event) => {
@@ -93,6 +96,17 @@ export const Footer: React.FC = () => {
         return () => window.removeEventListener(LOAD_PROJECT_AUDIO_EVENT, onProjectAudio as EventListener);
     }, []);
 
+    // Pause audio when the tab becomes hidden (visibilitychange)
+    useEffect(() => {
+        const handler = () => {
+            if (!audio.paused) {
+                audio.toggle();
+            }
+        };
+        document.addEventListener("visibilitychange", handler);
+        return () => document.removeEventListener("visibilitychange", handler);
+    }, [audio]);
+
     const rafId = useRef(0);
 
     const onAudioLoadedMetadata = useCallback(() => {
@@ -100,18 +114,18 @@ export const Footer: React.FC = () => {
         cancelAnimationFrame(rafId.current);
         audioStatePubSub.pub({
             type: AudioActionType.getDuration,
-            payload: audioRef.duration,
+            payload: audio.duration,
         });
         toastPubSub.pub({
             type: "success",
             text: lang.notify.audioLoaded,
         });
-    }, [lang]);
+    }, [lang, audio]);
 
     const syncCurrentTime = useCallback(() => {
-        currentTimePubSub.pub(audioRef.currentTime);
+        currentTimePubSub.pub(audio.currentTime);
         rafId.current = requestAnimationFrame(syncCurrentTime);
-    }, []);
+    }, [audio]);
 
     const onAudioPlay = useCallback(() => {
         rafId.current = requestAnimationFrame(syncCurrentTime);
@@ -138,44 +152,44 @@ export const Footer: React.FC = () => {
     }, []);
 
     const onAudioTimeUpdate = useCallback(() => {
-        if (audioRef.paused) {
-            currentTimePubSub.pub(audioRef.currentTime);
+        if (audio.paused) {
+            currentTimePubSub.pub(audio.currentTime);
         }
-    }, []);
+    }, [audio]);
 
     const onAudioRateChange = useCallback(() => {
         audioStatePubSub.pub({
             type: AudioActionType.rateChange,
-            payload: audioRef.playbackRate,
+            payload: audio.playbackRate,
         });
-    }, []);
+    }, [audio]);
 
     const onAudioError = useCallback(
         (ev: React.SyntheticEvent<HTMLAudioElement>) => {
             const fallbackUrl = fallbackAudioUrlRef.current;
             const fallbackHref = fallbackUrl ? new URL(fallbackUrl, window.location.href).href : "";
-            if (fallbackUrl && audioRef.currentSrc !== fallbackHref) {
+            if (fallbackUrl && audio.current?.src !== fallbackHref) {
                 fallbackAudioUrlRef.current = "";
                 sessionStorage.setItem(SSK.audioSrc, fallbackUrl);
                 setAudioSrc(fallbackUrl);
                 return;
             }
-            const audio = ev.target as HTMLAudioElement;
-            const error = audio.error!;
+            const el = ev.target as HTMLAudioElement;
+            const error = el.error!;
             const message = lang.audio.error[error.code] || error.message || lang.audio.error[0];
             toastPubSub.pub({
                 type: "warning",
                 text: message,
             });
         },
-        [lang],
+        [lang, audio],
     );
 
     return (
         <footer className="app-footer">
             <audio
-                ref={audioRef}
-                src={audioSrc}
+                ref={audioElRef}
+                src={audioSrc || undefined}
                 controls={prefState.builtInAudio}
                 hidden={!prefState.builtInAudio}
                 preload="metadata"
@@ -206,10 +220,3 @@ const receiveFile = (file: File, setAudioSrc: TsetAudioSrc): void => {
             });
         });
 };
-
-// side effect
-document.addEventListener("visibilitychange", () => {
-    if (!audioRef.paused) {
-        audioRef.toggle();
-    }
-});

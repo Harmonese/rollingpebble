@@ -203,6 +203,36 @@ class RuntimeManager:
             command.append("--skip-doctor")
         return command
 
+    def upgrade_command(self, profile: str) -> list[str]:
+        info = self.inspect(profile)
+        if not info.ready:
+            raise RuntimeError(
+                "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before upgrading."
+            )
+        from lrc_roller.runtime_constants import PYROLLER_RUNTIME_SPEC
+        return [
+            str(info.python_path), "-m", "pip", "install", "--upgrade",
+            PYROLLER_RUNTIME_SPEC,
+        ]
+
+    def cache_model_command(
+        self, profile: str, *, language: str = "mul", backend: str | None = None,
+        model_name: str | None = None, model_path: str | None = None,
+    ) -> list[str]:
+        info = self.inspect(profile)
+        if not info.ready:
+            raise RuntimeError(
+                "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before caching models."
+            )
+        command = [*self.command_prefix(profile), "cache-model", "--language", language, "--progress-format", "jsonl"]
+        if backend:
+            command.extend(["--transcriber-backend", backend])
+        if model_name:
+            command.extend(["--transcriber-model-name", model_name])
+        if model_path:
+            command.extend(["--transcriber-model-path", str(Path(model_path).expanduser())])
+        return command
+
     def legacy_dependency_status(self) -> tuple[bool, str | None, str | None]:
         try:
             version = importlib.metadata.version("py-roller")

@@ -686,9 +686,9 @@ class StorageService:
 
     def _other_label(self, path: Path) -> str:
         if path.name == "settings.json":
-            return "Settings File"
+            return "storage_label.settings_file"
         if path.name == "cache":
-            return "External Cache"
+            return "storage_label.external_cache"
         return path.name
 
     def _other_item_for_path(self, relative_path: str) -> StorageOtherItemModel:
@@ -711,7 +711,7 @@ class StorageService:
             if item.relative_path == "settings.json":
                 removable = False
                 risk = "blocked"
-                reason = "Settings File is protected."
+                reason = "storage_reason.settings_file_protected"
             elif item.relative_path == "cache":
                 risk = "safe"
                 reason = "External tool cache data can be downloaded or rebuilt again."
@@ -957,7 +957,7 @@ class StorageService:
             if parts[0] in {"projects", "models", "envs"}:
                 raise RuntimeError("Other cleanup cannot delete managed storage categories.")
             if parts[0] == "settings.json":
-                raise RuntimeError("Settings File is protected.")
+                raise RuntimeError("storage_reason.settings_file_protected")
             if self._is_ignored_other_child(path):
                 raise RuntimeError("Ignored system files are not cleanup targets.")
             if parts[0] == "cache" and self._runtime_busy():

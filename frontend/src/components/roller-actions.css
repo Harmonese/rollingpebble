@@ -1,0 +1,293 @@
+/* Tabs inside a roller-card (e.g. Single/Batch) — sliding pill toggle */
+.roller-card-tabs {
+    position: relative;
+    display: inline-flex;
+    gap: 0;
+    margin-bottom: 10px;
+    border-radius: var(--radius-pill);
+    background: var(--overlay-light);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 3px;
+}
+
+.roller-card-tabs button {
+    position: relative;
+    z-index: 1;
+    border: 0;
+    border-radius: var(--radius-pill);
+    padding: 5px 18px;
+    background: transparent;
+    color: var(--roller-muted);
+    font-size: 0.82rem;
+    font-weight: 650;
+    cursor: pointer;
+    transition: color 200ms ease;
+}
+
+.roller-card-tabs button.active {
+    color: var(--theme-contrast-color);
+}
+
+.roller-card-tabs button:hover:not(.active) {
+    color: var(--roller-text);
+}
+
+.roller-card-tabs-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    height: calc(100% - 6px);
+    width: calc(50% - 3px);
+    border-radius: var(--radius-pill);
+    background: var(--theme-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.roller-card-tabs-slider[data-active="batch"] {
+    transform: translateX(100%);
+}
+
+.roller-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, var(--roller-surface-2), var(--roller-surface-3));
+    border-bottom: 1px solid var(--roller-border);
+}
+
+.roller-tabs button,
+.roller-actions button,
+.roller-list button {
+    border: 1px solid var(--roller-border);
+    border-radius: var(--radius-pill);
+    padding: 7px 12px;
+    background: var(--roller-surface-2);
+    color: var(--roller-muted);
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 var(--overlay-light);
+    transition:
+        background var(--transition-duration) ease,
+        border-color var(--transition-duration) ease,
+        color var(--transition-duration) ease;
+}
+
+.roller-tabs button.active,
+.roller-actions button:not(:disabled):hover,
+.roller-list button:hover {
+    background: rgba(var(--theme-rgb), 0.16);
+    border-color: rgba(var(--theme-rgb), 0.55);
+    color: var(--theme-color);
+}
+
+.roller-tabs button:disabled,
+.roller-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.roller-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.roller-actions.compact {
+    margin-top: 8px;
+}
+
+.roller-actions.compact button {
+    padding: 5px 9px;
+    font-size: 0.78rem;
+}
+
+.roller-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 8px;
+}
+
+.roller-list button {
+    text-align: left;
+    border-radius: var(--radius-md);
+}
+
+.roller-result {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 10px 0;
+}
+
+.roller-result b {
+    display: block;
+    overflow-wrap: anywhere;
+}
+
+.roller-result small {
+    display: block;
+    margin-top: 3px;
+}
+
+.result-preview {
+    margin-top: 8px;
+}
+
+.result-preview summary {
+    font-size: 0.82rem;
+    color: var(--roller-muted);
+}
+
+.roller-result .result-preview {
+    margin-top: 8px;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.roller-result .result-preview summary {
+    padding-top: 0;
+}
+
+.lyric-preview {
+    max-height: 320px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-radius: var(--radius-md);
+    padding: 10px;
+    background: var(--roller-bg);
+    border: 1px solid var(--roller-border);
+    color: var(--roller-text);
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+/* Auto Timing run button variants */
+.roller-run-actions {
+    align-items: center;
+}
+
+.roller-actions .roller-action-start:not(:disabled) {
+    background: rgba(var(--theme-rgb), 0.18);
+    border-color: rgba(var(--theme-rgb), 0.50);
+    color: var(--theme-color);
+}
+
+.roller-actions .roller-action-cancel:not(:disabled) {
+    background: rgba(var(--roller-danger-rgb), 0.18);
+    border-color: rgba(var(--roller-danger-rgb), 0.50);
+    color: var(--roller-danger);
+}
+
+.roller-actions .roller-action-retry:not(:disabled) {
+    background: rgba(var(--roller-warn-rgb), 0.18);
+    border-color: rgba(var(--roller-warn-rgb), 0.50);
+    color: var(--roller-warn);
+}
+
+.roller-actions .roller-action-start:hover:not(:disabled) {
+    background: rgba(var(--theme-rgb), 0.28);
+    border-color: rgba(var(--theme-rgb), 0.72);
+    color: var(--theme-color);
+}
+
+.roller-actions .roller-action-cancel:hover:not(:disabled) {
+    background: rgba(var(--roller-danger-rgb), 0.28);
+    border-color: rgba(var(--roller-danger-rgb), 0.72);
+    color: var(--roller-danger);
+}
+
+.roller-actions .roller-action-retry:hover:not(:disabled) {
+    background: rgba(var(--roller-warn-rgb), 0.28);
+    border-color: rgba(var(--roller-warn-rgb), 0.72);
+    color: var(--roller-warn);
+}
+
+/* Library strip */
+.library-strip {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 0 10px;
+    margin-bottom: 8px;
+    scrollbar-width: none;
+}
+
+.library-strip::-webkit-scrollbar {
+    display: none;
+}
+
+.library-chip {
+    flex: 0 0 auto;
+    border: 1px solid var(--roller-border);
+    border-radius: var(--radius-pill);
+    padding: 7px 13px;
+    background: var(--roller-surface-2);
+    color: var(--roller-muted);
+    cursor: pointer;
+    transition: border-color 160ms ease, color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.library-chip.active,
+.library-chip:hover {
+    border-color: rgba(var(--theme-rgb), 0.65);
+    background: rgba(var(--theme-rgb), 0.14);
+    color: var(--theme-color);
+}
+
+.library-chip:hover {
+    transform: translateY(-1px);
+}
+
+.library-chip[aria-selected="false"] {
+    color: var(--roller-muted);
+    border-color: var(--roller-surface-3);
+}
+
+.library-chip[aria-selected="false"]:hover {
+    color: var(--roller-text);
+    border-color: var(--roller-border);
+    background: var(--roller-surface-3);
+}
+
+/* Code & log blocks */
+.roller-log,
+.roller-command {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    overflow: auto;
+    border-radius: var(--radius-md);
+    padding: 10px;
+    background: var(--roller-bg);
+    border: 1px solid var(--roller-border);
+    color: var(--roller-text);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.roller-log {
+    max-height: 260px;
+    white-space: pre-wrap;
+}
+
+.roller-command {
+    max-height: 220px;
+    white-space: pre;
+    word-break: normal;
+    overflow-wrap: normal;
+}
+
+.roller-command code {
+    display: block;
+    min-width: max-content;
+}
+
+.roller-plan {
+    margin-top: 10px;
+}
+
+.command-preview {
+    margin-top: 8px;
+}

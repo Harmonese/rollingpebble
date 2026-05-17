@@ -4,11 +4,8 @@ export const themeColor = {
     logic: "#23d18b",
     orange: "#ff691f",
     yellow: "#fab81e",
-    lime: "#7fdbb6",
-    green: "#19cf86",
     blue: "#91d2fa",
     navy: "#1b95e0",
-    grey: "#abb8c2",
     red: "#e81c4f",
     pink: "#f58ea8",
     purple: "#c877fe",
@@ -69,14 +66,10 @@ const init = (lazyInit: () => string): State => {
         const storedState = JSON.parse(lazyInit()) as State;
         const validKeys = Object.keys(initState) as (keyof State)[];
         for (const key of validKeys) {
-            if (key === "lang") {
-                continue;
-            }
             if (key in storedState) {
                 (state[key] as unknown) = storedState[key];
             }
         }
-        state.lang = "en-US";
         if (state.themeColor === themeColor.pink) {
             state.themeColor = themeColor.logic;
         }

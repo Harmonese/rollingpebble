@@ -1,6 +1,6 @@
 import { useWavesurfer } from "@wavesurfer/react";
 import { useEffect, useRef } from "react";
-import { audioRef } from "../utils/audiomodule";
+import { useAudio } from "../hooks/useAudio.js";
 import "./waveform.css";
 
 interface IWaveformProps {
@@ -14,13 +14,15 @@ interface IWaveformProps {
 }
 
 export const Waveform: React.FC<IWaveformProps> = ({ value, onSeek, className }) => {
+    const audio = useAudio();
     const containerRef = useRef<HTMLDivElement>(null);
 
     const style = getComputedStyle(document.documentElement);
     const themeColor = style.getPropertyValue("--theme-color");
+    const mutedColor = style.getPropertyValue("--roller-muted").trim() || "#aab2b9";
     const { wavesurfer } = useWavesurfer({
         container: containerRef,
-        waveColor: "#eeeeee",
+        waveColor: mutedColor,
         progressColor: themeColor,
         cursorColor: themeColor,
         normalize: true,
@@ -42,10 +44,11 @@ export const Waveform: React.FC<IWaveformProps> = ({ value, onSeek, className })
     }, [wavesurfer, value]);
 
     useEffect(() => {
-        wavesurfer?.load(audioRef.src).then(() => {
-            wavesurfer?.setTime(value);
-        });
-    }, [wavesurfer, audioRef.src]);
+        if (!wavesurfer || !audio.src) return;
+        wavesurfer.load(audio.src).then(() => {
+            wavesurfer.setTime(value);
+        }).catch(() => { /* load failure is non-fatal */ });
+    }, [wavesurfer, audio.src]);
 
     return <div className={`waveform ${className || ""}`} ref={containerRef}></div>;
 };

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPubSub } from "../utils/pubsub.js";
 import { CheckSVG, InfoSVG, ProblemSVG } from "./svg.js";
-
-type MessageType = "info" | "success" | "warning";
+import type { MessageType } from "../hooks/useMessage.js";
 
 interface IMessage {
     type: MessageType;
@@ -12,6 +11,7 @@ interface IMessage {
 export const toastPubSub = createPubSub<IMessage>();
 
 const box = { id: 0 };
+const MAX_TOAST = 5;
 
 export const Toast: React.FC = () => {
     const self = useRef(Symbol(Toast.name));
@@ -21,16 +21,42 @@ export const Toast: React.FC = () => {
     }
 
     const [toastQueue, setToastQueue] = useState<IToast[]>([]);
+    const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
     useEffect(() => {
         return toastPubSub.sub(self.current, (data) => {
-            setToastQueue((queue) => [{ id: box.id++, ...data }, ...queue]);
+            const id = box.id++;
+            const toast: IToast = { id, ...data };
+            setToastQueue((queue) => {
+                const next = [toast, ...queue];
+                if (next.length > MAX_TOAST) next.pop();
+                return next;
+            });
+            const timer = setTimeout(() => {
+                setToastQueue((queue) => queue.filter((item) => item.id !== id));
+                timersRef.current.delete(id);
+            }, 5000);
+            timersRef.current.set(id, timer);
         });
+    }, []);
+
+    useEffect(() => {
+        return () => {
+            timersRef.current.forEach((timer) => clearTimeout(timer));
+            timersRef.current.clear();
+        };
     }, []);
 
     const onAnimationEnd = useCallback((ev: React.AnimationEvent<HTMLElement>) => {
         if (ev.animationName === "slide-out-right") {
-            setToastQueue((queue) => queue.slice(0, -1));
+            setToastQueue((queue) => {
+                const removed = queue[queue.length - 1];
+                if (removed) {
+                    const timer = timersRef.current.get(removed.id);
+                    if (timer) { clearTimeout(timer); timersRef.current.delete(removed.id); }
+                }
+                return queue.slice(0, -1);
+            });
         }
     }, []);
 
@@ -39,6 +65,7 @@ export const Toast: React.FC = () => {
             info: <InfoSVG />,
             success: <CheckSVG />,
             warning: <ProblemSVG />,
+            error: <ProblemSVG />,
         }[toast.type];
 
         return (
@@ -50,7 +77,7 @@ export const Toast: React.FC = () => {
     }, []);
 
     return (
-        <div className="toast-queue" onAnimationEnd={onAnimationEnd}>
+        <div className="toast-queue" aria-live="polite" role="status" onAnimationEnd={onAnimationEnd}>
             {toastQueue.map(ToastIter)}
         </div>
     );

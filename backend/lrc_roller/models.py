@@ -74,6 +74,11 @@ class NeteaseResolveResponse(BaseModel):
     song: NeteaseSongModel
 
 
+class NeteaseLyricResponse(BaseModel):
+    lyric: str | None = None
+    tlyric: str | None = None
+
+
 class LrclibSearchRequest(BaseModel):
     query: str | None = None
     title: str | None = None
@@ -175,6 +180,7 @@ class RollRequest(BaseModel):
     transcriber_hf_etag_timeout: int | None = None
     transcriber_hf_download_timeout: int | None = None
     transcriber_hf_max_workers: int | None = None
+    transcriber_vad_filter: bool = False
 
     parser_lyrics_encoding: str | None = None
 
@@ -189,6 +195,12 @@ class RollRequest(BaseModel):
 
     cleanup: Literal["on-success", "never"] = "on-success"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+
+class BatchRollRequest(RollRequest):
+    project_ids: list[str] = Field(min_length=1)
+    continue_on_error: bool = False
+    skip_existing: bool = False
 
 
 class RollPreviewResponse(BaseModel):
@@ -294,6 +306,7 @@ class RuntimeSettingsModel(BaseModel):
     auto_timing_hf_etag_timeout: int | None = None
     auto_timing_hf_download_timeout: int | None = None
     auto_timing_hf_max_workers: int | None = None
+    auto_timing_transcriber_vad_filter: bool = False
 
     auto_timing_parser_lyrics_encoding: str = "auto"
 
@@ -305,6 +318,9 @@ class RuntimeSettingsModel(BaseModel):
     auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] = "kf"
 
     recent_projects_limit: int = 8
+
+    audio_filename_regex: str = ""
+    audio_filename_regex_enabled: bool = False
 
     last_doctor_status: str | None = None
     last_doctor_at: str | None = None
@@ -344,6 +360,17 @@ class RuntimeInstallRequest(BaseModel):
     dry_run: bool = False
 
 
+class RuntimeUpgradeRequest(BaseModel):
+    profile: Literal["auto", "cpu", "cu124"] = "auto"
+
+
+class ModelCacheRequest(BaseModel):
+    language: Literal["zh", "en", "mul"] = "mul"
+    transcriber_backend: str | None = None
+    transcriber_model_name: str | None = None
+    transcriber_model_path: str | None = None
+
+
 class RuntimeSettingsUpdateRequest(BaseModel):
     auto_roller_profile: Literal["auto", "cpu", "cu124"] | None = None
     auto_fill_lyrics_library_from_project_metadata: bool | None = None
@@ -380,6 +407,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     auto_timing_hf_etag_timeout: int | None = None
     auto_timing_hf_download_timeout: int | None = None
     auto_timing_hf_max_workers: int | None = None
+    auto_timing_transcriber_vad_filter: bool | None = None
 
     auto_timing_parser_lyrics_encoding: str | None = None
 
@@ -391,6 +419,9 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] | None = None
 
     recent_projects_limit: int | None = None
+
+    audio_filename_regex: str | None = None
+    audio_filename_regex_enabled: bool | None = None
 
 
 class UploadPlanRequest(BaseModel):
