@@ -46,9 +46,11 @@ function removeTags(text: string): { text: string; count: number } {
 }
 
 function removeBlankLines(text: string): { text: string; count: number } {
-    const lines = text.split("\n");
+    const hasTrailingNewline = /\r?\n$/.test(text);
+    const lines = text.split(/\r?\n/);
+    if (hasTrailingNewline) lines.pop();
     const filtered = lines.filter((line) => line.trim() !== "");
-    return { text: filtered.join("\n"), count: lines.length - filtered.length };
+    return { text: filtered.join("\n") + (hasTrailingNewline ? "\n" : ""), count: lines.length - filtered.length };
 }
 
 function compressTags(text: string): { text: string; count: number } {

@@ -22,10 +22,12 @@ render(createElement(App), document.querySelector(".app-container"), () => {
     }
 
     window.addEventListener("dragover", (ev) => {
+        if (!Array.from(ev.dataTransfer?.types || []).includes("Files")) return;
         ev.preventDefault();
         ev.dataTransfer!.dropEffect = "copy";
     });
     window.addEventListener("drop", (ev) => {
+        if (!Array.from(ev.dataTransfer?.types || []).includes("Files")) return;
         ev.preventDefault();
     });
 });

@@ -289,7 +289,7 @@ select, input, textarea, button {
     background-color: var(--roller-surface-2);
 }
 
-/* rollingpebble v0.4.0 startup screen */
+/* rollingpebble startup screen */
 .page-loading::before {
     background:
         radial-gradient(circle at 50% 45%, rgba(var(--theme-rgb), 0.12), transparent 32vmin),

@@ -6,7 +6,7 @@ import { api, type AutoRollerRuntime, type JobModel, type StorageCleanupTarget, 
 import { appContext, ChangBits } from "../../components/app.context.js";
 import { ThemeMode, themeColor as themeColors } from "../../hooks/usePref.js";
 import { ColorPicker } from "./ColorPicker.js";
-import { formatBytes, formatLongDuration, secondsSince } from "../../shared/format.js";
+import { formatBytes, secondsSince } from "../../shared/format.js";
 import { optionNodes } from "../../shared/optionNodes.js";
 import { notifySettingsUpdated } from "../../shared/settingsEvents.js";
 import {
@@ -32,9 +32,13 @@ import {
     transcriberBackendOptions,
     transcriberModelOptions,
     type HfXet,
+    type Cleanup,
+    type KaraokeTag,
     type Language,
     type LocalOnly,
+    type LogLevel,
     type Repetition,
+    type Spacing,
 } from "../roller/autoTimingOptions.js";
 
 type Profile = "auto" | "cpu" | "cu124";
@@ -58,6 +62,50 @@ type RuntimeStep = {
 
 function titleFromKey(key: string): string {
     return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function runtimeDetailText(detail: string | null | undefined, tr: Record<string, string>): string {
+    if (!detail) return "";
+    const details: Record<string, string> = {
+        "Isolated runtime has not been created yet.": tr.detailMissing,
+        "Runtime Python exists, but py-roller is not installed in it.": tr.detailBroken,
+        "Runtime exists, but the last doctor check reported problems.": tr.detailUnhealthy,
+        "Runtime exists, but no successful doctor check has been recorded yet.": tr.detailUnchecked,
+    };
+    return details[detail] || detail;
+}
+
+function jobStatusText(status: string, tr: Record<string, string>): string {
+    return tr[status] || status;
+}
+
+function runtimeStepLabel(key: string, fallback: string, tr: Record<string, string>): string {
+    const normalized = key.toLowerCase().replace(/-/g, "_");
+    if (tr[key]) return tr[key];
+    if (normalized.includes("packaging")) return tr.upgradePackaging;
+    if (normalized.includes("torch") && (normalized.includes("remove") || normalized.includes("uninstall"))) return tr.removeTorch;
+    if (normalized.includes("torch") && normalized.includes("install")) return tr.installTorch;
+    if (normalized.includes("audio") && normalized.includes("install")) return tr.installAudio;
+    if (normalized.includes("validat")) return tr.validate;
+    if (normalized.includes("doctor")) return tr.doctor;
+    return fallback;
+}
+
+function runtimeJobErrorText(error: string | null | undefined, tr: Record<string, string>): string {
+    if (!error) return tr.taskFailed;
+    const match = error.match(/^Command exited with code (\d+)/);
+    if (match) return tr.commandExitedWithCode.replace("{code}", match[1]);
+    return error;
+}
+
+function runtimeDuration(seconds: number | null, tr: Record<string, string>): string {
+    if (seconds === null) return tr.unknown;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+        return tr.durationMinutesSeconds.replace("{m}", String(mins)).replace("{s}", String(secs));
+    }
+    return tr.durationSeconds.replace("{s}", String(secs));
 }
 
 function runtimeEvents(job: JobModel | null): Record<string, unknown>[] {
@@ -125,19 +173,25 @@ function runtimeJobTitle(job: JobModel, labels: Record<string, string>): string 
     return job.kind;
 }
 
-function runtimeCompletionMessage(job: JobModel, msg: { taskComplete: string }): string {
+function runtimeCompletionMessage(job: JobModel, msg: { taskComplete: string; runtimeReady: string; upgradedTo: string; upgraded: string }): string {
     const result = job.result || {};
     if (job.kind === "auto-roller-runtime-install" && typeof result.runtime_id === "string") {
-        return `Runtime ready: ${result.runtime_id}`;
+        return msg.runtimeReady.replace("{id}", result.runtime_id);
     }
-    if (job.kind === "auto-roller-runtime-upgrade" || job.kind === "auto-roller-runtime-cache-model") {
+    if (job.kind === "auto-roller-runtime-upgrade") {
+        if (typeof result.new_version === "string" && result.new_version) {
+            return msg.upgradedTo.replace("{version}", result.new_version);
+        }
+        return msg.upgraded;
+    }
+    if (job.kind === "auto-roller-runtime-cache-model") {
         return typeof result.message === "string" ? result.message : "";
     }
     if (job.kind === "auto-roller-doctor") return "";
     return job.progress?.message || msg.taskComplete;
 }
 
-const RuntimeJobTerminal: React.FC<{ job: JobModel; elapsed: number | null; lastOutput: number | null; tr: Record<string, string>; jobLabels: Record<string, string>; jobMsg: { taskComplete: string } }> = ({ job, elapsed, lastOutput, tr, jobLabels, jobMsg }) => {
+const RuntimeJobTerminal: React.FC<{ job: JobModel; elapsed: number | null; lastOutput: number | null; tr: Record<string, string>; jobLabels: Record<string, string>; jobMsg: { taskComplete: string; runtimeReady: string; upgradedTo: string; upgraded: string } }> = ({ job, elapsed, lastOutput, tr, jobLabels, jobMsg }) => {
     const running = ["queued", "running"].includes(job.status);
     const steps = buildRuntimeSteps(job);
     const checks = doctorCheckSteps(job);
@@ -147,27 +201,27 @@ const RuntimeJobTerminal: React.FC<{ job: JobModel; elapsed: number | null; last
             <div className="settings-job-header">
                 <div>
                     <b>{runtimeJobTitle(job, jobLabels)}</b>
-                    <small>{job.job_id} · {job.status}</small>
+                    <small>{job.job_id} · {jobStatusText(job.status, tr)}</small>
                 </div>
                 {job.status === "succeeded" && <span className="runtime-status-pill ok">{tr.succeeded}</span>}
                 {job.status === "failed" && <span className="runtime-status-pill fail">{tr.failed}</span>}
                 {running && <span className="runtime-status-pill running">{tr.running}</span>}
             </div>
             <div className="roller-kv compact">
-                <b>{tr.pid}</b><span>{job.pid || "pending"}</span>
-                <b>{tr.elapsed}</b><span>{formatLongDuration(elapsed)}</span>
-                <b>{tr.lastOutput}</b><span>{formatLongDuration(lastOutput)} ago</span>
-                <b>{tr.exitCode}</b><span>{job.return_code ?? "n/a"}</span>
+                <b>{tr.pid}</b><span>{job.pid || tr.pending}</span>
+                <b>{tr.elapsed}</b><span>{runtimeDuration(elapsed, tr)}</span>
+                <b>{tr.lastOutput}</b><span>{tr.ago.replace("{time}", runtimeDuration(lastOutput, tr))}</span>
+                <b>{tr.exitCode}</b><span>{job.return_code ?? tr.na}</span>
             </div>
-            {job.status === "succeeded" && runtimeCompletionMessage(job) && <p className="roller-message success">{runtimeCompletionMessage(job, jobMsg)}</p>}
-            {job.status === "failed" && <p className="roller-message error">{job.error || "Runtime task failed."}</p>}
+            {job.status === "succeeded" && runtimeCompletionMessage(job, jobMsg) && <p className="roller-message success">{runtimeCompletionMessage(job, jobMsg)}</p>}
+            {job.status === "failed" && <p className="roller-message error">{runtimeJobErrorText(job.error, tr)}</p>}
             {running && lastOutput !== null && lastOutput > 30 && <p className="roller-message subtle">{tr.noOutput}</p>}
             {steps.length > 0 && (
                 <ol className="runtime-step-list">
                     {steps.map((step) => (
                         <li key={step.key} className={`runtime-step ${step.status}`}>
                             <span className="runtime-step-dot" />
-                            <span><b>{step.label}</b>{step.message && <small>{step.message}</small>}</span>
+                            <span><b>{runtimeStepLabel(step.key, step.label, tr)}</b>{step.message && <small>{step.message}</small>}</span>
                         </li>
                     ))}
                 </ol>
@@ -177,13 +231,13 @@ const RuntimeJobTerminal: React.FC<{ job: JobModel; elapsed: number | null; last
                     {checks.map((step) => (
                         <li key={step.key} className={`runtime-step ${step.status}`}>
                             <span className="runtime-step-dot" />
-                            <span><b>{step.label}</b>{step.message && <small>{step.message}</small>}</span>
+                            <span><b>{runtimeStepLabel(step.key, step.label, tr)}</b>{step.message && <small>{step.message}</small>}</span>
                         </li>
                     ))}
                 </ol>
             )}
             <details className="runtime-raw-log">
-                <summary>Raw log</summary>
+                <summary>{tr.rawLog}</summary>
                 <pre className="roller-log">{rawLog}</pre>
             </details>
         </div>
@@ -214,11 +268,13 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
 
     useEffect(() => { setHexInput(prefState.themeColor); }, [prefState.themeColor]);
     const u = lang.ui;
-    const trOpt = (key: string) => lang.optionLabels?.[key] || key;
+    const trOpt = (key: string) => (lang.optionLabels as Record<string, string | undefined>)?.[key] || key;
     const tl = (key: string): string => {
-        if (key.startsWith("storage_label.")) return lang.storageLabels?.[key.slice(14)] || key;
-        if (key.startsWith("storage_reason.")) return lang.storageReasons?.[key.slice(15)] || key;
-        return lang.storageLabels?.[key] || key;
+        const storageLabels = lang.storageLabels as Record<string, string | undefined>;
+        const storageReasons = lang.storageReasons as Record<string, string | undefined>;
+        if (key.startsWith("storage_label.")) return storageLabels?.[key.slice(14)] || key;
+        if (key.startsWith("storage_reason.")) return storageReasons?.[key.slice(15)] || key;
+        return storageLabels?.[key] || key;
     };
     const [message, setMessage, , messageFading, messageType] = useMessage();
     const [runtimeError, setRuntimeError] = useState("");
@@ -228,7 +284,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const [storageOlderThanDays, setStorageOlderThanDays] = useState("1");
     const [storageBusy, setStorageBusy] = useState(false);
 
-    const refresh = useCallback(async () => {
+    const refresh = useCallback(async (notify = false) => {
         try {
             setAutoTimingLoaded(false);
             const data = await api.autoRollerRuntime();
@@ -244,6 +300,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
             at.loadFromSettings(settings);
             skipAutoTimingSave.current = true;
             window.setTimeout(() => setAutoTimingLoaded(true), 0);
+            if (notify) toastPubSub.pub({ type: "success", text: t.messages.statusRefreshed });
         } catch (error) {
             setMessage((error as Error).message, "error");
         }
@@ -429,7 +486,12 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
 
     const copyDiagnostics = async () => {
         const text = JSON.stringify({ runtime, doctor_report: runtime?.doctor_report || job?.result?.doctor_report || null, install_report: runtime?.install_report || job?.result?.install_report || null, job }, null, 2);
-        await navigator.clipboard?.writeText(text);
+        try {
+            await navigator.clipboard?.writeText(text);
+            toastPubSub.pub({ type: "success", text: t.messages.diagnosticsCopied });
+        } catch (error) {
+            toastPubSub.pub({ type: "error", text: (error as Error).message });
+        }
     };
 
     const runUpgrade = async () => {
@@ -614,7 +676,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                     <label className="settings-check-row"><input type="checkbox" checked={editorWriteMetadataTags} disabled={busy} onChange={(ev) => { setEditorWriteMetadataTags(ev.currentTarget.checked); void savePatch({ editor_write_metadata_tags: ev.currentTarget.checked }, t.messages.metadataTagSaved); }} /><span><b>{t.syncEditor.writeMetadata}</b><small>{t.syncEditor.writeMetadataDesc}</small></span></label>
                     <label className="settings-check-row"><input type="checkbox" checked={prefState.screenButton} onChange={() => { prefDispatch({ type: "screenButton", payload: (s) => !s.screenButton }); }} /><span><b>{t.syncEditor.screenButton}</b><small>{t.syncEditor.screenButtonDesc}</small></span></label>
                     <div className="roller-form two-col" style={{ marginTop: 10 }}>
-                        <label>{t.syncEditor.timestampDecimals}<select value={prefState.fixed} onChange={(ev) => prefDispatch({ type: "fixed", payload: Number(ev.target.value) })}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select></label>
+                        <label>{t.syncEditor.timestampDecimals}<select value={prefState.fixed} onChange={(ev) => prefDispatch({ type: "fixed", payload: Number(ev.target.value) as Fixed })}><option value={0}>0</option><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select></label>
                         <label>{t.syncEditor.leftSpace}<span className="stepper-row"><button type="button" className="stepper-btn" onClick={() => prefDispatch({ type: "spaceStart", payload: Math.max(0, prefState.spaceStart - 1) })}>−</button><span className="stepper-val">{prefState.spaceStart}</span><button type="button" className="stepper-btn" onClick={() => prefDispatch({ type: "spaceStart", payload: prefState.spaceStart + 1 })}>+</button></span></label>
                         <label>{t.syncEditor.rightSpace}<span className="stepper-row"><button type="button" className="stepper-btn" onClick={() => prefDispatch({ type: "spaceEnd", payload: Math.max(0, prefState.spaceEnd - 1) })}>−</button><span className="stepper-val">{prefState.spaceEnd}</span><button type="button" className="stepper-btn" onClick={() => prefDispatch({ type: "spaceEnd", payload: prefState.spaceEnd + 1 })}>+</button></span></label>
                     </div>
@@ -631,19 +693,19 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                     <div className="settings-subsection">
                         <h4>{t.autoTiming.runtime}</h4>
                         <div className="roller-kv">
-                            <b>{t.autoTiming.status}</b><span>{runtime?.runtime_status || "loading"}</span>
-                            <b>{t.autoTiming.version}</b><span>{runtime?.version || "not installed"}</span>
-                            <b>{t.autoTiming.required}</b><span>{runtime?.runtime_requirement || "py-roller>=0.5.9,<0.7"}</span>
-                            <b>{t.autoTiming.runtimeFolder}</b><span>{runtime?.runtime_root || "not created"}</span>
-                            <b>{t.autoTiming.modelStore}</b><span>{at.transcriberModelPath || runtime?.model_store || "unknown"}</span>
-                            <b>{t.autoTiming.lastCheck}</b><span>{runtime?.settings.last_doctor_status || "not run"} {runtime?.settings.last_doctor_at ? `· ${runtime.settings.last_doctor_at}` : ""}</span>
-                            <b>{t.autoTiming.lastInstall}</b><span>{runtime?.settings.last_install_status || runtime?.settings.last_install_profile || "not run"} {runtime?.settings.last_install_at ? `· ${runtime.settings.last_install_at}` : ""}</span>
+                            <b>{t.autoTiming.status}</b><span>{trOpt(runtime?.runtime_status || "loading")}</span>
+                            <b>{t.autoTiming.version}</b><span>{runtime?.version || trOpt("not installed")}</span>
+                            <b>{t.autoTiming.required}</b><span>{runtime?.runtime_requirement || trOpt("loading")}</span>
+                            <b>{t.autoTiming.runtimeFolder}</b><span>{runtime?.runtime_root || trOpt("not created")}</span>
+                            <b>{t.autoTiming.modelStore}</b><span>{at.transcriberModelPath || runtime?.model_store || trOpt("unknown")}</span>
+                            <b>{t.autoTiming.lastCheck}</b><span>{trOpt(runtime?.settings.last_doctor_status || "not run")} {runtime?.settings.last_doctor_at ? `· ${runtime.settings.last_doctor_at}` : ""}</span>
+                            <b>{t.autoTiming.lastInstall}</b><span>{trOpt(runtime?.settings.last_install_status || runtime?.settings.last_install_profile || "not run")} {runtime?.settings.last_install_at ? `· ${runtime.settings.last_install_at}` : ""}</span>
                         </div>
-                        {runtime?.detail && <p className="roller-message subtle">{runtime.detail}</p>}
+                        {runtime?.detail && <p className="roller-message subtle">{runtimeDetailText(runtime.detail, t.runtime)}</p>}
                         <div className="roller-form settings-profile-row"><label>{t.autoTiming.runtimeProfile}<select value={profile} disabled={busy || runtimeJobRunning} onChange={(ev) => void saveProfile(ev.target.value as Profile)}><option value="auto">{t.general.themeModeAuto}</option><option value="cpu">{u.cpuOnly}</option><option value="cu124">{u.cuda124}</option></select></label></div>
-                        <div className="roller-actions runtime-actions"><button type="button" disabled={busy || runtimeJobRunning} title={busy ? t.runtime.busy : runtimeJobRunning ? t.runtime.jobRunning : ""} onClick={runDoctor}>{t.autoTiming.runtimeCheck}</button><button type="button" disabled={busy || runtimeJobRunning} title={busy ? t.runtime.busy : runtimeJobRunning ? t.runtime.jobRunning : ""} onClick={() => void runInstall()}>{t.autoTiming.createRuntime}</button><button type="button" disabled={busy || runtimeJobRunning || runtime?.runtime_status !== "ready"} title={busy ? t.runtime.busy : runtimeJobRunning ? t.runtime.jobRunning : runtime?.runtime_status !== "ready" ? t.runtime.notReady : ""} onClick={() => void runUpgrade()}>{t.autoTiming.upgradePyroller}</button><button type="button" disabled={busy || runtimeJobRunning || runtime?.runtime_status !== "ready"} title={busy ? t.runtime.busy : runtimeJobRunning ? t.runtime.jobRunning : runtime?.runtime_status !== "ready" ? t.runtime.notReady : ""} onClick={() => void runCacheModel()}>{t.autoTiming.preDownload}</button>{runtimeJobRunning && <button type="button" disabled={busy} title={busy ? t.runtime.busy : ""} onClick={cancelRuntimeJob}>{t.common.cancel}</button>}<button type="button" onClick={copyDiagnostics}>{t.autoTiming.copyDiagnostics}</button><button type="button" onClick={refresh}>{t.autoTiming.refreshStatus}</button></div>
+                        <div className="roller-actions runtime-actions"><button type="button" disabled={busy || runtimeJobRunning} title={busy ? t.runtime.busy : runtimeJobRunning ? t.runtime.jobRunning : ""} onClick={runDoctor}>{t.autoTiming.runtimeCheck}</button><button type="button" disabled={busy || runtimeJobRunning} title={busy ? t.runtime.busy : runtimeJobRunning ? t.runtime.jobRunning : ""} onClick={() => void runInstall()}>{t.autoTiming.createRuntime}</button><button type="button" disabled={busy || runtimeJobRunning || runtime?.runtime_status !== "ready"} title={busy ? t.runtime.busy : runtimeJobRunning ? t.runtime.jobRunning : runtime?.runtime_status !== "ready" ? t.runtime.notReady : ""} onClick={() => void runUpgrade()}>{t.autoTiming.upgradePyroller}</button><button type="button" disabled={busy || runtimeJobRunning || runtime?.runtime_status !== "ready"} title={busy ? t.runtime.busy : runtimeJobRunning ? t.runtime.jobRunning : runtime?.runtime_status !== "ready" ? t.runtime.notReady : ""} onClick={() => void runCacheModel()}>{t.autoTiming.preDownload}</button>{runtimeJobRunning && <button type="button" disabled={busy} title={busy ? t.runtime.busy : ""} onClick={cancelRuntimeJob}>{t.common.cancel}</button>}<button type="button" onClick={copyDiagnostics}>{t.autoTiming.copyDiagnostics}</button><button type="button" onClick={() => void refresh(true)}>{t.autoTiming.refreshStatus}</button></div>
                         {runtimeError && <p className="roller-message error runtime-local-notice">{runtimeError}</p>}
-                        {job && <RuntimeJobTerminal job={job} elapsed={runtimeJobElapsed} lastOutput={runtimeJobLastOutput} tr={t.runtime} jobLabels={t.runtime} jobMsg={{ taskComplete: t.runtime.taskComplete }} />}
+                        {job && <RuntimeJobTerminal job={job} elapsed={runtimeJobElapsed} lastOutput={runtimeJobLastOutput} tr={t.runtime} jobLabels={t.runtime} jobMsg={{ taskComplete: t.runtime.taskComplete, runtimeReady: t.runtime.runtimeReady, upgradedTo: t.runtime.upgradedTo, upgraded: t.runtime.upgraded }} />}
                     </div>
 
                     <div className="settings-subsection">

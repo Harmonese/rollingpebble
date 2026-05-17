@@ -7,19 +7,20 @@ import { buildImportText } from "../../shared/lrc.js";
 import { SETTINGS_UPDATED_EVENT } from "../../shared/settingsEvents.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
+import type { Language } from "../../languages/index.js";
 
 const emptyMeta: MetaModel = { track: "", artist: "", album: "", duration: 0 };
 
 type LibraryKind = "lrclib" | "local" | "netease";
 
-const previewText = (record: LyricsRecord) => {
+const previewText = (record: LyricsRecord, u: Language["ui"]) => {
     const plain = (record.plain_lyrics || "").trim();
     const synced = (record.synced_lyrics || "").trim();
-    if (!plain && !synced && record.instrumental) return "Instrumental — no lyrics from LRCLIB.";
-    if (!plain && !synced) return "No lyric text returned for this record.";
+    if (!plain && !synced && record.instrumental) return u.instrumentalNoLyrics;
+    if (!plain && !synced) return u.noLyricText;
     return [
-        synced ? `[Synced lyrics]\n${synced}` : "",
-        plain ? `[Plain lyrics]\n${plain}` : "",
+        synced ? `[${u.synced}]\n${synced}` : "",
+        plain ? `[${u.plain}]\n${plain}` : "",
     ].filter(Boolean).join("\n\n");
 };
 
@@ -36,6 +37,7 @@ export const LrclibPanel: React.FC<{
     const [query, setQuery] = useState("");
     const [lrclibId, setLrclibId] = useState("");
     const [results, setResults] = useState<LyricsRecord[]>([]);
+    const [searched, setSearched] = useState(false);
     const [message, setMessage, , messageFading, messageType] = useMessage();
     const { lang } = useContext(appContext, ChangBits.lang);
     const t = lang.toast;
@@ -88,6 +90,7 @@ export const LrclibPanel: React.FC<{
 
     const doSearch = async () => {
         setBusy(true);
+        setSearched(true);
         setMessage(t.lrclib.searching, "info", 15000);
         try {
             const response = await api.lrclibSearch({ query, track: meta.track, artist: meta.artist, album: meta.album, limit: 20 });
@@ -102,6 +105,7 @@ export const LrclibPanel: React.FC<{
 
     const doGet = async () => {
         setBusy(true);
+        setSearched(true);
         setMessage(t.lrclib.exactLookup, "info", 10000);
         try {
             const response = await api.lrclibGet(meta);
@@ -117,6 +121,7 @@ export const LrclibPanel: React.FC<{
     const doGetById = async () => {
         if (!Number.isFinite(normalizedId)) return;
         setBusy(true);
+        setSearched(true);
         setMessage(t.lrclib.fetching.replace("{id}", String(normalizedId)), "info", 10000);
         try {
             const record = await api.lrclibGetById(normalizedId);
@@ -224,14 +229,14 @@ export const LrclibPanel: React.FC<{
                 <button type="button" disabled={busy || !Number.isFinite(normalizedId)} onClick={doGetById}>{u.fetchById}</button>
             </div>
             <div className="roller-results">
-                {results.length === 0 && !busy && <p className="roller-muted">No results found.</p>}
+                {searched && results.length === 0 && !busy && <p className="roller-muted">{u.noResultsFound}</p>}
                 {results.map((record, index) => (
                     <article key={`${record.id || index}-${record.label}`} className="roller-result">
                         <b>{record.label || `${record.artist_name} - ${record.track_name}`}</b>
-                        <small>ID: {record.id || "unknown"} · plain: {record.has_plain ? "yes" : "no"} · synced: {record.has_synced ? "yes" : "no"} · instrumental: {record.instrumental ? "yes" : "no"}</small>
+                        <small>{u.id}: {record.id || u.unknownId} · {u.plain}: {record.has_plain ? u.yes : u.no} · {u.synced}: {record.has_synced ? u.yes : u.no} · {u.instrumental}: {record.instrumental ? u.yes : u.no}</small>
                         <details className="result-preview">
                             <summary>{u.preview}</summary>
-                            <pre className="lyric-preview">{previewText(record)}</pre>
+                            <pre className="lyric-preview">{previewText(record, u)}</pre>
                         </details>
                         <div className="roller-actions compact">
                             <button type="button" disabled={!record.has_plain} onClick={() => importRecord(record, "plain")}>{u.importPlain}</button>
@@ -259,7 +264,7 @@ export const LrclibPanel: React.FC<{
                     <small>{u.importLyricsDesc}</small>
                 </span>
             </button>
-            {localFileName && <p className="roller-muted">Selected: {localFileName}</p>}
+            {localFileName && <p className="roller-muted">{u.selectedFile.replace("{name}", localFileName)}</p>}
             <textarea
                 className="local-lyrics-preview"
                 placeholder={u.localLyricsInput}
@@ -296,7 +301,7 @@ export const LrclibPanel: React.FC<{
                 }
             }}
         >
-            Fetch Lyrics
+            {u.fetchLyrics}
         </button>
     );
 

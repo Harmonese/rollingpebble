@@ -238,6 +238,9 @@ class RollerService:
             for job in self.jobs.list()
         )
 
+    def _has_running_job(self, kind: str) -> bool:
+        return any(job.kind == kind and job.status in {"queued", "running"} for job in self.jobs.list())
+
     def preview(self, project_id: str, request: RollRequest) -> RollPreviewResponse:
         timing_plain = self.project_service.plain_lyrics_for_timing(project_id)
         request = self._effective_request(request)
@@ -339,8 +342,10 @@ class RollerService:
     def run_batch(self, request: BatchRollRequest) -> JobModel:
         if self._has_running_job("auto-timing") or self._has_running_job("batch-auto-timing"):
             raise RuntimeError("An Auto Timing or Batch job is already running.")
+        if self.runtime_manager is None:
+            raise RuntimeError("Isolated Auto Timing runtime is not configured.")
         settings = self.settings_provider() if self.settings_provider is not None else RuntimeSettingsModel()
-        runtime = self.manager.active_runtime(settings)
+        runtime = self.runtime_manager.active_runtime(settings)
         if not runtime.ready:
             raise RuntimeError("Isolated Auto Timing runtime is not ready.")
 
@@ -353,7 +358,7 @@ class RollerService:
                 raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
         command, manifest_text = build_pyroller_batch_command(effective, tasks)
-        runtime_env = self.manager.runtime_env(runtime.venv_path)
+        runtime_env = self.runtime_manager.runtime_env(runtime.venv_path)
         # Prepend py-roller to PATH via the runtime's bin directory
         bin_dir = runtime.venv_path / ("Scripts" if sys.platform == "win32" else "bin")  # noqa: F821
         env = build_pyroller_env(effective, base_env=runtime_env) or runtime_env

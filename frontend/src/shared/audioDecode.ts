@@ -71,7 +71,8 @@ function decodeWithWorker(file: File, workerUrl: URL): Promise<Uint8Array> {
 function buildDecodedFile(source: File, data: Uint8Array): File {
     const format = detectAudioFormat(data);
     const decodedName = replaceEncryptedExtension(source.name, format.extension);
-    return new File([new Blob([data], { type: format.mime })], decodedName, {
+    const bytes = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+    return new File([new Blob([bytes], { type: format.mime })], decodedName, {
         type: format.mime,
         lastModified: source.lastModified,
     });

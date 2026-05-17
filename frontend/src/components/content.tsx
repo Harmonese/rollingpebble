@@ -84,15 +84,19 @@ export const Content: React.FC = () => {
 
     useEffect(() => {
         let dragCounter = 0;
+        const isFileDrag = (ev: DragEvent) => Array.from(ev.dataTransfer?.types || []).includes("Files");
         const onDragOver = (ev: DragEvent) => {
+            if (!isFileDrag(ev)) return;
             ev.preventDefault();
         };
         const onDragEnter = (ev: DragEvent) => {
+            if (!isFileDrag(ev)) return;
             ev.preventDefault();
             dragCounter++;
             document.body.classList.add("roller-drag-over");
         };
         const onDragLeave = (ev: DragEvent) => {
+            if (!isFileDrag(ev)) return;
             ev.preventDefault();
             dragCounter--;
             if (dragCounter <= 0) {
@@ -101,6 +105,7 @@ export const Content: React.FC = () => {
             }
         };
         const onDrop = (ev: DragEvent) => {
+            if (!isFileDrag(ev)) return;
             ev.preventDefault();
             dragCounter = 0;
             document.body.classList.remove("roller-drag-over");
@@ -249,6 +254,9 @@ const luminanace = (...rgb: [number, number, number]): number => {
 };
 
 const hex2rgb = (hex: string): [number, number, number] => {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) {
+        return [35, 209, 139];
+    }
     hex = hex.slice(1);
     const value = Number.parseInt(hex, 16);
     return [(value >> 0x10) & 0xff, (value >> 0x08) & 0xff, value & 0xff];

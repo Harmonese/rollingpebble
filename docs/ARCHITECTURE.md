@@ -1,4 +1,4 @@
-# rollingpebble v0.5.5 architecture
+# rollingpebble architecture
 
 ## Goal
 

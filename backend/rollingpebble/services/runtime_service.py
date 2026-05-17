@@ -148,7 +148,7 @@ class RuntimeService:
             raise RuntimeError("Runtime Check is already running.")
         settings = self.settings_store.read()
         runtime = self.manager.active_runtime(settings)
-        if not runtime.ready:
+        if not runtime.doctorable:
             raise RuntimeError("Isolated Auto Timing runtime is not ready. Create or repair it before running Runtime Check.")
 
         def on_success(job_model: JobModel) -> dict:
@@ -194,6 +194,7 @@ class RuntimeService:
             return {
                 "profile": request.profile,
                 "succeeded": succeeded,
+                "new_version": new_version,
                 "message": f"py-roller upgraded to {new_version}." if succeeded and new_version
                 else "py-roller upgraded successfully." if succeeded
                 else f"Upgrade failed: {job_model.error or 'unknown error'}",

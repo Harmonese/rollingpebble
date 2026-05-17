@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from rollingpebble.models import RuntimeSettingsModel
+from rollingpebble.runtime_python import select_runtime_python, target_runtime_python_tag
 
 
 @dataclass(slots=True)
@@ -30,7 +31,11 @@ class IsolatedRuntimeInfo:
 
     @property
     def ready(self) -> bool:
-        return self.status in {"ready", "unchecked"} and self.python_path.exists()
+        return self.status == "ready" and self.python_path.exists()
+
+    @property
+    def doctorable(self) -> bool:
+        return self.status in {"ready", "unchecked", "unhealthy"} and self.python_path.exists() and self.version is not None
 
 
 class RuntimeManager:
@@ -40,7 +45,10 @@ class RuntimeManager:
         self.models_root = data_dir / "models" / "transcriber"
 
     def runtime_id(self, profile: str) -> str:
-        version = f"py{sys.version_info.major}{sys.version_info.minor}"
+        try:
+            version = select_runtime_python().tag
+        except RuntimeError:
+            version = target_runtime_python_tag()
         return f"pyroller-{version}-{profile}"
 
     def runtime_root(self, profile: str) -> Path:
@@ -195,7 +203,10 @@ class RuntimeManager:
         return [str(info.python_path), "-m", "pyroller.cli.main"]
 
     def doctor_command(self, profile: str) -> list[str]:
-        return [*self.command_prefix(profile), "doctor", "--output-format", "json"]
+        info = self.inspect(profile)
+        if not info.doctorable:
+            raise RuntimeError("Isolated Auto Timing runtime is not ready. Create or repair it before running Runtime Check.")
+        return [str(info.python_path), "-m", "pyroller.cli.main", "doctor", "--output-format", "json"]
 
     def install_command(self, profile: str, *, skip_doctor: bool = False) -> list[str]:
         command = [sys.executable, "-m", "rollingpebble.runtime_installer", "--data-dir", str(self.data_dir), "--profile", profile]

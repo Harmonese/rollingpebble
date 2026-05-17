@@ -128,12 +128,12 @@ export const Editor: React.FC<{
             });
             fileReader.addEventListener("error", () => {
                 setImporting(false);
-                toastPubSub.pub({ type: "warning", text: "Failed to read file." });
+                toastPubSub.pub({ type: "warning", text: u.failedReadFile });
                 ev.target.value = "";
             });
             fileReader.readAsText(ev.target.files[0], "UTF-8");
         },
-        [lrcDispatch, trimOptions],
+        [lrcDispatch, trimOptions, u.failedReadFile],
     );
 
     const onCopyClick = useCallback(() => {
@@ -141,11 +141,11 @@ export const Editor: React.FC<{
         if (!el) return;
         el.select();
         navigator.clipboard.writeText(el.value).then(() => {
-            toastPubSub.pub({ type: "success", text: "Copied to clipboard." });
+            toastPubSub.pub({ type: "success", text: u.copiedToClipboard });
         }).catch(() => {
-            toastPubSub.pub({ type: "warning", text: "Copy failed." });
+            toastPubSub.pub({ type: "warning", text: u.copyFailed });
         });
-    }, []);
+    }, [u.copiedToClipboard, u.copyFailed]);
 
     const downloadName = useMemo(() => lrcFileName(lrcState.info), [lrcState.info]);
 

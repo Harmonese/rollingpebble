@@ -251,7 +251,7 @@
       "running": "執行中",
       "rawLog": "原始日誌",
       "upgradePackaging": "升級打包工具",
-      "removeTorch": "移除现有 Torch 包",
+      "removeTorch": "解除安裝現有 Torch",
       "installTorch": "安裝 Torch 栈",
       "installAudio": "安裝音訊依赖",
       "validate": "验证執行时設定",
@@ -261,7 +261,26 @@
       "taskComplete": "任务完成。",
       "install": "创建/修復執行时",
       "upgrade": "升級 py-roller",
-      "cacheModel": "预下載模型"
+      "cacheModel": "预下載模型",
+      "busy": "另一个操作正在进行",
+      "jobRunning": "已有运行时任务正在运行",
+      "notReady": "未安装运行时，请先创建。",
+      "queued": "排隊中",
+      "canceled": "已取消",
+      "pending": "等待中",
+      "na": "不適用",
+      "runtimeReady": "運行時已就緒：{id}",
+      "detailMissing": "尚未建立隔離運行時。",
+      "detailBroken": "運行時 Python 存在，但其中未安裝 py-roller。",
+      "detailUnhealthy": "運行時存在，但上次運行時檢查報告了問題。",
+      "detailUnchecked": "運行時存在，但尚未記錄成功的運行時檢查。",
+      "commandExitedWithCode": "指令結束，退出碼 {code}。",
+      "ago": "{time}前",
+      "durationSeconds": "{s} 秒",
+      "durationMinutesSeconds": "{m} 分 {s} 秒",
+      "unknown": "未知",
+      "upgradedTo": "py-roller 已升級到 {version}。",
+      "upgraded": "py-roller 已升級成功。"
     },
     "messages": {
       "saving": "正在儲存設定...",
@@ -284,7 +303,9 @@
       "noRuntimesDelete": "没有可刪除的執行时。",
       "noOtherDelete": "没有可刪除的其他專案。",
       "deletedEntries": "已刪除 {count} 条记录，回收 {bytes}",
-      "displayPrefsReset": "顯示設定已重設。"
+      "displayPrefsReset": "顯示設定已重設。",
+      "diagnosticsCopied": "診斷資訊已複製。",
+      "statusRefreshed": "運行時狀態已刷新。"
     }
   },
   "toast": {
@@ -300,6 +321,7 @@
       "logCopied": "任务日誌已複製。",
       "openedFolder": "已開啟 {path}",
       "modelStoreSelected": "转录器模型儲存位置已選擇。",
+      "openingFolder": "正在開啟資料夾選擇器...",
       "selectProject": "请先创建或開啟一个專案。",
       "selectOneProject": "请至少選擇一个專案。",
       "batchStarting": "正在启动批量自动打轴...",
@@ -354,6 +376,7 @@
       "noLyrics": "未找到此歌曲的歌词。",
       "fetchingLyrics": "正在取得网易云歌词...",
       "importedLyrics": "已匯入 {name} 的歌词。",
+      "loadingAudio": "正在載入 {label} 的网易云音訊連結...",
       "loadedAudio": "已載入网易云音訊連結：{label}"
     },
     "upload": {
@@ -379,7 +402,9 @@
       "timeOffsetDesc": "按固定毫秒值偏移所有時間戳",
       "linearTransformDesc": "线性缩放和平移所有時間戳",
       "overwriteLyricsDesc": "替换時間轴行的歌词文本，每行对应一条",
-      "pastePlaceholder": "在此貼上新歌词，每行对应一个時間戳..."
+      "pastePlaceholder": "在此貼上新歌词，每行对应一个時間戳...",
+      "noTimedLines": "当前歌词中没有找到带时间戳的行。",
+      "lineMismatch": "粘贴的歌词行数（{a}）与当前带时间戳行数（{b}）不一致。"
     }
   },
   "ui": {
@@ -400,6 +425,7 @@
     "fetchLyrics": "取得歌詞",
     "openWiki": "開啟百科",
     "loadAudioLink": "載入音訊連結",
+    "durationLabel": "時長",
     "openSong": "開啟歌曲",
     "localFiles": "本地檔案",
     "netease": "网易云",
@@ -415,6 +441,7 @@
     "project": "專案",
     "projectList": "專案列表",
     "noProjects": "暂无專案。",
+    "noResultsFound": "未找到結果。",
     "shown": "{n}/{total} 顯示",
     "dragToReorder": "拖动排序",
     "deleteProject": "刪除專案",
@@ -457,6 +484,7 @@
     "title": "标题",
     "lyricsSource": "歌词来源",
     "id": "ID",
+    "unknownId": "未知",
     "unknownArtist": "未知藝人",
     "untitled": "未命名",
     "manual": "手动",
@@ -472,7 +500,12 @@
     "upload": "上傳",
     "downloadLRC": "下載 LRC",
     "selectAllCopy": "全选複製",
+    "copiedToClipboard": "已複製到剪貼簿。",
+    "copyFailed": "複製失敗。",
+    "failedReadFile": "讀取檔案失敗。",
     "importLyricsText": "匯入歌词文本",
+    "selectedFile": "已選擇：{name}",
+    "spaceKey": "空格",
     "noLyricText": "此记录未返回歌词文本。",
     "instrumentalNoLyrics": "纯音乐 — LRCLIB 无歌词。",
     "generatingPlan": "正在生成计划...",
@@ -523,7 +556,14 @@
     "cpuOnly": "僅 CPU",
     "cuda124": "CUDA 12.4",
     "planReady": "計劃已就緒。",
-    "planWarnings": "計劃存在阻塞性警告。"
+    "planWarnings": "計劃存在阻塞性警告。",
+    "noBatchProjects": "未找到專案。請先匯入音訊。",
+    "autoTimingRuntimeNotReady": "自動打軸運行時尚未就緒。執行 py-roller 前，請先在設定中建立或修復隔離運行時。",
+    "statusQueued": "排隊中",
+    "statusRunning": "運行中",
+    "statusSucceeded": "成功",
+    "statusFailed": "失敗",
+    "statusCanceled": "已取消"
   },
   "about": {
     "kicker": "關於",
@@ -616,6 +656,18 @@
     "unknown": "未知",
     "pending": "等待中",
     "n/a": "不适用",
-    "not run": "未執行"
+    "not run": "未執行",
+    "No filter chain": "无过滤链",
+    "Let Demucs choose": "由 Demucs 选择",
+    "Demucs built-in": "Demucs 内置",
+    "Auto / py-roller default": "自动 / py-roller 默认",
+    "ok": "正常",
+    "passed": "通過",
+    "failed": "失敗",
+    "running": "運行中",
+    "skipped": "已跳過",
+    "broken": "損壞",
+    "unchecked": "未檢查",
+    "unhealthy": "異常"
   }
 }

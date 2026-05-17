@@ -231,6 +231,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/api/netease/audio/{song_id}")
+    def netease_audio(song_id: int, range: str | None = Header(default=None)) -> StreamingResponse:
+        try:
+            upstream = netease.open_audio(song_id, range_header=range)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        def stream_audio():
+            try:
+                while True:
+                    chunk = upstream.read(1024 * 256)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                upstream.close()
+
+        headers: dict[str, str] = {}
+        for source, target in (
+            ("Content-Length", "Content-Length"),
+            ("Content-Range", "Content-Range"),
+            ("Accept-Ranges", "Accept-Ranges"),
+        ):
+            value = upstream.headers.get(source)
+            if value:
+                headers[target] = value
+        media_type = upstream.headers.get_content_type() or "audio/mpeg"
+        return StreamingResponse(stream_audio(), status_code=getattr(upstream, "status", 200), media_type=media_type, headers=headers)
+
     @app.post("/api/projects/{project_id}/roll/preview", response_model=RollPreviewResponse)
     def roll_preview(project_id: str, request: RollRequest) -> RollPreviewResponse:
         try:

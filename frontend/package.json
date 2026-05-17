@@ -1,6 +1,5 @@
 {
   "name": "rollingpebble-frontend",
-  "version": "0.6.0",
   "description": "Local WebUI for pylrclib and py-roller lyrics timing workflow",
   "repository": "https://github.com/Harmonese/rollingpebble",
   "author": "Harmonese",
@@ -21,11 +20,11 @@
   "type": "module",
   "scripts": {
     "start": "vite",
-    "build": "tsc -b --noEmit && vite build",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
     "fix:fmt": "dprint fmt",
     "check:fmt": "dprint check",
     "check:lint": "oxlint src -D correctness",
-    "check:type": "tsc -b --noEmit"
+    "check:type": "tsc --noEmit -p tsconfig.json"
   },
   "imports": {
     "#const/*": "./src/const/*"

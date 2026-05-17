@@ -15,7 +15,22 @@ const langMap = langFiles.map((filename) => {
 });
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf-8")) as { version: string };
+const repoRoot = dirname(rootDir);
+
+const projectVersion = (() => {
+    let inProjectSection = false;
+    for (const line of readFileSync(join(repoRoot, "pyproject.toml"), "utf-8").split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed === "[project]") {
+            inProjectSection = true;
+            continue;
+        }
+        if (inProjectSection && trimmed.startsWith("[")) break;
+        if (!inProjectSection || !trimmed.startsWith("version")) continue;
+        return trimmed.split("=", 2)[1]?.trim().replace(/^"|"$/g, "") || "dev";
+    }
+    return "dev";
+})();
 
 export default defineConfig({
     plugins: [react()],
@@ -23,7 +38,7 @@ export default defineConfig({
         "import.meta.env.app": JSON.stringify({
             hash: "dev",
             updateTime: new Date().toISOString(),
-            version: pkg.version,
+            version: projectVersion,
         }),
         "i18n.langCodeList": JSON.stringify(langCodeList),
         "i18n.langMap": JSON.stringify(langMap),

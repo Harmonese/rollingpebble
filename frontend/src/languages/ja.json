@@ -251,7 +251,7 @@
       "running": "実行中",
       "rawLog": "ログ",
       "upgradePackaging": "Upgrade packaging tools",
-      "removeTorch": "Remove existing Torch packages",
+      "removeTorch": "既存の Torch をアンインストール",
       "installTorch": "Install Torch stack",
       "installAudio": "Install audio requirements",
       "validate": "Validate runtime profile",
@@ -261,7 +261,26 @@
       "taskComplete": "タスク完了",
       "install": "Create / Repair Runtime",
       "upgrade": "Upgrade py-roller",
-      "cacheModel": "Pre-download Model"
+      "cacheModel": "Pre-download Model",
+      "busy": "Another operation is in progress",
+      "jobRunning": "A runtime job is already running",
+      "notReady": "No runtime installed. Create one first.",
+      "queued": "Queued",
+      "canceled": "Canceled",
+      "pending": "pending",
+      "na": "n/a",
+      "runtimeReady": "Runtime ready: {id}",
+      "detailMissing": "Isolated runtime has not been created yet.",
+      "detailBroken": "Runtime Python exists, but py-roller is not installed in it.",
+      "detailUnhealthy": "Runtime exists, but the last doctor check reported problems.",
+      "detailUnchecked": "Runtime exists, but no successful doctor check has been recorded yet.",
+      "commandExitedWithCode": "コマンドがコード {code} で終了しました。",
+      "ago": "{time} 前",
+      "durationSeconds": "{s}秒",
+      "durationMinutesSeconds": "{m}分 {s}秒",
+      "unknown": "不明",
+      "upgradedTo": "py-roller を {version} に更新しました。",
+      "upgraded": "py-roller を更新しました。"
     },
     "messages": {
       "saving": "保存中...",
@@ -284,7 +303,9 @@
       "noRuntimesDelete": "No matching runtimes to delete.",
       "noOtherDelete": "No matching other items to delete.",
       "deletedEntries": "Deleted {count} entries and reclaimed {bytes}",
-      "displayPrefsReset": "表示設定をリセットしました。"
+      "displayPrefsReset": "表示設定をリセットしました。",
+      "diagnosticsCopied": "診断情報をコピーしました。",
+      "statusRefreshed": "実行環境の状態を更新しました。"
     }
   },
   "toast": {
@@ -300,6 +321,7 @@
       "logCopied": "ログコピー",
       "openedFolder": "{path} を開く",
       "modelStoreSelected": "モデル保存場所を選択",
+      "openingFolder": "フォルダー選択を開いています...",
       "selectProject": "プロジェクトを作成してください",
       "selectOneProject": "プロジェクトを選択してください",
       "batchStarting": "バッチ開始中...",
@@ -354,6 +376,7 @@
       "noLyrics": "歌詞なし",
       "fetchingLyrics": "歌詞取得中...",
       "importedLyrics": "{name} の歌詞をインポート",
+      "loadingAudio": "{label} のNetEase音声リンクを読み込み中...",
       "loadedAudio": "NetEase音声リンク: {label}"
     },
     "upload": {
@@ -379,7 +402,9 @@
       "timeOffsetDesc": "全タイムスタンプをオフセット",
       "linearTransformDesc": "線形変換",
       "overwriteLyricsDesc": "各行の歌詞を置換",
-      "pastePlaceholder": "新しい歌詞を貼り付け..."
+      "pastePlaceholder": "新しい歌詞を貼り付け...",
+      "noTimedLines": "No timed lines found in the current lyrics.",
+      "lineMismatch": "Pasted lyric lines ({a}) do not match timed lines ({b})."
     }
   },
   "ui": {
@@ -400,6 +425,7 @@
     "fetchLyrics": "歌詞を取得",
     "openWiki": "Wikiを開く",
     "loadAudioLink": "音声リンク",
+    "durationLabel": "長さ",
     "openSong": "楽曲を開く",
     "localFiles": "ローカル",
     "netease": "NetEase",
@@ -415,6 +441,7 @@
     "project": "プロジェクト",
     "projectList": "プロジェクト一覧",
     "noProjects": "プロジェクトなし",
+    "noResultsFound": "結果なし",
     "shown": "{n}/{total} 表示",
     "dragToReorder": "ドラッグで並べ替え",
     "deleteProject": "削除",
@@ -457,6 +484,7 @@
     "title": "タイトル",
     "lyricsSource": "歌詞ソース",
     "id": "ID",
+    "unknownId": "不明",
     "unknownArtist": "不明なアーティスト",
     "untitled": "無題",
     "manual": "手動",
@@ -472,7 +500,12 @@
     "upload": "upload",
     "downloadLRC": "LRC ダウンロード",
     "selectAllCopy": "全選択コピー",
+    "copiedToClipboard": "クリップボードにコピーしました。",
+    "copyFailed": "コピーに失敗しました。",
+    "failedReadFile": "ファイルを読み込めませんでした。",
     "importLyricsText": "歌詞テキスト",
+    "selectedFile": "選択済み: {name}",
+    "spaceKey": "スペース",
     "noLyricText": "歌詞テキストなし",
     "instrumentalNoLyrics": "インストゥルメンタル",
     "generatingPlan": "プラン生成中...",
@@ -523,7 +556,14 @@
     "cpuOnly": "CPUのみ",
     "cuda124": "CUDA 12.4",
     "planReady": "プラン準備完了。",
-    "planWarnings": "プランに警告があります。"
+    "planWarnings": "プランに警告があります。",
+    "noBatchProjects": "No projects found. Import audio first.",
+    "autoTimingRuntimeNotReady": "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before running py-roller.",
+    "statusQueued": "Queued",
+    "statusRunning": "Running",
+    "statusSucceeded": "Succeeded",
+    "statusFailed": "Failed",
+    "statusCanceled": "Canceled"
   },
   "about": {
     "kicker": "概要",
@@ -620,6 +660,14 @@
     "unknown": "不明",
     "pending": "待機中",
     "n/a": "N/A",
-    "not run": "未実行"
+    "not run": "未実行",
+    "ok": "ok",
+    "passed": "passed",
+    "failed": "failed",
+    "running": "running",
+    "skipped": "skipped",
+    "broken": "broken",
+    "unchecked": "unchecked",
+    "unhealthy": "unhealthy"
   }
 }

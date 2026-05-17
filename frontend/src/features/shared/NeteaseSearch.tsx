@@ -32,6 +32,7 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
         () => [meta.track, meta.artist].filter(Boolean).join(" ") || defaultQuery,
     );
     const [results, setResults] = useState<NeteaseSong[]>([]);
+    const [searched, setSearched] = useState(false);
 
     const placeholderQuery = useMemo(() => {
         return [meta.track, meta.artist].filter(Boolean).join(" ") || defaultQuery;
@@ -44,6 +45,7 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
             return;
         }
         setBusy(true);
+        setSearched(true);
         onMessage(t.netease.matching, "info", 10000);
         try {
             const response = await api.neteaseResolve(value);
@@ -63,6 +65,7 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
             return;
         }
         setBusy(true);
+        setSearched(true);
         onMessage(t.netease.searching, "info", 10000);
         try {
             const response = await api.neteaseSearch({
@@ -118,11 +121,11 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
             </div>
 
             <div className="roller-results">
-                {results.length === 0 && !busy && <p className="roller-muted">No results found.</p>}
+                {searched && results.length === 0 && !busy && <p className="roller-muted">{u.noResultsFound}</p>}
                 {results.map((song) => (
                     <article key={song.id} className="roller-result">
                         <b>{song.label || song.id}</b>
-                        <small>ID: {song.id} · duration: {formatDuration(song.duration)}</small>
+                        <small>{u.id}: {song.id} · {u.durationLabel}: {formatDuration(song.duration)}</small>
                         <div className="roller-actions compact">
                             {renderResultActions({ song, busy })}
                         </div>

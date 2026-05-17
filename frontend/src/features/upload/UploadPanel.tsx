@@ -6,8 +6,17 @@ import { api, type MetaModel, type ProjectModel, type UploadPlan } from "../../s
 import { SETTINGS_UPDATED_EVENT } from "../../shared/settingsEvents.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
+import type { Language } from "../../languages/index.js";
 
 type UploadDestination = "lrclib" | "netease";
+
+const uploadModeLabels = (u: Language["ui"]): Record<string, string> => ({
+    auto: u.auto,
+    mixed: u.mixed,
+    synced: u.synced,
+    plain: u.plain,
+    instrumental: u.instrumental,
+});
 
 export const UploadPanel: React.FC<{
     project: ProjectModel | null;
@@ -23,6 +32,7 @@ export const UploadPanel: React.FC<{
     const [message, setMessage, , messageFading, messageType] = useMessage();
     const { lang } = useContext(appContext, ChangBits.lang);
     const u = lang.ui;
+    const modeLabels = uploadModeLabels(u);
     const [busy, setBusy] = useState(false);
 
     const showMessage = (text: string, type: MessageType, _duration?: number) => {
@@ -95,11 +105,11 @@ export const UploadPanel: React.FC<{
             <div className="roller-form">
                 <label>{u.mode}
                     <select value={mode} onChange={(ev) => setMode(ev.target.value)}>
-                        <option value="auto">Auto</option>
-                        <option value="mixed">Mixed</option>
-                        <option value="synced">Synced</option>
-                        <option value="plain">Plain</option>
-                        <option value="instrumental">Instrumental</option>
+                        <option value="auto">{u.auto}</option>
+                        <option value="mixed">{u.mixed}</option>
+                        <option value="synced">{u.synced}</option>
+                        <option value="plain">{u.plain}</option>
+                        <option value="instrumental">{u.instrumental}</option>
                     </select>
                 </label>
             </div>
@@ -111,7 +121,7 @@ export const UploadPanel: React.FC<{
                 <div className="roller-plan">
                     <div className="roller-kv">
                         <b>{u.canUpload}</b><span>{plan.can_upload ? u.yes : u.no}</span>
-                        <b>{u.mode}</b><span>{plan.mode}</span>
+                        <b>{u.mode}</b><span>{modeLabels[plan.mode] || plan.mode}</span>
                         <b>{u.reason}</b><span>{plan.reason}</span>
                         <b>{u.plainLines}</b><span>{plan.plain_lines}</span>
                         <b>{u.syncedLines}</b><span>{plan.synced_lines}</span>

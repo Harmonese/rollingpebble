@@ -47,7 +47,7 @@ pnpm dev
 
 The main workflow calls this feature **Auto Timing**. The technical engine is `py-roller`.
 
-Starting with v0.5.0, rollingpebble runs py-roller from an **isolated runtime virtual environment** under the rollingpebble data directory instead of installing or repairing py-roller inside the backend `.venv`. This keeps FastAPI/pylrclib separate from heavy audio dependencies such as Torch, Demucs, and faster-whisper.
+rollingpebble runs py-roller from an **isolated runtime virtual environment** under the rollingpebble data directory instead of installing or repairing py-roller inside the backend `.venv`. This keeps FastAPI/pylrclib separate from heavy audio dependencies such as Torch, Demucs, and faster-whisper.
 
 Open **Settings -> Auto Timing -> Runtime** and choose:
 
@@ -77,7 +77,7 @@ export LRC_ROLLER_PYROLLER_SOURCE=/path/to/py-roller
 
 Then use **Create / Repair Runtime** from Settings.
 
-When using the default PyPI source, **Create / Repair Runtime** also upgrades py-roller within the compatible runtime range declared by rollingpebble, currently `py-roller>=0.5.6,<0.6`. It does not upgrade to py-roller 0.6.x until rollingpebble explicitly supports that CLI/runtime contract.
+When using the default PyPI source, **Create / Repair Runtime** also upgrades py-roller within the compatible runtime range declared by rollingpebble. The exact requirement is shown in **Settings -> Auto Timing -> Runtime** and comes from the backend runtime constants.
 
 After a model has been downloaded, enable local cache-only model use in Settings or Auto Timing to avoid unnecessary Hugging Face network access. For restricted networks, prefer `socks5h://` proxies so DNS resolution also goes through the SOCKS proxy.
 

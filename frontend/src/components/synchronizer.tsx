@@ -11,14 +11,14 @@ import { useAudio } from "../hooks/useAudio.js";
 import { InputAction } from "../utils/input-action.js";
 import { isKeyboardElement } from "../utils/is-keyboard-element.js";
 import { getMatchedAction } from "../utils/keybindings.js";
-import { appContext } from "./app.context.js";
+import { appContext, ChangBits } from "./app.context.js";
 import { AsidePanel } from "./asidepanel.js";
 import { Curser } from "./curser.js";
 
-const SpaceButton: React.FC<{ sync: () => void }> = ({ sync }) => {
+const SpaceButton: React.FC<{ sync: () => void; label: string }> = ({ sync, label }) => {
     return (
-        <button className="space-button" onClick={sync}>
-            space
+        <button className="space-button" type="button" aria-label={label} title={label} onClick={sync}>
+            {label}
         </button>
     );
 };
@@ -39,7 +39,7 @@ export const Synchronizer: React.FC<ISynchronizerProps> = ({ state, dispatch }) 
 
     const { selectIndex, currentIndex: highlightIndex, lyric } = state;
 
-    const { prefState, lang } = useContext(appContext);
+    const { prefState, lang } = useContext(appContext, ChangBits.prefState | ChangBits.lang);
     const keyBindings = useKeyBindings();
 
     useEffect(() => {
@@ -254,7 +254,7 @@ export const Synchronizer: React.FC<ISynchronizerProps> = ({ state, dispatch }) 
                 {state.lyric.map(LyricLineIter)}
             </ul>
             <AsidePanel syncMode={syncMode} setSyncMode={setSyncMode} lrcDispatch={dispatch} prefState={prefState} />
-            {prefState.screenButton && <SpaceButton sync={sync} />}
+            {prefState.screenButton && <SpaceButton sync={sync} label={lang.ui.spaceKey} />}
         </>
     );
 };

@@ -15,6 +15,7 @@ from rollingpebble.runtime_constants import (
     PYROLLER_RUNTIME_SPEC,
     PYROLLER_RUNTIME_SUPPORT_SPECS,
 )
+from rollingpebble.runtime_python import select_runtime_python
 
 
 class JsonCommandError(RuntimeError):
@@ -29,9 +30,8 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _runtime_id(profile: str) -> str:
-    version = f"py{sys.version_info.major}{sys.version_info.minor}"
-    return f"pyroller-{version}-{profile}"
+def _runtime_id(profile: str, python_tag: str) -> str:
+    return f"pyroller-{python_tag}-{profile}"
 
 
 def _venv_python(venv: Path) -> Path:
@@ -129,7 +129,8 @@ def _write_runtime_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> None:
-    runtime_id = _runtime_id(profile)
+    runtime_python = select_runtime_python()
+    runtime_id = _runtime_id(profile, runtime_python.tag)
     runtime_root = data_dir / "envs" / runtime_id
     venv = runtime_root / ".venv"
     runtime_json = runtime_root / "runtime.json"
@@ -139,7 +140,8 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
     base_payload: dict[str, Any] = {
         "runtime_id": runtime_id,
         "profile": profile,
-        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
+        "python_version": f"{runtime_python.major}.{runtime_python.minor}",
+        "runtime_python_executable": runtime_python.executable,
         "platform": f"{platform.system().lower()}-{platform.machine().lower()}",
         "venv_path": str(venv),
         "python_path": str(_venv_python(venv)),
@@ -152,6 +154,7 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
     print(f"Creating / repairing isolated py-roller runtime: {runtime_id}", flush=True)
     print(f"Runtime root: {runtime_root}", flush=True)
     print(f"Profile: {profile}", flush=True)
+    print(f"Runtime Python: {runtime_python.executable}", flush=True)
 
     install_report: dict[str, Any] | None = None
     doctor_report: dict[str, Any] | None = None
@@ -160,7 +163,7 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
     env: dict[str, str] | None = None
     try:
         if not python.exists():
-            _run([sys.executable, "-m", "venv", str(venv)])
+            _run([runtime_python.executable, "-m", "venv", str(venv)])
         else:
             print(f"Reusing existing virtual environment: {venv}", flush=True)
 

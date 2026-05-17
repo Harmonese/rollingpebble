@@ -37,9 +37,6 @@ export function useMessage(initial = "") {
 
         if (typeof arg2 === "number") {
             duration = arg2;
-            if (typeof arg3 === "number") {
-                msgType = (arg3 as MessageType) || "info";
-            }
         } else if (typeof arg2 === "string") {
             msgType = arg2;
             if (typeof arg3 === "number") {

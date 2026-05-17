@@ -251,7 +251,7 @@
       "running": "Beží",
       "rawLog": "Log",
       "upgradePackaging": "Upgrade packaging tools",
-      "removeTorch": "Remove existing Torch packages",
+      "removeTorch": "Odinštalovať existujúci Torch",
       "installTorch": "Install Torch stack",
       "installAudio": "Install audio requirements",
       "validate": "Validate runtime profile",
@@ -261,7 +261,26 @@
       "taskComplete": "Úloha dokončená",
       "install": "Create / Repair Runtime",
       "upgrade": "Upgrade py-roller",
-      "cacheModel": "Pre-download Model"
+      "cacheModel": "Pre-download Model",
+      "busy": "Another operation is in progress",
+      "jobRunning": "A runtime job is already running",
+      "notReady": "No runtime installed. Create one first.",
+      "queued": "Queued",
+      "canceled": "Canceled",
+      "pending": "pending",
+      "na": "n/a",
+      "runtimeReady": "Runtime ready: {id}",
+      "detailMissing": "Isolated runtime has not been created yet.",
+      "detailBroken": "Runtime Python exists, but py-roller is not installed in it.",
+      "detailUnhealthy": "Runtime exists, but the last doctor check reported problems.",
+      "detailUnchecked": "Runtime exists, but no successful doctor check has been recorded yet.",
+      "commandExitedWithCode": "Príkaz skončil s kódom {code}.",
+      "ago": "pred {time}",
+      "durationSeconds": "{s}s",
+      "durationMinutesSeconds": "{m}m {s}s",
+      "unknown": "neznáme",
+      "upgradedTo": "py-roller aktualizovaný na {version}.",
+      "upgraded": "py-roller bol úspešne aktualizovaný."
     },
     "messages": {
       "saving": "Saving settings...",
@@ -284,7 +303,9 @@
       "noRuntimesDelete": "No matching runtimes to delete.",
       "noOtherDelete": "No matching other items to delete.",
       "deletedEntries": "Deleted {count} entries and reclaimed {bytes}",
-      "displayPrefsReset": "Nastavenia zobrazenia resetované."
+      "displayPrefsReset": "Nastavenia zobrazenia resetované.",
+      "diagnosticsCopied": "Diagnostika skopírovaná.",
+      "statusRefreshed": "Stav runtime obnovený."
     }
   },
   "toast": {
@@ -300,6 +321,7 @@
       "logCopied": "Log skopírovaný",
       "openedFolder": "Otvorené {path}",
       "modelStoreSelected": "Úložisko vybrané",
+      "openingFolder": "Otvára sa výber priečinka...",
       "selectProject": "Najprv vytvorte projekt",
       "selectOneProject": "Vyberte projekt",
       "batchStarting": "Spúšťa sa dávka...",
@@ -354,6 +376,7 @@
       "noLyrics": "Bez textu",
       "fetchingLyrics": "Získavanie...",
       "importedLyrics": "Imported lyrics for {name}.",
+      "loadingAudio": "Načítava sa audio odkaz NetEase pre {label}...",
       "loadedAudio": "Loaded NetEase audio link: {label}"
     },
     "upload": {
@@ -379,7 +402,9 @@
       "timeOffsetDesc": "Shift all timestamps by a fixed offset in milliseconds",
       "linearTransformDesc": "Scale and shift all timestamps linearly",
       "overwriteLyricsDesc": "Replace lyric text on timed lines, one per row",
-      "pastePlaceholder": "Paste new lyrics here, one line per timestamp..."
+      "pastePlaceholder": "Paste new lyrics here, one line per timestamp...",
+      "noTimedLines": "No timed lines found in the current lyrics.",
+      "lineMismatch": "Pasted lyric lines ({a}) do not match timed lines ({b})."
     }
   },
   "ui": {
@@ -400,6 +425,7 @@
     "fetchLyrics": "Získať text",
     "openWiki": "Otvoriť Wiki",
     "loadAudioLink": "Načítať audio",
+    "durationLabel": "trvanie",
     "openSong": "Otvoriť skladbu",
     "localFiles": "Lokálne",
     "netease": "NetEase",
@@ -415,6 +441,7 @@
     "project": "Projekt",
     "projectList": "Zoznam",
     "noProjects": "Žiadne projekty",
+    "noResultsFound": "Nenašli sa žiadne výsledky.",
     "shown": "{n}/{total} zobrazených",
     "dragToReorder": "Presunutím zmeňte poradie",
     "deleteProject": "Odstrániť",
@@ -457,6 +484,7 @@
     "title": "Názov",
     "lyricsSource": "Zdroj textu",
     "id": "ID",
+    "unknownId": "neznáme",
     "unknownArtist": "Unknown Artist",
     "untitled": "Untitled",
     "manual": "manual",
@@ -472,7 +500,12 @@
     "upload": "Upload",
     "downloadLRC": "Download LRC",
     "selectAllCopy": "Select all and copy",
+    "copiedToClipboard": "Skopírované do schránky.",
+    "copyFailed": "Kopírovanie zlyhalo.",
+    "failedReadFile": "Súbor sa nepodarilo prečítať.",
     "importLyricsText": "Import lyrics text",
+    "selectedFile": "Vybrané: {name}",
+    "spaceKey": "Medzerník",
     "noLyricText": "No lyric text returned for this record.",
     "instrumentalNoLyrics": "Instrumental — no lyrics from LRCLIB.",
     "generatingPlan": "Generating plan...",
@@ -523,7 +556,14 @@
     "cpuOnly": "Iba CPU",
     "cuda124": "CUDA 12.4",
     "planReady": "Plán je pripravený.",
-    "planWarnings": "Plán obsahuje blokujúce varovania."
+    "planWarnings": "Plán obsahuje blokujúce varovania.",
+    "noBatchProjects": "No projects found. Import audio first.",
+    "autoTimingRuntimeNotReady": "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before running py-roller.",
+    "statusQueued": "Queued",
+    "statusRunning": "Running",
+    "statusSucceeded": "Succeeded",
+    "statusFailed": "Failed",
+    "statusCanceled": "Canceled"
   },
   "about": {
     "kicker": "O aplikácii",
@@ -620,6 +660,14 @@
     "unknown": "unknown",
     "pending": "pending",
     "n/a": "n/a",
-    "not run": "not run"
+    "not run": "not run",
+    "ok": "ok",
+    "passed": "passed",
+    "failed": "failed",
+    "running": "running",
+    "skipped": "skipped",
+    "broken": "broken",
+    "unchecked": "unchecked",
+    "unhealthy": "unhealthy"
   }
 }

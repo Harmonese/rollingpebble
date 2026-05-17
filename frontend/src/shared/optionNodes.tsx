@@ -1,5 +1,3 @@
-import React from "react";
-
 type Option = { value: string; label: string; disabled?: boolean };
 
 export const optionNodes = (

@@ -41,6 +41,7 @@ import {
   type Language,
   type LocalOnly,
   type Repetition,
+  type Spacing,
 } from "./autoTimingOptions.js";
 
 function formatCommandPreview(commandText: string | null | undefined, placeholder: string): string {
@@ -121,6 +122,25 @@ function progressMessage(progress: JobModel["progress"], msg: { waiting: string;
   return progress.message || msg.working;
 }
 
+function runtimeMessage(text: string, u: { autoTimingRuntimeNotReady: string }): string {
+  if (text === "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before running py-roller.") {
+    return u.autoTimingRuntimeNotReady || text;
+  }
+  return text;
+}
+
+function jobStatusLabel(status: string | undefined, u: { statusQueued: string; statusRunning: string; statusSucceeded: string; statusFailed: string; statusCanceled: string }): string {
+  if (!status) return "";
+  const labels: Record<string, string> = {
+    queued: u.statusQueued,
+    running: u.statusRunning,
+    succeeded: u.statusSucceeded,
+    failed: u.statusFailed,
+    canceled: u.statusCanceled,
+  };
+  return labels[status] || status;
+}
+
 function buildStageSequence(labels: Record<string, string>) {
   return [
     { key: "preflight", label: labels.preflight },
@@ -169,7 +189,8 @@ export const RollerPanel: React.FC<{
   const { lang, prefState } = useContext(appContext, ChangBits.lang | ChangBits.prefState);
   const u = lang.ui;
   const s = lang.settings;
-  const trOpt = (key: string) => lang.optionLabels?.[key] || key;
+  const tm = lang.toast.autoTiming;
+  const trOpt = (key: string) => (lang.optionLabels as Record<string, string | undefined>)?.[key] || key;
 
   // Merge UI language into the roll payload so py-roller can set PYROLLER_LANG
   const rollPayload = () => ({ ...at.buildRollPayload(), ui_lang: prefState.lang });
@@ -242,10 +263,10 @@ export const RollerPanel: React.FC<{
             const refreshed = await api.getProject(project.project_id);
             onProject(refreshed, false);
           }
-          toastPubSub.pub({ type: "success", text: s.autoTiming.finished });
+          toastPubSub.pub({ type: "success", text: tm.finished });
         }
-        if (updated.status === "failed") toastPubSub.pub({ type: "error", text: updated.error || s.autoTiming.failed });
-        if (updated.status === "canceled") toastPubSub.pub({ type: "warning", text: s.autoTiming.canceled });
+        if (updated.status === "failed") toastPubSub.pub({ type: "error", text: updated.error || tm.failed });
+        if (updated.status === "canceled") toastPubSub.pub({ type: "warning", text: tm.canceled });
       } catch (error) {
         toastPubSub.pub({ type: "error", text: (error as Error).message });
       }
@@ -264,7 +285,7 @@ export const RollerPanel: React.FC<{
 
   const start = async () => {
     if (!project) {
-      setMessage(s.autoTiming.selectProject, "warning", 4000);
+      setMessage(tm.selectProject, "warning", 4000);
       return;
     }
     if (!inputState.ready) {
@@ -272,12 +293,12 @@ export const RollerPanel: React.FC<{
       return;
     }
     setBusy(true);
-    setMessage(s.autoTiming.starting, "info", 10000);
+    setMessage(tm.starting, "info", 10000);
     try {
       await saveAndPreview();
       const created = await api.roll(project.project_id, rollPayload());
       setJob(created);
-      toastPubSub.pub({ type: "success", text: s.autoTiming.started.replace("{id}", created.job_id) });
+      toastPubSub.pub({ type: "success", text: tm.started.replace("{id}", created.job_id) });
     } catch (error) {
       toastPubSub.pub({ type: "error", text: (error as Error).message });
     } finally {
@@ -286,7 +307,7 @@ export const RollerPanel: React.FC<{
   };
 
   const retry = async () => {
-    setMessage(s.autoTiming.retrying, "info", 10000);
+    setMessage(tm.retrying, "info", 10000);
     await start();
   };
 
@@ -296,7 +317,7 @@ export const RollerPanel: React.FC<{
     try {
       const canceled = await api.cancelJob(job.job_id);
       setJob(canceled);
-      toastPubSub.pub({ type: "success", text: s.autoTiming.cancelRequested });
+      toastPubSub.pub({ type: "success", text: tm.cancelRequested });
     } catch (error) {
       toastPubSub.pub({ type: "error", text: (error as Error).message });
     } finally {
@@ -333,16 +354,16 @@ export const RollerPanel: React.FC<{
 
   const startBatch = async () => {
     if (selectedBatchIds.size === 0) {
-      setMessage(s.autoTiming.selectOneProject, "warning", 4000);
+      setMessage(tm.selectOneProject, "warning", 4000);
       return;
     }
     setBusy(true);
-    setMessage(s.autoTiming.batchStarting, "info", 10000);
+    setMessage(tm.batchStarting, "info", 10000);
     try {
       const payload = { ...rollPayload(), project_ids: [...selectedBatchIds], continue_on_error: true };
       const created = await api.batchRoll(payload);
       setJob(created);
-      toastPubSub.pub({ type: "success", text: s.autoTiming.batchStarted.replace("{id}", created.job_id).replace("{count}", String(selectedBatchIds.size)) });
+      toastPubSub.pub({ type: "success", text: tm.batchStarted.replace("{id}", created.job_id).replace("{count}", String(selectedBatchIds.size)) });
     } catch (error) {
       toastPubSub.pub({ type: "error", text: (error as Error).message });
     } finally {
@@ -356,31 +377,32 @@ export const RollerPanel: React.FC<{
     const text = preview?.command_text || job?.command.join(" ") || "";
     if (!text) return;
     await navigator.clipboard?.writeText(text);
-    toastPubSub.pub({ type: "success", text: s.autoTiming.commandCopied });
+    toastPubSub.pub({ type: "success", text: tm.commandCopied });
   };
 
   const copyLog = async () => {
     if (!job) return;
     await navigator.clipboard?.writeText(job.logs.join("\n") || job.command.join(" "));
-    toastPubSub.pub({ type: "success", text: s.autoTiming.logCopied });
+    toastPubSub.pub({ type: "success", text: tm.logCopied });
   };
 
   const openJobFolder = async () => {
     if (!job) return;
     try {
       const result = await api.openJobFolder(job.job_id);
-      toastPubSub.pub({ type: "success", text: s.autoTiming.openedFolder.replace("{path}", result.path) });
+      toastPubSub.pub({ type: "success", text: tm.openedFolder.replace("{path}", result.path) });
     } catch (error) {
       toastPubSub.pub({ type: "error", text: (error as Error).message });
     }
   };
 
   const browseModelPath = async () => {
+    toastPubSub.pub({ type: "info", text: tm.openingFolder });
     try {
       const result = await api.selectLocalPath({ mode: "directory", title: "Select transcriber model store", initial_path: at.transcriberModelPath || transcriberModelStoreDefault || null });
       if (!result.canceled && result.path) {
         at.setTranscriberModelPath(result.path);
-        toastPubSub.pub({ type: "success", text: s.autoTiming.modelStoreSelected });
+        toastPubSub.pub({ type: "success", text: tm.modelStoreSelected });
       }
     } catch (error) {
       toastPubSub.pub({ type: "error", text: (error as Error).message });
@@ -388,7 +410,7 @@ export const RollerPanel: React.FC<{
   };
 
 
-  const stageLabels = { preflight: u.modelPreflight, modelDownload: u.modelDownload, splitter: u.splitter, filter: u.filtering, transcriber: u.transcription, parser: u.lyricsParsing, aligner: u.alignment, writer: u.writer };
+  const stageLabels = { queued: u.statusQueued, running: u.statusRunning, preflight: u.modelPreflight, modelDownload: u.modelDownload, splitter: u.splitter, filter: u.filtering, transcriber: u.transcription, parser: u.lyricsParsing, aligner: u.alignment, writer: u.writer };
   const stageSequence = useMemo(() => buildStageSequence(stageLabels), [stageLabels]);
   const commandPreviewText = formatCommandPreview(preview?.command_text, u.commandPreviewPlaceholder);
 
@@ -413,7 +435,7 @@ export const RollerPanel: React.FC<{
       {batchMode === "batch" && (
         <>
           <div className="roller-section-title">{u.selectProjects}</div>
-          {batchProjects.length === 0 && <p className="roller-muted">No projects found. Import audio first.</p>}
+          {batchProjects.length === 0 && <p className="roller-muted">{u.noBatchProjects}</p>}
           {batchProjects.length > 0 && (
             <>
               <div className="roller-actions compact">
@@ -442,6 +464,7 @@ export const RollerPanel: React.FC<{
             <span className={inputState.lyricsReady ? "status-ok" : "status-missing"}>{u.lyrics}: {at.includesParser ? (inputState.lyricsReady ? u.ready : u.missing) : u.notNeeded}</span>
           </div>
           {!inputState.ready && <p className="roller-warning">{inputState.reason}</p>}
+          {previewError && <p className="roller-warning">{runtimeMessage(previewError, u)}</p>}
         </>
       )}
 
@@ -471,7 +494,7 @@ export const RollerPanel: React.FC<{
           <span className="browse-row"><input placeholder={transcriberModelStoreDefault || "rollingpebble model store"} value={at.transcriberModelPath} onChange={(ev) => at.setTranscriberModelPath(ev.target.value)} disabled={!at.includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!at.includesTranscriber}>{u.browse}</button></span>
         </label>
         <label>{s.autoTiming.spacing}
-          <select value={at.writerSpacing} onChange={(ev) => at.setWriterSpacing(ev.target.value)} disabled={!at.includesWriter}>
+          <select value={at.writerSpacing} onChange={(ev) => at.setWriterSpacing(ev.target.value as Spacing)} disabled={!at.includesWriter}>
             {optionNodes(SPACING_OPTIONS, trOpt)}
           </select>
         </label>
@@ -565,7 +588,7 @@ export const RollerPanel: React.FC<{
         <section className="roller-progress-card" aria-live="polite">
           <div className="roller-progress-head">
             <b>{progressStageLabel(progress?.stage || (job?.status === "queued" ? "queued" : "running"), stageLabels, { preparing: u.preparing, complete: u.complete })}</b>
-            <span>{typeof progressPercent === "number" ? `${Math.round(progressPercent * 100)}%` : job?.status}</span>
+            <span>{typeof progressPercent === "number" ? `${Math.round(progressPercent * 100)}%` : jobStatusLabel(job?.status, u)}</span>
           </div>
           <div className={progressWidth ? "roller-progress-bar" : "roller-progress-bar indeterminate"}>
             <span style={progressWidth ? { width: progressWidth } : undefined} />
@@ -577,7 +600,7 @@ export const RollerPanel: React.FC<{
           {progress?.cache_dir && <p className="roller-muted progress-cache">Cache: {progress.cache_dir}</p>}
           <ol className="roller-stage-list">
             {stageSequence.map((item) => (
-              <li key={item.key} className={`stage-${stageStatus(item.key, progress?.stage || "", job?.status, job?.completed_stages || [])}`}>
+              <li key={item.key} className={`stage-${stageStatus(item.key, progress?.stage || "", stageSequence, job?.status, job?.completed_stages || [])}`}>
                 <span />{item.label}
               </li>
             ))}
@@ -601,7 +624,6 @@ export const RollerPanel: React.FC<{
           </>
         )}
       </div>
-      {batchMode === "single" && startDisabled && !running && <p className="roller-warning">{inputState.reason}</p>}
       {message && <p className={`roller-message ${messageType}${messageFading ? " fading" : ""}`}>{message}</p>}
 
       {batchMode === "single" && <details>
@@ -609,8 +631,7 @@ export const RollerPanel: React.FC<{
         <div className="roller-actions compact">
           <button type="button" disabled={!preview && !job} onClick={() => void copyCommand()}>{u.copyCommand}</button>
         </div>
-        {previewBusy && <p className="roller-muted">Updating command preview...</p>}
-        {previewError && <p className="roller-warning">{previewError}</p>}
+        {previewBusy && <p className="roller-muted">{u.updatingPreview}</p>}
         {preview?.warnings?.map((warning) => <p key={warning} className="roller-warning">{warning}</p>)}
         <pre className="roller-command" aria-label="Command preview"><code>{commandPreviewText}</code></pre>
       </details>}

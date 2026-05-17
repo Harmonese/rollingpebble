@@ -24,7 +24,12 @@ def new_project_id() -> str:
 
 
 def project_dir(projects_root: Path, project_id: str) -> Path:
-    return projects_root / project_id
+    candidate = projects_root / project_id
+    try:
+        candidate.resolve(strict=False).relative_to(projects_root.resolve(strict=False))
+    except ValueError as exc:
+        raise FileNotFoundError(f"Project not found: {project_id}") from exc
+    return candidate
 
 
 def read_project(projects_root: Path, project_id: str) -> ProjectModel:

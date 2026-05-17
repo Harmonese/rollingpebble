@@ -64,6 +64,25 @@
     --editor-bg-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.88));
 }
 
+@media (prefers-color-scheme: light) {
+    [data-theme="auto"] {
+        --roller-bg: #f2f4f5;
+        --roller-surface: #fafbfc;
+        --roller-surface-2: #eef0f2;
+        --roller-surface-3: #e4e7eb;
+        --roller-border: #d5d9de;
+        --roller-text: #1a1d22;
+        --roller-muted: #69727d;
+        --roller-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+
+        --overlay-subtle: rgba(0, 0, 0, 0.03);
+        --overlay-light: rgba(0, 0, 0, 0.05);
+        --overlay-border: rgba(0, 0, 0, 0.07);
+        --card-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.015), rgba(0, 0, 0, 0.005)), var(--roller-surface);
+        --editor-bg-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.88));
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     :root {
         --transition-duration: 10ms;

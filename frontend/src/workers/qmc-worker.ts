@@ -1,4 +1,20 @@
-const qmcWorker = self as DedicatedWorkerGlobalScope;
+export {};
+
+type WorkerScope = {
+    addEventListener: (type: "message", listener: (ev: MessageEvent<File>) => void) => void;
+    postMessage: <T>(message: T, transfer?: Transferable[]) => void;
+    close: () => void;
+};
+
+declare class FileReaderSync {
+    readAsArrayBuffer(blob: Blob): ArrayBuffer;
+}
+
+const qmcWorker = self as unknown as WorkerScope;
+
+const toArrayBuffer = (data: Uint8Array): ArrayBuffer => {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+};
 
 // dprint-ignore
 const keys = [
@@ -24,6 +40,6 @@ qmcWorker.addEventListener("message", (ev) => {
         return v ^ keys[index];
     });
 
-    qmcWorker.postMessage<IMessage>({ type: "success", payload: decryptedData }, [decryptedData.buffer]);
+    qmcWorker.postMessage<IMessage>({ type: "success", payload: decryptedData }, [toArrayBuffer(decryptedData)]);
     qmcWorker.close();
 });

@@ -1,4 +1,20 @@
-const ncmcWorker = self as DedicatedWorkerGlobalScope;
+export {};
+
+type WorkerScope = {
+    addEventListener: (type: "message", listener: (ev: MessageEvent<File>) => void | Promise<void>) => void;
+    postMessage: <T>(message: T, transfer?: Transferable[]) => void;
+    close: () => void;
+};
+
+declare class FileReaderSync {
+    readAsArrayBuffer(blob: Blob): ArrayBuffer;
+}
+
+const ncmcWorker = self as unknown as WorkerScope;
+
+const toArrayBuffer = (data: Uint8Array): ArrayBuffer => {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+};
 
 const CORE_KEY = Uint8Array.of(
     0x68,
@@ -85,13 +101,13 @@ const AES_ECB_DECRYPT = async (keyData: Uint8Array, data: Uint8Array): Promise<U
         iv: new Uint8Array(16),
     };
 
-    const cryptoKey = await crypto.subtle.importKey("raw", keyData, "AES-CBC", false, ["encrypt", "decrypt"]);
+    const cryptoKey = await crypto.subtle.importKey("raw", toArrayBuffer(keyData), "AES-CBC", false, ["encrypt", "decrypt"]);
 
     const bodyLength = data.byteLength - 16;
 
     const tailBlock = data.slice(bodyLength);
 
-    const deTailBlock = await crypto.subtle.decrypt(AES, cryptoKey, tailBlock);
+    const deTailBlock = await crypto.subtle.decrypt(AES, cryptoKey, toArrayBuffer(tailBlock));
 
     const decrypted = new Uint8Array(bodyLength + deTailBlock.byteLength);
 
@@ -110,13 +126,13 @@ const AES_ECB_DECRYPT = async (keyData: Uint8Array, data: Uint8Array): Promise<U
                 iv: clip,
             },
             cryptoKey,
-            padding,
+            toArrayBuffer(padding),
         );
 
         cipher.set(clip, 0);
         cipher.set(new Uint8Array(encryptedPadding).slice(0, 16), 16);
 
-        const result = await crypto.subtle.decrypt({ name: "AES-CBC", iv: new ArrayBuffer(16) }, cryptoKey, cipher);
+        const result = await crypto.subtle.decrypt({ name: "AES-CBC", iv: new ArrayBuffer(16) }, cryptoKey, toArrayBuffer(cipher));
         decrypted.set(new Uint8Array(result), curser);
     }
 
@@ -189,6 +205,6 @@ ncmcWorker.addEventListener("message", async (ev) => {
         return data;
     })();
 
-    ncmcWorker.postMessage<IMessage>({ type: "success", payload: decryptedData }, [decryptedData.buffer]);
+    ncmcWorker.postMessage<IMessage>({ type: "success", payload: decryptedData }, [toArrayBuffer(decryptedData)]);
     ncmcWorker.close();
 });

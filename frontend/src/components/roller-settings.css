@@ -410,21 +410,23 @@
 }
 
 .stepper-row {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: 32px minmax(24px, auto) 32px;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
     margin-top: 4px;
+    width: max-content;
 }
 
 .stepper-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 32px;
+    height: 32px;
     padding: 0;
     border: 1px solid var(--roller-border);
-    border-radius: 50%;
+    border-radius: var(--radius-sm);
     background: var(--roller-surface-2);
     color: var(--roller-text);
     font-size: 0.85rem;

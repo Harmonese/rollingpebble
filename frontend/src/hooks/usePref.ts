@@ -44,6 +44,7 @@ const reducer = (state: State, action: Action): State => {
 };
 
 const langCodeList = i18n.langCodeList;
+const isHexColor = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
 
 const init = (lazyInit: () => string): State => {
     const state: Mutable<State> = initState;
@@ -71,6 +72,9 @@ const init = (lazyInit: () => string): State => {
             }
         }
         if (state.themeColor === themeColor.pink) {
+            state.themeColor = themeColor.logic;
+        }
+        if (!isHexColor(state.themeColor)) {
             state.themeColor = themeColor.logic;
         }
     } catch {

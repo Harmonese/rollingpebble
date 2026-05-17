@@ -173,7 +173,9 @@ export const ProjectPanel: React.FC<{
     };
 
     // Drag-and-drop handlers
-    const onDragStart = (index: number) => {
+    const onDragStart = (ev: React.DragEvent, index: number) => {
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("application/x-rollingpebble-project", String(index));
         dragIndex.current = index;
     };
 
@@ -243,7 +245,7 @@ export const ProjectPanel: React.FC<{
                                 dragOverIndex === index && dragIndex.current !== index ? "drag-target" : "",
                             ].filter(Boolean).join(" ")}
                             draggable={!pendingDelete}
-                            onDragStart={() => onDragStart(index)}
+                            onDragStart={(ev) => onDragStart(ev, index)}
                             onDragOver={(ev) => onDragOver(ev, index)}
                             onDragLeave={onDragLeave}
                             onDrop={() => onDrop(index)}
@@ -268,7 +270,7 @@ export const ProjectPanel: React.FC<{
                             )}
                         </div>
                     ))}
-                    {!visibleProjects.length && <p className="roller-message subtle">No projects to show.</p>}
+                    {!visibleProjects.length && <p className="roller-message subtle">{u.noProjects}</p>}
                 </div>
             </details>
             {message && <p className={`roller-message ${messageType}${messageFading ? " fading" : ""}`}>{message}</p>}

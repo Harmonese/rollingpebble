@@ -357,7 +357,7 @@ class AutoRollerRuntimeResponse(BaseModel):
 class RuntimeInstallRequest(BaseModel):
     profile: Literal["auto", "cpu", "cu124"] = "auto"
     skip_doctor: bool = False
-    # Kept for compatibility with older frontends. v0.5.0 always creates or repairs
+    # Kept for compatibility with older frontends. Runtime install always creates or repairs
     # the isolated runtime; dry-run is intentionally ignored.
     dry_run: bool = False
 

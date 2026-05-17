@@ -686,9 +686,9 @@ class StorageService:
 
     def _other_label(self, path: Path) -> str:
         if path.name == "settings.json":
-            return "storage_label.settings_file"
+            return "Settings File"
         if path.name == "cache":
-            return "storage_label.external_cache"
+            return "External Cache"
         return path.name
 
     def _other_item_for_path(self, relative_path: str) -> StorageOtherItemModel:

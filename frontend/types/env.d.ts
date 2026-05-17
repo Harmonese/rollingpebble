@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-    app: {
+    app?: {
         hash: string;
         version: string;
         updateTime: string;

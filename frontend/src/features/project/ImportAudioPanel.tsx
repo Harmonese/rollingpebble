@@ -46,6 +46,7 @@ export const ImportAudioPanel: React.FC<{
     };
 
     const loadNeteaseAudio = (song: NeteaseSong) => {
+        toastPubSub.pub({ type: "info", text: t.netease.loadingAudio.replace("{label}", song.label || String(song.id)) });
         loadProjectAudioUrlForPlayback(song.playback_url || song.outer_audio_url, song.outer_audio_url || undefined);
     };
 
