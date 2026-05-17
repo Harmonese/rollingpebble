@@ -166,10 +166,13 @@ export const RollerPanel: React.FC<{
   const [previewError, setPreviewError] = useState("");
   const [message, setMessage, , messageFading, messageType] = useMessage();
   const [busy, setBusy] = useState(false);
-  const { lang } = useContext(appContext, ChangBits.lang);
+  const { lang, prefState } = useContext(appContext, ChangBits.lang | ChangBits.prefState);
   const u = lang.ui;
   const s = lang.settings;
   const trOpt = (key: string) => lang.optionLabels?.[key] || key;
+
+  // Merge UI language into the roll payload so py-roller can set PYROLLER_LANG
+  const rollPayload = () => ({ ...at.buildRollPayload(), ui_lang: prefState.lang });
 
   const inputState = useMemo(
     () => computeInputState(project, plainLyrics, syncedLyrics, at.stages, { noProject: u.selectProject, noAudio: u.noAudio, noLyrics: u.noLyrics, ready: u.ready }),
@@ -210,7 +213,7 @@ export const RollerPanel: React.FC<{
     setPreviewError("");
     const timer = window.setTimeout(async () => {
       try {
-        const next = await api.rollPreview(project.project_id, at.buildRollPayload());
+        const next = await api.rollPreview(project.project_id, rollPayload());
         if (!canceled) setPreview(next);
       } catch (error) {
         if (!canceled) {
@@ -253,7 +256,7 @@ export const RollerPanel: React.FC<{
   const saveAndPreview = async () => {
     if (!project) throw new Error("Create or open a project first.");
     await api.saveEditor(project.project_id, { plain_lyrics: plainLyrics, synced_lyrics: syncedLyrics, metadata: editorMeta });
-    const next = await api.rollPreview(project.project_id, at.buildRollPayload());
+    const next = await api.rollPreview(project.project_id, rollPayload());
     setPreview(next);
     setPreviewError("");
     return next;
@@ -272,7 +275,7 @@ export const RollerPanel: React.FC<{
     setMessage(s.autoTiming.starting, "info", 10000);
     try {
       await saveAndPreview();
-      const created = await api.roll(project.project_id, at.buildRollPayload());
+      const created = await api.roll(project.project_id, rollPayload());
       setJob(created);
       toastPubSub.pub({ type: "success", text: s.autoTiming.started.replace("{id}", created.job_id) });
     } catch (error) {
@@ -336,7 +339,7 @@ export const RollerPanel: React.FC<{
     setBusy(true);
     setMessage(s.autoTiming.batchStarting, "info", 10000);
     try {
-      const payload = { ...at.buildRollPayload(), project_ids: [...selectedBatchIds], continue_on_error: true };
+      const payload = { ...rollPayload(), project_ids: [...selectedBatchIds], continue_on_error: true };
       const created = await api.batchRoll(payload);
       setJob(created);
       toastPubSub.pub({ type: "success", text: s.autoTiming.batchStarted.replace("{id}", created.job_id).replace("{count}", String(selectedBatchIds.size)) });
@@ -465,7 +468,7 @@ export const RollerPanel: React.FC<{
           </select>
         </label>
         <label className="field-with-browse">{s.autoTiming.modelStoreLabel}
-          <span className="browse-row"><input placeholder={transcriberModelStoreDefault || "lrc-roller model store"} value={at.transcriberModelPath} onChange={(ev) => at.setTranscriberModelPath(ev.target.value)} disabled={!at.includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!at.includesTranscriber}>{u.browse}</button></span>
+          <span className="browse-row"><input placeholder={transcriberModelStoreDefault || "rollingpebble model store"} value={at.transcriberModelPath} onChange={(ev) => at.setTranscriberModelPath(ev.target.value)} disabled={!at.includesTranscriber} /><button type="button" onClick={browseModelPath} disabled={!at.includesTranscriber}>{u.browse}</button></span>
         </label>
         <label>{s.autoTiming.spacing}
           <select value={at.writerSpacing} onChange={(ev) => at.setWriterSpacing(ev.target.value)} disabled={!at.includesWriter}>
@@ -551,7 +554,7 @@ export const RollerPanel: React.FC<{
           <>
             <div className="roller-section-title">{u.writer}</div>
             <div className="roller-form two-col">
-              <label>{s.autoTiming.byTag}<input placeholder="LRC Roller" value={at.writerByTag} onChange={(ev) => at.setWriterByTag(ev.target.value)} /></label>
+              <label>{s.autoTiming.byTag}<input placeholder="RollingPebble" value={at.writerByTag} onChange={(ev) => at.setWriterByTag(ev.target.value)} /></label>
               <label>{s.autoTiming.assKaraokeTag}<select value={at.writerKaraokeTag} onChange={(ev) => at.setWriterKaraokeTag(ev.target.value)} disabled={!at.writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS, trOpt)}</select></label>
             </div>
           </>

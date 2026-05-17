@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import yaml
 
-from lrc_roller.models import BatchRollRequest, RollRequest
+from rollingpebble.models import BatchRollRequest, RollRequest
 
 PIPELINE_ORDER = ("s", "f", "t", "p", "a", "w")
 PIPELINE_INDEX = {stage: index for index, stage in enumerate(PIPELINE_ORDER)}
@@ -47,6 +47,20 @@ def _proxy_can_be_exported_to_stdlib_env(proxy: str) -> bool:
     return scheme in {"http", "https"}
 
 
+# Map rollingpebble UI language codes to py-roller PYROLLER_LANG locale codes.
+# py-roller v0.6.0+ uses this env var to select its display language.
+_UI_LANG_TO_PYROLLER_LANG: dict[str, str] = {
+    "zh-CN": "zh",
+    "zh-HK": "zh_Hant_HK",
+    "zh-TW": "zh_Hant",
+    "ja": "ja",
+    "ko-KR": "ko",
+    "pl-PL": "pl",
+    "pt-BR": "pt",
+    "sk-SK": "sk",
+}
+
+
 def build_pyroller_env(request: RollRequest, base_env: dict[str, str] | None = None) -> dict[str, str] | None:
     """Return subprocess environment overrides for py-roller downloads.
 
@@ -54,15 +68,21 @@ def build_pyroller_env(request: RollRequest, base_env: dict[str, str] | None = N
     backends and their dependencies also consult process-level environment
     variables. In particular Transformers / huggingface_hub based phoneme
     backends may open their own HTTP clients while resolving model assets.
-    Exporting the same settings here keeps lrc-roller's UI proxy field
+    Exporting the same settings here keeps rollingpebble's UI proxy field
     effective for all py-roller transcriber backends.
     """
     stages = set(normalize_stages(request.stages))
-    if "t" not in stages:
-        return None
-
     env = dict(base_env if base_env is not None else os.environ)
     changed = False
+
+    if request.ui_lang:
+        pyroller_lang = _UI_LANG_TO_PYROLLER_LANG.get(request.ui_lang)
+        if pyroller_lang:
+            env["PYROLLER_LANG"] = pyroller_lang
+            changed = True
+
+    if "t" not in stages:
+        return env if changed else None
 
     proxy = str(request.transcriber_hf_proxy or "").strip()
     if proxy and _proxy_can_be_exported_to_stdlib_env(proxy):
@@ -281,7 +301,7 @@ def build_pyroller_batch_command(
                                    sort_keys=False)
 
     # Write manifest to a temp file alongside the first project's intermediate dir
-    # so it lives in the lrc-roller data directory.
+    # so it lives in the rollingpebble data directory.
     tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix="batch_manifest_",
                                       delete=False, encoding="utf-8")
     tmp.write(manifest_text)

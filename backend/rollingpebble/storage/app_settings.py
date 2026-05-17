@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from lrc_roller.models import RuntimeSettingsModel
+from rollingpebble.models import RuntimeSettingsModel
 
 SETTINGS_JSON = "settings.json"
 

@@ -1,4 +1,4 @@
-export const LOAD_PROJECT_AUDIO_EVENT = "lrc-roller:load-project-audio";
+export const LOAD_PROJECT_AUDIO_EVENT = "rollingpebble:load-project-audio";
 
 export type ProjectAudioLoadDetail =
     | { file: File; url?: never; fallbackUrl?: never }

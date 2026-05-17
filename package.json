@@ -1,5 +1,5 @@
 {
-  "name": "lrc-roller",
+  "name": "rollingpebble",
   "version": "0.5.5",
   "private": true,
   "description": "Local WebUI frontend for py-roller and pylrclib.",
@@ -7,7 +7,7 @@
     "start": "pnpm -C frontend start",
     "dev": "pnpm -C frontend start --host 127.0.0.1 --port 5173",
     "dev:frontend": "pnpm -C frontend start --host 127.0.0.1 --port 5173",
-    "dev:backend": "lrc-roller serve --reload",
+    "dev:backend": "rollingpebble serve --reload",
     "build": "pnpm -C frontend build",
     "install:frontend": "pnpm -C frontend install"
   },

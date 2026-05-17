@@ -193,6 +193,8 @@ class RollRequest(BaseModel):
     writer_by_tag: str | None = None
     writer_ass_karaoke_tag_type: Literal["k", "K", "kf", "ko"] | None = None
 
+    ui_lang: str | None = None
+
     cleanup: Literal["on-success", "never"] = "on-success"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
@@ -314,7 +316,7 @@ class RuntimeSettingsModel(BaseModel):
     auto_timing_aligner_min_gap: float | None = 0.5
     auto_timing_aligner_repetition: Literal["none", "few", "full"] = "none"
 
-    auto_timing_writer_by_tag: str = "LRC Roller"
+    auto_timing_writer_by_tag: str = "RollingPebble"
     auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] = "kf"
 
     recent_projects_limit: int = 8

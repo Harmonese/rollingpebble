@@ -19,7 +19,7 @@ def _read_version_from_pyproject() -> str:
 
 def app_version() -> str:
     try:
-        return importlib.metadata.version("lrc-roller")
+        return importlib.metadata.version("rollingpebble")
     except importlib.metadata.PackageNotFoundError:
         return _read_version_from_pyproject()
 

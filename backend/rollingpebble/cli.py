@@ -14,10 +14,10 @@ from typing import Iterable
 
 import uvicorn
 
-from lrc_roller.config import DEFAULT_HOST, DEFAULT_PORT, Settings
-from lrc_roller.main import create_app
-from lrc_roller.services.runtime_manager import RuntimeManager
-from lrc_roller.storage.app_settings import SettingsStore
+from rollingpebble.config import DEFAULT_HOST, DEFAULT_PORT, Settings
+from rollingpebble.main import create_app
+from rollingpebble.services.runtime_manager import RuntimeManager
+from rollingpebble.storage.app_settings import SettingsStore
 
 
 def _repo_root() -> Path:
@@ -31,12 +31,12 @@ def _repo_root() -> Path:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="lrc-roller",
+        prog="rollingpebble",
         description="Local WebUI frontend for py-roller and pylrclib. Running without a subcommand starts the server.",
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    serve = subparsers.add_parser("serve", help="Start the local lrc-roller backend/server")
+    serve = subparsers.add_parser("serve", help="Start the local rollingpebble backend/server")
     _add_serve_args(serve)
 
     dev = subparsers.add_parser("dev", help="Start backend on 6789 and Vite frontend on 5173")
@@ -51,7 +51,7 @@ def build_parser() -> argparse.ArgumentParser:
     setup.add_argument("--skip-doctor", action="store_true", help="Pass --skip-doctor to py-roller install")
     setup.add_argument("--dry-run", action="store_true", help="Print commands without running them")
 
-    doctor = subparsers.add_parser("doctor", help="Show lrc-roller, frontend, pylrclib, and isolated py-roller runtime status")
+    doctor = subparsers.add_parser("doctor", help="Show rollingpebble, frontend, pylrclib, and isolated py-roller runtime status")
     doctor.add_argument("--run-pyroller-doctor", action="store_true", help="Also execute py-roller doctor inside the isolated runtime")
     doctor.add_argument("--profile", choices=("auto", "cpu", "cu124"), default=None, help="Runtime profile to inspect; defaults to saved settings")
     return parser
@@ -81,12 +81,12 @@ def _port_available(host: str, port: int) -> bool:
 
 def _print_port_help(host: str, port: int) -> None:
     print(
-        f"lrc-roller could not start because http://{host}:{port} is already in use.\n\n"
+        f"rollingpebble could not start because http://{host}:{port} is already in use.\n\n"
         "On macOS, find and stop the process with:\n"
         f"  lsof -nP -iTCP:{port} -sTCP:LISTEN\n"
         f"  kill <PID>\n\n"
         "Or temporarily use another port:\n"
-        f"  lrc-roller serve --port {port + 1}\n",
+        f"  rollingpebble serve --port {port + 1}\n",
         file=sys.stderr,
     )
 
@@ -122,7 +122,7 @@ def _serve(args: argparse.Namespace) -> int:
     if args.reload:
         # Uvicorn reload requires an import string; pass CLI settings through env so the reloader child sees them.
         _apply_settings_env(settings)
-        uvicorn.run("lrc_roller.main:app", host=settings.host, port=settings.port, reload=True)
+        uvicorn.run("rollingpebble.main:app", host=settings.host, port=settings.port, reload=True)
     else:
         uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
     return 0
@@ -151,7 +151,7 @@ def _setup(args: argparse.Namespace) -> int:
 
     if not args.skip_roller:
         settings = Settings.from_env()
-        cmd = [sys.executable, "-m", "lrc_roller.runtime_installer", "--data-dir", str(settings.data_dir), "--profile", args.profile]
+        cmd = [sys.executable, "-m", "rollingpebble.runtime_installer", "--data-dir", str(settings.data_dir), "--profile", args.profile]
         if args.skip_doctor:
             cmd.append("--skip-doctor")
         code = _run(cmd, dry_run=args.dry_run)
@@ -175,7 +175,7 @@ def _doctor(args: argparse.Namespace) -> int:
     _print_row("Python", sys.executable)
     _print_row("Working directory", str(Path.cwd()))
     _print_row("Source root", str(root))
-    _print_row("lrc-roller", _package_version("lrc-roller") or "not installed")
+    _print_row("rollingpebble", _package_version("rollingpebble") or "not installed")
     _print_row("pylrclib-cli", _package_version("pylrclib-cli") or "not installed")
     settings = Settings.from_env()
     runtime_settings = SettingsStore(settings.data_dir).read()
@@ -195,11 +195,11 @@ def _doctor(args: argparse.Namespace) -> int:
     _print_row("frontend node_modules", "yes" if (root / "frontend" / "node_modules").exists() else "not found")
 
     try:
-        import lrc_roller
+        import rollingpebble
 
-        _print_row("lrc_roller module", str(Path(lrc_roller.__file__).resolve()))
+        _print_row("rollingpebble module", str(Path(rollingpebble.__file__).resolve()))
     except Exception as exc:
-        _print_row("lrc_roller module", f"import failed: {exc.__class__.__name__}: {exc}")
+        _print_row("rollingpebble module", f"import failed: {exc.__class__.__name__}: {exc}")
 
     if args.run_pyroller_doctor:
         if not runtime_info.ready:
@@ -238,18 +238,18 @@ def _dev(args: argparse.Namespace) -> int:
         print("pnpm is not on PATH. Run: corepack enable && corepack prepare pnpm@latest --activate", file=sys.stderr)
         return 2
     if not (root / "frontend" / "package.json").exists():
-        print("Cannot find frontend/package.json. Run lrc-roller dev from the source checkout.", file=sys.stderr)
+        print("Cannot find frontend/package.json. Run rollingpebble dev from the source checkout.", file=sys.stderr)
         return 2
     if not args.skip_port_check and not _port_available(settings.host, settings.port):
         _print_port_help(settings.host, settings.port)
         return 48
 
-    backend_cmd = [sys.executable, "-m", "uvicorn", "lrc_roller.main:app", "--host", settings.host, "--port", str(settings.port)]
+    backend_cmd = [sys.executable, "-m", "uvicorn", "rollingpebble.main:app", "--host", settings.host, "--port", str(settings.port)]
     if not args.no_backend_reload:
         backend_cmd.append("--reload")
     frontend_cmd = ["pnpm", "-C", "frontend", "start", "--host", "127.0.0.1", "--port", str(args.frontend_port)]
 
-    print("Starting lrc-roller dev stack:")
+    print("Starting rollingpebble dev stack:")
     print("+", _command_text(backend_cmd))
     print("+", _command_text(frontend_cmd))
     backend = subprocess.Popen(backend_cmd, cwd=str(root), env=_settings_env(settings))
@@ -265,7 +265,7 @@ def _dev(args: argparse.Namespace) -> int:
                 return f
             time.sleep(0.5)
     except KeyboardInterrupt:
-        print("\nStopping lrc-roller dev stack...")
+        print("\nStopping rollingpebble dev stack...")
         for proc in (frontend, backend):
             if proc.poll() is None:
                 proc.terminate()

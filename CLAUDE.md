@@ -4,24 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-lrc-roller is a local WebUI for lyrics lookup, automatic timing (Auto Timing), manual LRC editing, and LRCLIB publishing. Backend: FastAPI on `127.0.0.1:6789`. Frontend: React 18 + Vite on `127.0.0.1:5173` (dev) or served from FastAPI (production).
+rollingpebble is a local WebUI for lyrics lookup, automatic timing (Auto Timing), manual LRC editing, and LRCLIB publishing. Backend: FastAPI on `127.0.0.1:6789`. Frontend: React 18 + Vite on `127.0.0.1:5173` (dev) or served from FastAPI (production).
 
 ## Commands
 
 ```bash
 # Full dev stack (backend + Vite frontend)
-lrc-roller dev
+rollingpebble dev
 
 # Individual dev terminals
-lrc-roller serve --reload       # backend with auto-reload
+rollingpebble serve --reload       # backend with auto-reload
 pnpm dev                        # frontend Vite dev server
 
 # Production-like (build frontend, serve from backend port)
-pnpm build && lrc-roller
+pnpm build && rollingpebble
 
 # Python tests
 python -m pytest                # all tests
-python -m pytest tests/test_lrc_roller_runtime_and_app.py -k test_runtime_install_blocks
+python -m pytest tests/test_rollingpebble_runtime_and_app.py -k test_runtime_install_blocks
 
 # Frontend checks (run from repo root or frontend/)
 pnpm -C frontend check:type     # TypeScript type-check (tsc -b --noEmit)
@@ -33,21 +33,21 @@ pnpm -C frontend fix:fmt        # dprint auto-format
 ruff check backend/             # Python linting (line-length 100, target py310)
 
 # Diagnostics
-lrc-roller doctor
-lrc-roller doctor --run-pyroller-doctor
+rollingpebble doctor
+rollingpebble doctor --run-pyroller-doctor
 
 # Setup isolated runtime
-lrc-roller setup --profile auto
+rollingpebble setup --profile auto
 ```
 
 ## Architecture
 
 ### Backend (`backend/`)
 
-Python package `lrc_roller` installed from the monorepo root with `pip install -e .`.
+Python package `rollingpebble` installed from the monorepo root with `pip install -e .`.
 
 - `main.py` — `create_app()` factory builds the FastAPI app. All routes are registered inline. Frontend SPA fallback is served after API routes when built assets exist.
-- `cli.py` — Entry point (`lrc-roller` console script). Subcommands: `serve`, `dev`, `setup`, `doctor`. Dev mode spawns both uvicorn and `pnpm -C frontend start` as subprocesses.
+- `cli.py` — Entry point (`rollingpebble` console script). Subcommands: `serve`, `dev`, `setup`, `doctor`. Dev mode spawns both uvicorn and `pnpm -C frontend start` as subprocesses.
 - `models.py` — Pydantic models for all API requests/responses. The RollRequest model carries all Auto Timing options (splitter, transcriber, aligner, writer, etc.).
 - `jobs.py` — `JobManager` runs long-running commands (Auto Timing, runtime install/doctor) as threaded subprocesses. Progress is parsed from stdout via `pyroller.progress` log lines, JSONL events (`PYROLLER_EVENT ` prefix), and tqdm download bars. Job status is polled by the frontend via `/api/jobs/{job_id}`.
 - `config.py` — `Settings` dataclass resolved from env vars (`LRC_ROLLER_HOST`, `LRC_ROLLER_PORT`, `LRC_ROLLER_DATA_DIR`, `LRC_ROLLER_FRONTEND_DIST`). Frontend asset resolution order: explicit env → bundled wheel `frontend_dist/` → source checkout `frontend/dist/`.

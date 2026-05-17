@@ -5,8 +5,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from lrc_roller.jobs import JobManager
-from lrc_roller.models import (
+from rollingpebble.jobs import JobManager
+from rollingpebble.models import (
     AutoRollerRuntimeResponse,
     JobModel,
     JobStatus,
@@ -16,9 +16,9 @@ from lrc_roller.models import (
     RuntimeUpgradeRequest,
     ModelCacheRequest,
 )
-from lrc_roller.runtime_constants import PYROLLER_RUNTIME_SPEC
-from lrc_roller.services.runtime_manager import RuntimeManager
-from lrc_roller.storage.app_settings import SettingsStore, utc_now_iso
+from rollingpebble.runtime_constants import PYROLLER_RUNTIME_SPEC
+from rollingpebble.services.runtime_manager import RuntimeManager
+from rollingpebble.storage.app_settings import SettingsStore, utc_now_iso
 
 
 def _json_from_log_lines(lines: list[str]) -> dict[str, Any] | None:

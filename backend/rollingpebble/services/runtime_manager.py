@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from lrc_roller.models import RuntimeSettingsModel
+from rollingpebble.models import RuntimeSettingsModel
 
 
 @dataclass(slots=True)
@@ -198,7 +198,7 @@ class RuntimeManager:
         return [*self.command_prefix(profile), "doctor", "--output-format", "json"]
 
     def install_command(self, profile: str, *, skip_doctor: bool = False) -> list[str]:
-        command = [sys.executable, "-m", "lrc_roller.runtime_installer", "--data-dir", str(self.data_dir), "--profile", profile]
+        command = [sys.executable, "-m", "rollingpebble.runtime_installer", "--data-dir", str(self.data_dir), "--profile", profile]
         if skip_doctor:
             command.append("--skip-doctor")
         return command
@@ -209,7 +209,7 @@ class RuntimeManager:
             raise RuntimeError(
                 "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before upgrading."
             )
-        from lrc_roller.runtime_constants import PYROLLER_RUNTIME_SPEC
+        from rollingpebble.runtime_constants import PYROLLER_RUNTIME_SPEC
         return [
             str(info.python_path), "-m", "pip", "install", "--upgrade",
             PYROLLER_RUNTIME_SPEC,
@@ -238,4 +238,4 @@ class RuntimeManager:
             version = importlib.metadata.version("py-roller")
         except importlib.metadata.PackageNotFoundError:
             version = None
-        return False, version, "Legacy PATH py-roller is ignored; lrc-roller uses an isolated runtime."
+        return False, version, "Legacy PATH py-roller is ignored; rollingpebble uses an isolated runtime."

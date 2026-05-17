@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from lrc_roller.adapters.pylrclib_adapter import PylrclibAdapter
-from lrc_roller.models import LrcCleanseRequest, LrcCleanseResponse, LrclibGetRequest, LrclibGetResponse, LrclibIdRequest, LrclibSearchRequest, LrclibSearchResponse, LyricsRecordModel, MetaModel
+from rollingpebble.adapters.pylrclib_adapter import PylrclibAdapter
+from rollingpebble.models import LrcCleanseRequest, LrcCleanseResponse, LrclibGetRequest, LrclibGetResponse, LrclibIdRequest, LrclibSearchRequest, LrclibSearchResponse, LyricsRecordModel, MetaModel
 
 
 class LrclibService:

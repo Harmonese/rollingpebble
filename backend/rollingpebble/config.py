@@ -6,7 +6,7 @@ from pathlib import Path
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 6789
-DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "lrc-roller"
+DEFAULT_DATA_DIR = Path.home() / ".local" / "share" / "rollingpebble"
 
 
 @dataclass(slots=True)

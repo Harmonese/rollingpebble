@@ -1,8 +1,8 @@
 {
-  "name": "lrc-roller-frontend",
+  "name": "rollingpebble-frontend",
   "version": "0.6.0",
   "description": "Local WebUI for pylrclib and py-roller lyrics timing workflow",
-  "repository": "https://github.com/Harmonese/lrc-roller",
+  "repository": "https://github.com/Harmonese/rollingpebble",
   "author": "Harmonese",
   "license": "MIT",
   "keywords": [
@@ -11,8 +11,8 @@
     "lyric",
     "lyric maker"
   ],
-  "bugs": "https://github.com/Harmonese/lrc-roller/issues",
-  "homepage": "https://github.com/Harmonese/lrc-roller#readme",
+  "bugs": "https://github.com/Harmonese/rollingpebble/issues",
+  "homepage": "https://github.com/Harmonese/rollingpebble#readme",
   "files": [
     "src",
     "dist"

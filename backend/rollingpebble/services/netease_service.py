@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from lrc_roller.models import NeteaseResolveResponse, NeteaseSearchResponse, NeteaseSongModel, NeteaseSongSearchRequest
+from rollingpebble.models import NeteaseResolveResponse, NeteaseSearchResponse, NeteaseSongModel, NeteaseSongSearchRequest
 
 NETEASE_SEARCH_URLS = (
     "https://music.163.com/api/search/get/web",
@@ -357,7 +357,7 @@ class NeteaseService:
         return NeteaseResolveResponse(song=model)
 
     def fetch_lyrics(self, song_id: int) -> NeteaseLyricResponse:
-        from lrc_roller.models import NeteaseLyricResponse
+        from rollingpebble.models import NeteaseLyricResponse
 
         url = f"https://music.163.com/api/song/lyric?id={song_id}&lv=1&kv=1&tv=-1"
         data = _request_json(url, timeout=10.0)

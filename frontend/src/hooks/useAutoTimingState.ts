@@ -103,7 +103,7 @@ export function useAutoTimingState(): AutoTimingHook {
     const [stages, setStages] = useState("s,f,t,p,a,w");
     const [writerBackend, setWriterBackend] = useState("lrc_ms");
     const [writerSpacing, setWriterSpacing] = useState("keep");
-    const [writerByTag, setWriterByTag] = useState("LRC Roller");
+    const [writerByTag, setWriterByTag] = useState("RollingPebble");
     const [writerKaraokeTag, setWriterKaraokeTag] = useState("kf");
     const [cleanup, setCleanup] = useState("on-success");
     const [logLevel, setLogLevel] = useState("INFO");
@@ -190,8 +190,8 @@ export function useAutoTimingState(): AutoTimingHook {
         setAlignerBackend((s.auto_timing_aligner_backend as string) || "global_dp_v1");
         setAlignerMinGap(textFromOptionalNumber(s.auto_timing_aligner_min_gap as number | null | undefined) || "0.5");
         setAlignerRepetition((s.auto_timing_aligner_repetition as Repetition) || "none");
-        const byTag = (s.auto_timing_writer_by_tag as string) || "LRC Roller";
-        setWriterByTag(byTag === "py-roller" ? "LRC Roller" : byTag);
+        const byTag = (s.auto_timing_writer_by_tag as string) || "RollingPebble";
+        setWriterByTag(byTag === "py-roller" || byTag === "LRC Roller" ? "RollingPebble" : byTag);
         setWriterKaraokeTag((s.auto_timing_writer_ass_karaoke_tag_type as string) || "kf");
 
         if (modelStoreDefault) {

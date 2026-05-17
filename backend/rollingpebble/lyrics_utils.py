@@ -37,7 +37,7 @@ def leading_lrc_metadata_block(text: str | None) -> list[str]:
     """Return the original leading LRC metadata lines, preserving order/text.
 
     Only the contiguous header block before the first non-empty non-metadata
-    line is preserved. This lets lrc-roller keep user/editor metadata such as
+    line is preserved. This lets rollingpebble keep user/editor metadata such as
     [ti:...], [ar:...], [al:...] when replacing the timed lyric body with an
     automatic timing result.
     """
@@ -68,7 +68,7 @@ def merge_lrc_metadata_header(original_text: str | None, generated_lrc: str | No
     """Prefix generated LRC with the original editor metadata header block.
 
     py-roller may output its own metadata such as [by: py-roller]. When the
-    generated result is written back into a project/editor, lrc-roller should
+    generated result is written back into a project/editor, rollingpebble should
     preserve the user's original leading metadata instead of replacing it.
     """
     headers = leading_lrc_metadata_block(original_text)

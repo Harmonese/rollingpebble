@@ -8,9 +8,9 @@ from typing import Any
 
 from fastapi import UploadFile
 
-from lrc_roller.lyrics_utils import clean_plain_lyrics, is_lrc_metadata_line, normalize_newlines, strip_leading_timestamps
+from rollingpebble.lyrics_utils import clean_plain_lyrics, is_lrc_metadata_line, normalize_newlines, strip_leading_timestamps
 
-from lrc_roller.models import MetaModel, ProjectModel
+from rollingpebble.models import MetaModel, ProjectModel
 
 PROJECT_JSON = "project.json"
 AUDIO_NAME = "audio"

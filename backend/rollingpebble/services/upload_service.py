@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lrc_roller.adapters.pylrclib_adapter import PylrclibAdapter
-from lrc_roller.models import UploadPlanRequest, UploadPlanResponse, UploadRunRequest, UploadRunResponse
-from lrc_roller.storage.files import plain_for_timing
-from lrc_roller.services.project_service import ProjectService
+from rollingpebble.adapters.pylrclib_adapter import PylrclibAdapter
+from rollingpebble.models import UploadPlanRequest, UploadPlanResponse, UploadRunRequest, UploadRunResponse
+from rollingpebble.storage.files import plain_for_timing
+from rollingpebble.services.project_service import ProjectService
 
 
 class UploadService:

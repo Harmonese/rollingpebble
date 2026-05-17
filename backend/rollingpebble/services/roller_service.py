@@ -5,7 +5,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from lrc_roller.adapters.pyroller_adapter import (
+from rollingpebble.adapters.pyroller_adapter import (
     artifacts_for,
     build_pyroller_batch_command,
     build_pyroller_command,
@@ -15,11 +15,11 @@ from lrc_roller.adapters.pyroller_adapter import (
     normalize_stages,
     normalized_stage_text,
 )
-from lrc_roller.jobs import JobManager
-from lrc_roller.models import BatchRollRequest, JobModel, RollPreviewResponse, RollRequest, RuntimeSettingsModel
-from lrc_roller.services.project_service import ProjectService
-from lrc_roller.services.runtime_manager import RuntimeManager
-from lrc_roller.storage.files import PLAIN_NAME, PYROLLER_NAME, write_text
+from rollingpebble.jobs import JobManager
+from rollingpebble.models import BatchRollRequest, JobModel, RollPreviewResponse, RollRequest, RuntimeSettingsModel
+from rollingpebble.services.project_service import ProjectService
+from rollingpebble.services.runtime_manager import RuntimeManager
+from rollingpebble.storage.files import PLAIN_NAME, PYROLLER_NAME, write_text
 
 _ALLOWED_TRANSCRIBERS: dict[str, set[str]] = {
     "zh": {"faster_whisper", "mms_phonetic"},

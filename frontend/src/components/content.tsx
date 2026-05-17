@@ -158,8 +158,8 @@ export const Content: React.FC = () => {
 
     useEffect(() => {
         const handler = () => setBgVersion(Date.now());
-        window.addEventListener("lrc-roller:workspace-bg-changed", handler);
-        return () => window.removeEventListener("lrc-roller:workspace-bg-changed", handler);
+        window.addEventListener("rollingpebble:workspace-bg-changed", handler);
+        return () => window.removeEventListener("rollingpebble:workspace-bg-changed", handler);
     }, []);
 
     const importText = useCallback((text: string) => {

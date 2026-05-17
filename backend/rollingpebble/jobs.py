@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Any
 
-from lrc_roller.models import JobModel, JobProgressModel, JobStatus
+from rollingpebble.models import JobModel, JobProgressModel, JobStatus
 
 _PYROLLER_EVENT_PREFIX = "PYROLLER_EVENT "
 _MAX_RETAINED_JOBS = 100
@@ -188,7 +188,7 @@ def _parse_demucs_progress_line(line: str, previous: JobProgressModel | None = N
     """Extract Demucs native tqdm progress as splitter progress.
 
     Demucs writes progress bars such as ``50%|...| 175.5/351.0 [..seconds/s]``.
-    Earlier lrc-roller versions parsed every tqdm line as model download, which
+    Earlier rollingpebble versions parsed every tqdm line as model download, which
     made Vocal separation jump back to the model-download card.
     """
     clean = _clean_progress_line(line)
@@ -557,7 +557,7 @@ class JobManager:
             now = _utc_now_iso()
             managed.model.updated_at = now
             managed.model.last_output_at = now
-            managed.model.logs.append("Cancellation requested by lrc-roller.")
+            managed.model.logs.append("Cancellation requested by rollingpebble.")
             if managed.model.progress is not None:
                 managed.model.progress.message = "Cancellation requested"
             process = managed.process

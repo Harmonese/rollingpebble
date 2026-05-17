@@ -1,4 +1,4 @@
-# lrc-roller v0.5.5 architecture
+# rollingpebble v0.5.5 architecture
 
 ## Goal
 
@@ -8,7 +8,7 @@ A local web application for lyrics lookup, automatic timing, manual editing, and
 
 - Backend: FastAPI on `127.0.0.1:6789` by default.
 - Frontend: React/Vite, based on `lrc-maker`, served by Vite in development or by FastAPI from built static assets in production.
-- Data directory: `~/.local/share/lrc-roller` by default, or `LRC_ROLLER_DATA_DIR` / `--data-dir`.
+- Data directory: `~/.local/share/rollingpebble` by default, or `LRC_ROLLER_DATA_DIR` / `--data-dir`.
 - Auto Timing runtime: an isolated per-profile virtual environment under the data directory, not the user's global `py-roller` installation.
 
 ## Frontend asset resolution
@@ -16,10 +16,10 @@ A local web application for lyrics lookup, automatic timing, manual editing, and
 `create_app()` resolves static frontend assets in this order:
 
 1. `LRC_ROLLER_FRONTEND_DIST` / explicit settings.
-2. Bundled wheel assets at `lrc_roller/frontend_dist`.
+2. Bundled wheel assets at `rollingpebble/frontend_dist`.
 3. Source-checkout assets at `frontend/dist`.
 
-This keeps source development (`pnpm build && lrc-roller`) and packaged releases compatible. Release packaging should copy `frontend/dist` to `backend/lrc_roller/frontend_dist` before building the Python distribution.
+This keeps source development (`pnpm build && rollingpebble`) and packaged releases compatible. Release packaging should copy `frontend/dist` to `backend/rollingpebble/frontend_dist` before building the Python distribution.
 
 ## Integration choices
 
@@ -32,7 +32,7 @@ This keeps source development (`pnpm build && lrc-roller`) and packaged releases
 - `pylrclib.models.LyricsBundle`
 - `pylrclib.workflows.up.build_upload_plan`
 
-This keeps search/get/upload-plan/upload structured and avoids parsing CLI output. Requests use an `lrc-roller/<version>` User-Agent so LRCLIB traffic can be traced during diagnostics.
+This keeps search/get/upload-plan/upload structured and avoids parsing CLI output. Requests use an `rollingpebble/<version>` User-Agent so LRCLIB traffic can be traced during diagnostics.
 
 ### Auto Timing engine
 
@@ -86,7 +86,7 @@ The center keeps lrc-maker's line-based editor, waveform/audio footer, shortcut 
 
 ## Runtime commands
 
-- `lrc-roller dev`: start backend and Vite frontend for development. CLI host/port/data-dir are forwarded to the uvicorn child process through environment variables.
-- `lrc-roller serve`: start the local server, serving built frontend assets when available.
-- `lrc-roller setup --profile auto`: run frontend install and create/repair the isolated `py-roller` runtime.
-- `lrc-roller doctor`: inspect package, frontend, pylrclib, and isolated runtime status.
+- `rollingpebble dev`: start backend and Vite frontend for development. CLI host/port/data-dir are forwarded to the uvicorn child process through environment variables.
+- `rollingpebble serve`: start the local server, serving built frontend assets when available.
+- `rollingpebble setup --profile auto`: run frontend install and create/repair the isolated `py-roller` runtime.
+- `rollingpebble doctor`: inspect package, frontend, pylrclib, and isolated runtime status.

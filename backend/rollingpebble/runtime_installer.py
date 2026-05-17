@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lrc_roller.runtime_constants import (
+from rollingpebble.runtime_constants import (
     PYROLLER_EVENT_PREFIX,
     PYROLLER_RUNTIME_SPEC,
     PYROLLER_RUNTIME_SUPPORT_SPECS,
@@ -277,7 +277,7 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Create or repair the isolated lrc-roller py-roller runtime.")
+    parser = argparse.ArgumentParser(description="Create or repair the isolated rollingpebble py-roller runtime.")
     parser.add_argument("--data-dir", required=True)
     parser.add_argument("--profile", choices=("auto", "cpu", "cu124"), default="auto")
     parser.add_argument("--skip-doctor", action="store_true")

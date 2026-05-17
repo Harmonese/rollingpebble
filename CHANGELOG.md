@@ -20,7 +20,7 @@
 - Refined isolated py-roller runtime upgrade and diagnostics behavior.
 - Changed runtime creation/repair to upgrade `py-roller>=0.5.6,<0.6` when using the PyPI runtime source.
 - Centralized the py-roller runtime version requirement to avoid drift between status and installer code.
-- Updated `lrc-roller doctor --run-pyroller-doctor` to run doctor inside the isolated runtime instead of PATH.
+- Updated `rollingpebble doctor --run-pyroller-doctor` to run doctor inside the isolated runtime instead of PATH.
 - Persisted failed runtime install/check results so Settings can show the latest failure after refresh.
 - Kept pip raw output in logs while preventing `install_subprocess_output` events from crowding out structured install steps.
 - Added a simple guard to avoid repairing the runtime while Auto Timing is running, and to avoid starting Auto Timing during runtime repair.
@@ -42,8 +42,8 @@
 
 ## 0.5.0 - 2026-05-13
 
-- Moved Auto Timing to an isolated py-roller runtime virtual environment under the lrc-roller data directory.
-- Changed Runtime install/repair to create or repair that isolated runtime instead of modifying the lrc-roller backend .venv.
+- Moved Auto Timing to an isolated py-roller runtime virtual environment under the rollingpebble data directory.
+- Changed Runtime install/repair to create or repair that isolated runtime instead of modifying the rollingpebble backend .venv.
 - Changed Auto Timing command generation to call the runtime Python with `-m pyroller.cli.main`, avoiding PATH-based py-roller resolution.
 - Added runtime liveness metadata to jobs, including PID, elapsed time, last output time, and return code.
 - Added runtime task cancellation using process groups on POSIX systems.

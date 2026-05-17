@@ -1,9 +1,9 @@
 # Storage and cleanup
 
-lrc-roller stores local data under the configured data directory. The default is usually:
+rollingpebble stores local data under the configured data directory. The default is usually:
 
 ```text
-~/.local/share/lrc-roller
+~/.local/share/rollingpebble
 ```
 
 You can override it with `--data-dir` or `LRC_ROLLER_DATA_DIR`.
@@ -93,7 +93,7 @@ The current active runtime is marked and protected. Runtimes are also protected 
 
 ## Browser Storage
 
-Browser Storage clears fixed local browser keys and lrc-roller CacheStorage entries. It does not delete backend project files.
+Browser Storage clears fixed local browser keys and rollingpebble CacheStorage entries. It does not delete backend project files.
 
 ## Safety boundaries
 

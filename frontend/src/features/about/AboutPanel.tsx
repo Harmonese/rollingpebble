@@ -11,7 +11,7 @@ export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ o
     const u = lang.ui;
 
     return (
-        <div className="about-overlay" role="dialog" aria-modal="true" aria-label="About LRC Roller">
+        <div className="about-overlay" role="dialog" aria-modal="true" aria-label={`About ${lang.app?.name || "Rolling Pebble"}`}>
             <button className="about-backdrop" type="button" onClick={onClose} aria-label="Close about" />
             <section className="about-modal">
                 <div className="about-header">
@@ -44,7 +44,7 @@ export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ o
                     <h3>{a.credits}</h3>
                     <p>{a.creditsText}</p>
                     <div className="about-links">
-                        <a href="https://github.com/Harmonese/lrc-roller" target="_blank" rel="noreferrer">LRC Roller</a>
+                        <a href="https://github.com/Harmonese/rollingpebble" target="_blank" rel="noreferrer">{lang.app?.name || "Rolling Pebble"}</a>
                         <a href="https://github.com/magic-akari/lrc-maker" target="_blank" rel="noreferrer">lrc-maker</a>
                         <a href="https://github.com/Harmonese/py-roller" target="_blank" rel="noreferrer">py-roller</a>
                         <a href="https://github.com/Harmonese/pylrclib" target="_blank" rel="noreferrer">pylrclib</a>

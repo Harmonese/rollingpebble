@@ -8,7 +8,7 @@ import { SETTINGS_UPDATED_EVENT } from "../../shared/settingsEvents.js";
 
 const DEFAULT_RECENT_PROJECTS_LIMIT = 8;
 const DELETE_UNDO_MS = 10_000;
-const PROJECT_ORDER_KEY = "lrc-roller.projectOrder";
+const PROJECT_ORDER_KEY = "rollingpebble.projectOrder";
 
 function formatLyricsSource(source?: string | null): string {
     if (!source) return "manual";

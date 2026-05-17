@@ -10,10 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from lrc_roller.adapters import pylrclib_adapter, pyroller_adapter
-from lrc_roller.config import Settings, resolve_frontend_dist
-from lrc_roller.jobs import JobManager
-from lrc_roller.models import (
+from rollingpebble.adapters import pylrclib_adapter, pyroller_adapter
+from rollingpebble.config import Settings, resolve_frontend_dist
+from rollingpebble.jobs import JobManager
+from rollingpebble.models import (
     ApplyLyricsRequest,
     HealthDependency,
     HealthResponse,
@@ -57,24 +57,24 @@ from lrc_roller.models import (
     StorageOpenRuntimeRequest,
     StorageUsageResponse,
 )
-from lrc_roller.paths import ensure_data_dirs
-from lrc_roller.version import app_version
-from lrc_roller.services.lrclib_service import LrclibService
-from lrc_roller.services.netease_service import NeteaseService
-from lrc_roller.services.project_service import ProjectService
-from lrc_roller.services.roller_service import RollerService
-from lrc_roller.services.upload_service import UploadService
-from lrc_roller.services.runtime_manager import RuntimeManager
-from lrc_roller.services.runtime_service import RuntimeService
-from lrc_roller.services.storage_service import StorageService
-from lrc_roller.services.local_dialog import select_local_path
+from rollingpebble.paths import ensure_data_dirs
+from rollingpebble.version import app_version
+from rollingpebble.services.lrclib_service import LrclibService
+from rollingpebble.services.netease_service import NeteaseService
+from rollingpebble.services.project_service import ProjectService
+from rollingpebble.services.roller_service import RollerService
+from rollingpebble.services.upload_service import UploadService
+from rollingpebble.services.runtime_manager import RuntimeManager
+from rollingpebble.services.runtime_service import RuntimeService
+from rollingpebble.services.storage_service import StorageService
+from rollingpebble.services.local_dialog import select_local_path
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     paths = ensure_data_dirs(settings.data_dir)
 
-    app = FastAPI(title="lrc-roller", version=app_version())
+    app = FastAPI(title="rollingpebble", version=app_version())
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", f"http://{settings.host}:{settings.port}"],
@@ -349,7 +349,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ]:
                 if candidate is None:
                     continue
-                default_path = candidate / "img" / "lrc-roller-workspace-bg.webp"
+                default_path = candidate / "img" / "rollingpebble-workspace-bg.webp"
                 if default_path.exists():
                     return FileResponse(default_path, media_type="image/webp")
             raise HTTPException(status_code=404, detail="No background available.")

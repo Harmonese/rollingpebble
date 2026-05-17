@@ -7,9 +7,9 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
-from lrc_roller.models import ApplyLyricsRequest, MetaModel, ProjectModel, RuntimeSettingsModel, SaveEditorRequest
-from lrc_roller.lyrics_utils import merge_lrc_metadata_header
-from lrc_roller.storage.files import (
+from rollingpebble.models import ApplyLyricsRequest, MetaModel, ProjectModel, RuntimeSettingsModel, SaveEditorRequest
+from rollingpebble.lyrics_utils import merge_lrc_metadata_header
+from rollingpebble.storage.files import (
     PLAIN_NAME,
     PYROLLER_NAME,
     SYNCED_NAME,

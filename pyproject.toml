@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lrc-roller"
+name = "rollingpebble"
 version = "0.6.0"
 description = "Local WebUI frontend for py-roller and pylrclib."
 readme = "README.md"
@@ -23,7 +23,7 @@ full = []
 dev = ["ruff>=0.6", "pytest>=8", "build>=1.2"]
 
 [project.scripts]
-lrc-roller = "lrc_roller.cli:main"
+rollingpebble = "rollingpebble.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "backend"}
@@ -31,10 +31,10 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["backend"]
-include = ["lrc_roller*"]
+include = ["rollingpebble*"]
 
 [tool.setuptools.package-data]
-lrc_roller = ["frontend_dist/**/*"]
+rollingpebble = ["frontend_dist/**/*"]
 
 [tool.ruff]
 line-length = 100

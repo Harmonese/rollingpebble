@@ -1,5 +1,5 @@
 @font-face {
-    font-family: "LRC Roller Fallback UI";
+    font-family: "RollingPebble Fallback UI";
     src:
         local("Segoe UI"),
         local("Roboto"),
@@ -14,7 +14,7 @@
 :root {
     color: var(--roller-text);
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", sans-serif, "Apple Color Emoji",
+        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
     background-color: var(--roller-bg);
     font-feature-settings: "kern" 1;
@@ -29,28 +29,28 @@
 
 [lang]:lang(zh) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", "PingFang SC", "Microsoft YaHei UI",
+        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "PingFang SC", "Microsoft YaHei UI",
         "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "WenQuanYi Micro Hei", sans-serif,
         "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 [lang]:lang(zh-HK) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", "PingFang HK", "Microsoft JhengHei UI",
+        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "PingFang HK", "Microsoft JhengHei UI",
         "Microsoft JhengHei", "Source Han Sans HK", "Noto Sans CJK TC", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
 }
 
 [lang]:lang(zh-TW) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", "PingFang TC", "Microsoft JhengHei UI",
+        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "PingFang TC", "Microsoft JhengHei UI",
         "Microsoft JhengHei", "Source Han Sans TW", "Noto Sans CJK TC", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
 }
 
 [lang]:lang(ja) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "LRC Roller Fallback UI", "Hiragino Kaku Gothic Pro", "Yu Gothic UI",
+        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "Hiragino Kaku Gothic Pro", "Yu Gothic UI",
         "Yu Gothic", "Meiryo UI", Meiryo, "Source Han Sans JP", "Noto Sans CJK JP", sans-serif, "Apple Color Emoji",
         "Segoe UI Emoji";
 }
@@ -222,7 +222,7 @@ a > * {
     filter: drop-shadow(0 0 4px currentColor);
 }
 
-/* lrc-roller shell refinements */
+/* rollingpebble shell refinements */
 html {
     color-scheme: dark;
     background: var(--roller-bg);
@@ -289,7 +289,7 @@ select, input, textarea, button {
     background-color: var(--roller-surface-2);
 }
 
-/* lrc-roller v0.4.0 startup screen */
+/* rollingpebble v0.4.0 startup screen */
 .page-loading::before {
     background:
         radial-gradient(circle at 50% 45%, rgba(var(--theme-rgb), 0.12), transparent 32vmin),

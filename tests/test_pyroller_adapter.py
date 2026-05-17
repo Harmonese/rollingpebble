@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from lrc_roller.adapters.pyroller_adapter import build_pyroller_command, normalize_stages
-from lrc_roller.models import RollRequest
+from rollingpebble.adapters.pyroller_adapter import build_pyroller_command, normalize_stages
+from rollingpebble.models import RollRequest
 
 
 def test_build_command_emits_integer_hf_timeouts_and_artifact_outputs() -> None:
@@ -80,7 +80,7 @@ def test_build_pyroller_env_does_not_export_socks_proxy_to_stdlib_env() -> None:
         transcriber_hf_download_timeout=120,
     )
 
-    from lrc_roller.adapters.pyroller_adapter import build_pyroller_env
+    from rollingpebble.adapters.pyroller_adapter import build_pyroller_env
 
     env = build_pyroller_env(request, base_env={})
 
@@ -98,7 +98,7 @@ def test_build_pyroller_env_exports_http_proxy_to_stdlib_env() -> None:
         transcriber_hf_proxy="http://127.0.0.1:7890",
     )
 
-    from lrc_roller.adapters.pyroller_adapter import build_pyroller_env
+    from rollingpebble.adapters.pyroller_adapter import build_pyroller_env
 
     env = build_pyroller_env(request, base_env={})
 
@@ -108,7 +108,7 @@ def test_build_pyroller_env_exports_http_proxy_to_stdlib_env() -> None:
 
 
 def test_build_pyroller_env_ignores_non_transcriber_stage() -> None:
-    from lrc_roller.adapters.pyroller_adapter import build_pyroller_env
+    from rollingpebble.adapters.pyroller_adapter import build_pyroller_env
 
     env = build_pyroller_env(
         RollRequest(stages="p,a,w", transcriber_hf_proxy="socks5h://127.0.0.1:9909"),

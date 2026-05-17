@@ -1,5 +1,5 @@
 export async function unregister() {
-    const APP_NAME = "lrc-roller";
+    const APP_NAME = "rollingpebble";
 
     if ("serviceWorker" in navigator) {
         await caches.keys().then(async (cacheNames) => {

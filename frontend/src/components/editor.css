@@ -178,7 +178,7 @@
     color: var(--roller-accent-2, var(--theme-color));
 }
 
-/* lrc-roller overrides */
+/* rollingpebble overrides */
 .app-editor > details:first-of-type {
     padding-right: 132px;
 }
@@ -206,7 +206,7 @@
     margin-top: 10px;
 }
 
-/* lrc-roller editor header: Metadata row + compact tools */
+/* rollingpebble editor header: Metadata row + compact tools */
 .editor-header-row {
     display: flex;
     align-items: flex-start;
@@ -289,7 +289,7 @@
     transform: translateY(-1px);
 }
 
-/* lrc-roller v0.4.0 cleanup controls */
+/* rollingpebble v0.4.0 cleanup controls */
 .editor-cleanup-row {
     display: flex;
     align-items: flex-start;
@@ -317,7 +317,7 @@
     display: none;
 }
 
-/* lrc-roller editor host */
+/* rollingpebble editor host */
 .roller-editor-host {
     position: relative;
     display: flex;
@@ -327,7 +327,7 @@
     background:
         radial-gradient(circle at 58% 46%, rgba(var(--theme-rgb), 0.08), transparent 38%),
         var(--editor-bg-overlay),
-        url("/img/lrc-roller-workspace-bg.webp"),
+        url("/img/rollingpebble-workspace-bg.webp"),
         var(--roller-bg);
     background-repeat: no-repeat, no-repeat, no-repeat, repeat;
     background-position: center center, center center, center center, center center;

@@ -89,7 +89,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, [prefState]);
 
     useEffect(() => {
-        document.title = "lrc-roller";
+        document.title = lang.app?.name || "Rolling Pebble";
         document.documentElement.lang = prefState.lang;
     }, [lang, prefState.lang]);
 

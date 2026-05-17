@@ -56,8 +56,8 @@ type RuntimeStep = {
     message: string;
 };
 
-function titleFromKey(key: string, labels: Record<string, string>): string {
-    return labels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+function titleFromKey(key: string): string {
+    return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function runtimeEvents(job: JobModel | null): Record<string, unknown>[] {
@@ -357,7 +357,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         setBusy(true);
         try {
             await api.uploadWorkspaceBg(file);
-            window.dispatchEvent(new Event("lrc-roller:workspace-bg-changed"));
+            window.dispatchEvent(new Event("rollingpebble:workspace-bg-changed"));
             toastPubSub.pub({ type: "success", text: t.messages.bgUpdated });
         } catch (error) {
             toastPubSub.pub({ type: "error", text: (error as Error).message });
@@ -370,7 +370,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         setBusy(true);
         try {
             await api.deleteWorkspaceBg();
-            window.dispatchEvent(new Event("lrc-roller:workspace-bg-changed"));
+            window.dispatchEvent(new Event("rollingpebble:workspace-bg-changed"));
             toastPubSub.pub({ type: "success", text: t.messages.bgReset });
         } catch (error) {
             toastPubSub.pub({ type: "error", text: (error as Error).message });
@@ -532,7 +532,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
     const clearBrowserState = async () => {
         if (!window.confirm(u.clearBrowserConfirm)) return;
         const localKeys = [
-            "lrc-roller-hidden-recent-projects",
+            "rollingpebble-hidden-recent-projects",
             "lrc-maker-lyric",
             "lrc-maker-oauth-token",
             "lrc-maker-gist-id",
@@ -544,7 +544,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         sessionKeys.forEach((key) => sessionStorage.removeItem(key));
         if ("caches" in window) {
             const names = await caches.keys();
-            await Promise.all(names.filter((name) => name.startsWith("lrc-roller")).map((name) => caches.delete(name)));
+            await Promise.all(names.filter((name) => name.startsWith("rollingpebble")).map((name) => caches.delete(name)));
         }
         toastPubSub.pub({ type: "success", text: t.messages.browserCleared });
     };
@@ -653,7 +653,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                             <label>{t.autoTiming.processingPreset}<select value={at.stages} onChange={(ev) => at.setStages(ev.target.value)}>{optionNodes(STAGE_OPTIONS, trOpt)}</select></label>
                             <label>{t.autoTiming.outputFormat}<select value={at.writerBackend} onChange={(ev) => at.setWriterBackend(ev.target.value)}>{optionNodes(WRITER_OPTIONS, trOpt)}</select></label>
                             <label>{t.autoTiming.repetitionHandling}<select value={at.alignerRepetition} onChange={(ev) => at.setAlignerRepetition(ev.target.value as Repetition)}>{optionNodes(REPETITION_OPTIONS, trOpt)}</select></label>
-                            <label className="field-with-browse">{t.autoTiming.modelStoreLabel}<span className="browse-row"><input placeholder={runtime?.model_store || "~/.local/share/lrc-roller/models/transcriber"} value={at.transcriberModelPath} onChange={(ev) => at.setTranscriberModelPath(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>{t.common.browse}</button></span></label>
+                            <label className="field-with-browse">{t.autoTiming.modelStoreLabel}<span className="browse-row"><input placeholder={runtime?.model_store || "~/.local/share/rollingpebble/models/transcriber"} value={at.transcriberModelPath} onChange={(ev) => at.setTranscriberModelPath(ev.target.value)} /><button type="button" disabled={busy} onClick={browseModelStore}>{t.common.browse}</button></span></label>
                             <label>{t.autoTiming.spacing}<select value={at.writerSpacing} onChange={(ev) => at.setWriterSpacing(ev.target.value as Spacing)}>{optionNodes(SPACING_OPTIONS, trOpt)}</select></label>
                         </div>
 
@@ -705,7 +705,7 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                             <div className="roller-form two-col"><label>{t.autoTiming.backend}<select value={at.alignerBackend} onChange={(ev) => at.setAlignerBackend(ev.target.value)}>{optionNodes(ALIGNER_BACKEND_OPTIONS, trOpt)}</select></label><label>{t.autoTiming.minGap}<input inputMode="decimal" placeholder="0.5" value={at.alignerMinGap} onChange={(ev) => at.setAlignerMinGap(ev.target.value)} /></label></div>
 
                             <div className="roller-section-title">{t.autoTiming.writer}</div>
-                            <div className="roller-form two-col"><label>{t.autoTiming.byTag}<input placeholder="LRC Roller" value={at.writerByTag} onChange={(ev) => at.setWriterByTag(ev.target.value)} /></label><label>{t.autoTiming.assKaraokeTag}<select value={at.writerKaraokeTag} onChange={(ev) => at.setWriterKaraokeTag(ev.target.value as KaraokeTag)} disabled={!at.writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS, trOpt)}</select></label></div>
+                            <div className="roller-form two-col"><label>{t.autoTiming.byTag}<input placeholder="RollingPebble" value={at.writerByTag} onChange={(ev) => at.setWriterByTag(ev.target.value)} /></label><label>{t.autoTiming.assKaraokeTag}<select value={at.writerKaraokeTag} onChange={(ev) => at.setWriterKaraokeTag(ev.target.value as KaraokeTag)} disabled={!at.writerIsAss}>{optionNodes(KARAOKE_TAG_OPTIONS, trOpt)}</select></label></div>
                         </details>
                     </div>
                 </section>

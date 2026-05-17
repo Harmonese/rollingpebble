@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
-from lrc_roller.jobs import JobManager
-from lrc_roller.models import (
+from rollingpebble.jobs import JobManager
+from rollingpebble.models import (
     JobStatus,
     ProjectModel,
     StorageCategoryModel,
@@ -25,9 +25,9 @@ from lrc_roller.models import (
     StorageRuntimeItemModel,
     StorageUsageResponse,
 )
-from lrc_roller.services.runtime_manager import RuntimeManager
-from lrc_roller.storage.app_settings import SettingsStore
-from lrc_roller.storage.files import AUDIO_NAME, PLAIN_NAME, PROJECT_JSON, PYROLLER_NAME, SYNCED_NAME, read_project, write_project
+from rollingpebble.services.runtime_manager import RuntimeManager
+from rollingpebble.storage.app_settings import SettingsStore
+from rollingpebble.storage.files import AUDIO_NAME, PLAIN_NAME, PROJECT_JSON, PYROLLER_NAME, SYNCED_NAME, read_project, write_project
 
 
 @dataclass(slots=True)
@@ -45,9 +45,9 @@ _CATEGORY_LABELS: dict[str, str] = {
 
 _CATEGORY_DESCRIPTIONS: dict[str, str] = {
     "projects": "Project folders, including audio, lyrics, generated outputs, artifacts, and intermediates.",
-    "models": "Downloaded model caches under the lrc-roller models directory.",
+    "models": "Downloaded model caches under the rollingpebble models directory.",
     "runtime_envs": "Isolated py-roller Python environments.",
-    "other": "Known app data and unclassified files under the lrc-roller data directory.",
+    "other": "Known app data and unclassified files under the rollingpebble data directory.",
 }
 
 _RUNNING_STATUSES = {JobStatus.queued, JobStatus.running, "queued", "running"}
@@ -311,7 +311,7 @@ class StorageService:
         try:
             resolved.relative_to(self.data_dir)
         except ValueError as exc:
-            raise RuntimeError("Cleanup path escaped the lrc-roller data directory.") from exc
+            raise RuntimeError("Cleanup path escaped the rollingpebble data directory.") from exc
         return path
 
     def _project_dirs(self) -> list[Path]:
@@ -926,7 +926,7 @@ class StorageService:
         try:
             resolved.relative_to(self.data_dir)
         except ValueError as exc:
-            raise RuntimeError("Cleanup path escaped the lrc-roller data directory.") from exc
+            raise RuntimeError("Cleanup path escaped the rollingpebble data directory.") from exc
         parts = Path(entry.relative_path).parts
         if not parts:
             raise RuntimeError("Invalid cleanup path.")
