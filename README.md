@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Harmonese/rollingpebble/main/frontend/public/img/rollingpebble-avatar.png" alt="Rolling Pebble" width="120" height="120">
+  <img src="https://raw.githubusercontent.com/Harmonese/rollingpebble/main/frontend/public/favicons/apple-touch-icon.png" alt="Rolling Pebble" width="120" height="120">
 </p>
 
 # Rolling Pebble
