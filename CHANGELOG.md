@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses Semantic Versioning.
 
+## [0.6.2] - 2026-05-20
+
+### Changed
+
+- Added Harmonese author information to the About dialog credits section.
+- Added official website, GitHub, and Bandcamp links for Harmonese.
+- Split author links and project repository links into separate rows in the About dialog.
+
 ## [0.6.1] - 2026-05-20
 
 ### Added

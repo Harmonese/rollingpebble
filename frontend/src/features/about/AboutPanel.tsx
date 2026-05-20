@@ -39,8 +39,14 @@ export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ o
 
                 <section className="about-section">
                     <h3>{a.credits}</h3>
+                    <p>{a.authorText}</p>
                     <p>{a.creditsText}</p>
-                    <div className="about-links">
+                    <div className="about-links about-links-row">
+                        <a href="https://harmonese.cn" target="_blank" rel="noreferrer">{a.authorWebsite}</a>
+                        <a href="https://github.com/Harmonese" target="_blank" rel="noreferrer">{a.authorGithub}</a>
+                        <a href="https://harmonese.bandcamp.com" target="_blank" rel="noreferrer">{a.authorMusic}</a>
+                    </div>
+                    <div className="about-links about-links-row">
                         <a href="https://github.com/Harmonese/rollingpebble" target="_blank" rel="noreferrer">{lang.app?.name || "Rolling Pebble"}</a>
                         <a href="https://github.com/magic-akari/lrc-maker" target="_blank" rel="noreferrer">lrc-maker</a>
                         <a href="https://github.com/Harmonese/py-roller" target="_blank" rel="noreferrer">py-roller</a>

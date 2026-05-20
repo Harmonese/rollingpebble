@@ -167,6 +167,10 @@
     margin-top: 10px;
 }
 
+.about-links-row + .about-links-row {
+    margin-top: 8px;
+}
+
 .about-links a,
 .about-header button {
     display: inline-flex;

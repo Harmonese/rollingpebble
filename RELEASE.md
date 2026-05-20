@@ -4,7 +4,7 @@ This project releases through GitHub Releases. Publishing a GitHub Release trigg
 
 ## Version
 
-Current release target: `v0.6.1`
+Current release target: `v0.6.2`
 
 Before tagging:
 
@@ -42,8 +42,8 @@ python -m build
 
 Expected files in `dist/`:
 
-- `rollingpebble-0.6.1-py3-none-any.whl`
-- `rollingpebble-0.6.1.tar.gz`
+- `rollingpebble-0.6.2-py3-none-any.whl`
+- `rollingpebble-0.6.2.tar.gz`
 
 ## PyPI Publishing
 
@@ -67,7 +67,7 @@ PyPI must be configured with a trusted publisher for this repository and the `py
 python -m venv /tmp/rollingpebble-release-test
 . /tmp/rollingpebble-release-test/bin/activate
 python -m pip install -U pip
-python -m pip install dist/rollingpebble-0.6.1-py3-none-any.whl
+python -m pip install dist/rollingpebble-0.6.2-py3-none-any.whl
 rollingpebble --help
 rollingpebble doctor
 ```
@@ -83,9 +83,9 @@ Open `http://127.0.0.1:6790`.
 ## Tag
 
 ```bash
-git tag -a v0.6.1 -m "Release v0.6.1"
+git tag -a v0.6.2 -m "Release v0.6.2"
 git push origin main
-git push origin v0.6.1
+git push origin v0.6.2
 ```
 
 ## GitHub Release Notes
@@ -93,7 +93,7 @@ git push origin v0.6.1
 Title:
 
 ```text
-Rolling Pebble v0.6.1
+Rolling Pebble v0.6.2
 ```
 
 Body:
@@ -103,9 +103,9 @@ Maintenance release for Rolling Pebble.
 
 Highlights:
 
-- Converted `CHANGELOG.md` to a Keep a Changelog style structure.
-- Added GitHub Actions publishing to PyPI when a GitHub Release is published.
-- The release workflow builds the frontend and includes it in the Python wheel before publishing.
+- Added Harmonese author information to the About dialog credits section.
+- Added official website, GitHub, and Bandcamp links for Harmonese.
+- Split author links and project repository links into separate rows.
 
 Install from PyPI:
 
@@ -122,8 +122,6 @@ http://127.0.0.1:6789
 
 Notes:
 
-- Auto Timing creates an isolated py-roller runtime under the Rolling Pebble data directory.
-- Large model downloads are managed separately from runtime environments.
 - Auto Timing creates an isolated py-roller runtime under the Rolling Pebble data directory.
 - Large model downloads are managed separately from runtime environments.
 ```
