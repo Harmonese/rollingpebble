@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses Semantic Versioning.
 
+## [0.6.3] - 2026-05-21
+
+### Added
+
+- Added an MIT license file.
+- Added a Tauri desktop packaging prototype with macOS `.app`/`.dmg` output, a bundled Python sidecar backend, generated desktop icons, and desktop packaging notes.
+- Added README project icon branding.
+
+### Changed
+
+- Changed the README Python support badge to a static Python 3.10+ badge so it does not fail before or between PyPI metadata refreshes.
+- Documented the current desktop app packaging workflow.
+
+### Fixed
+
+- Fixed Auto Timing model pre-download so it uses the same managed model store as normal py-roller runs.
+- Fixed model pre-download to inherit the configured Hugging Face/XET/proxy/timeout download settings.
+- Fixed batch Auto Timing command generation so it also uses the managed transcriber model store.
+
 ## [0.6.2] - 2026-05-20
 
 ### Changed

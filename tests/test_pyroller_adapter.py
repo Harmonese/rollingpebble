@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from rollingpebble.adapters.pyroller_adapter import build_pyroller_command, normalize_stages
-from rollingpebble.models import RollRequest
+from rollingpebble.adapters.pyroller_adapter import build_pyroller_batch_command, build_pyroller_command, normalize_stages
+from rollingpebble.models import BatchRollRequest, RollRequest
 
 
 def test_build_command_emits_integer_hf_timeouts_and_artifact_outputs() -> None:
@@ -66,6 +66,16 @@ def test_build_command_can_use_isolated_runtime_python_and_model_store() -> None
     )
 
     assert command[:4] == ["/runtime/bin/python", "-m", "pyroller.cli.main", "run"]
+    assert command[command.index("--transcriber-model-path") + 1] == "/models/transcriber"
+
+
+def test_build_batch_command_can_use_isolated_runtime_model_store() -> None:
+    command, _manifest = build_pyroller_batch_command(
+        BatchRollRequest(stages="t,p,a,w", language="zh", writer_backend="lrc_ms", project_ids=["one"]),
+        [{"id": "one", "audio": "/song/audio.mp3", "lyrics": "/song/plain.txt", "output": "/song/out.lrc"}],
+        default_model_store="/models/transcriber",
+    )
+
     assert command[command.index("--transcriber-model-path") + 1] == "/models/transcriber"
 
 

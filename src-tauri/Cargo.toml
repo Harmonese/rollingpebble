@@ -1,0 +1,14 @@
+[package]
+name = "rollingpebble-desktop"
+version = "0.6.3"
+description = "Desktop shell for Rolling Pebble"
+authors = ["Harmonese"]
+license = "MIT"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+url = "2"

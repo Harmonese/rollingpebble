@@ -17,7 +17,7 @@ import {
     type StorageUsage,
 } from "../../shared/api.js";
 import { formatBytes, secondsSince } from "../../shared/format.js";
-import { INTEGER_POSITIVE_ERROR, NUMERIC_POSITIVE_ERROR } from "../../shared/numbers.js";
+import { INTEGER_POSITIVE_ERROR, NUMERIC_POSITIVE_ERROR, optionalPositiveIntValue } from "../../shared/numbers.js";
 import { notifySettingsUpdated } from "../../shared/settingsEvents.js";
 import { AutoTimingFields } from "../roller/AutoTimingFields.js";
 import { ColorPicker } from "./ColorPicker.js";
@@ -684,6 +684,11 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
                 transcriber_backend: at.transcriberBackend || null,
                 transcriber_model_name: at.transcriberModel || null,
                 transcriber_model_path: null,
+                transcriber_hf_xet: at.hfXet || null,
+                transcriber_hf_proxy: at.hfProxy || null,
+                transcriber_hf_etag_timeout: optionalPositiveIntValue(at.hfEtagTimeout),
+                transcriber_hf_download_timeout: optionalPositiveIntValue(at.hfDownloadTimeout),
+                transcriber_hf_max_workers: optionalPositiveIntValue(at.hfMaxWorkers),
             });
             setJob(created);
             toastPubSub.pub({ type: "success", text: t.messages.runtimeJobStarted.replace("{id}", created.job_id) });

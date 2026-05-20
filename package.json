@@ -8,7 +8,9 @@
     "dev:frontend": "pnpm -C frontend start --host 127.0.0.1 --port 5173",
     "dev:backend": "rollingpebble serve --reload",
     "build": "pnpm -C frontend build",
-    "install:frontend": "pnpm -C frontend install"
+    "install:frontend": "pnpm -C frontend install",
+    "desktop:dev": "cd src-tauri && cargo run",
+    "desktop:build": "cd src-tauri && cargo tauri build"
   },
   "packageManager": "pnpm@10.11.0"
 }

@@ -535,7 +535,17 @@ export const api = {
         request<JobModel>("/api/runtime/auto-roller/install", { method: "POST", body: JSON.stringify(payload) }),
     upgradeAutoRoller: (payload: { profile: "auto" | "cpu" | "cu124" }) =>
         request<JobModel>("/api/runtime/auto-roller/upgrade", { method: "POST", body: JSON.stringify(payload) }),
-    cacheModel: (payload: { language: "zh" | "en" | "mul"; transcriber_backend?: string | null; transcriber_model_name?: string | null; transcriber_model_path?: string | null }) =>
+    cacheModel: (payload: {
+        language: "zh" | "en" | "mul";
+        transcriber_backend?: string | null;
+        transcriber_model_name?: string | null;
+        transcriber_model_path?: string | null;
+        transcriber_hf_xet?: "auto" | "on" | "off" | null;
+        transcriber_hf_proxy?: string | null;
+        transcriber_hf_etag_timeout?: number | null;
+        transcriber_hf_download_timeout?: number | null;
+        transcriber_hf_max_workers?: number | null;
+    }) =>
         request<JobModel>("/api/runtime/auto-roller/cache-model", { method: "POST", body: JSON.stringify(payload) }),
     uploadPlan: (projectId: string, payload: Record<string, unknown>) =>
         request<UploadPlan>(`/api/projects/${projectId}/upload/plan`, { method: "POST", body: JSON.stringify(payload) }),

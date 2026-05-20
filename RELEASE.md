@@ -4,7 +4,7 @@ This project releases through GitHub Releases. Publishing a GitHub Release trigg
 
 ## Version
 
-Current release target: `v0.6.2`
+Current release target: `v0.6.3`
 
 Before tagging:
 
@@ -42,8 +42,8 @@ python -m build
 
 Expected files in `dist/`:
 
-- `rollingpebble-0.6.2-py3-none-any.whl`
-- `rollingpebble-0.6.2.tar.gz`
+- `rollingpebble-0.6.3-py3-none-any.whl`
+- `rollingpebble-0.6.3.tar.gz`
 
 ## PyPI Publishing
 
@@ -67,7 +67,7 @@ PyPI must be configured with a trusted publisher for this repository and the `py
 python -m venv /tmp/rollingpebble-release-test
 . /tmp/rollingpebble-release-test/bin/activate
 python -m pip install -U pip
-python -m pip install dist/rollingpebble-0.6.2-py3-none-any.whl
+python -m pip install dist/rollingpebble-0.6.3-py3-none-any.whl
 rollingpebble --help
 rollingpebble doctor
 ```
@@ -83,9 +83,9 @@ Open `http://127.0.0.1:6790`.
 ## Tag
 
 ```bash
-git tag -a v0.6.2 -m "Release v0.6.2"
+git tag -a v0.6.3 -m "Release v0.6.3"
 git push origin main
-git push origin v0.6.2
+git push origin v0.6.3
 ```
 
 ## GitHub Release Notes
@@ -93,19 +93,20 @@ git push origin v0.6.2
 Title:
 
 ```text
-Rolling Pebble v0.6.2
+Rolling Pebble v0.6.3
 ```
 
 Body:
 
 ```markdown
-Maintenance release for Rolling Pebble.
+Desktop packaging and Auto Timing cache reliability release for Rolling Pebble.
 
 Highlights:
 
-- Added Harmonese author information to the About dialog credits section.
-- Added official website, GitHub, and Bandcamp links for Harmonese.
-- Split author links and project repository links into separate rows.
+- Added MIT license and Tauri desktop packaging prototype.
+- Added macOS `.app`/`.dmg` packaging with bundled Python sidecar backend.
+- Fixed Auto Timing model pre-download to use the same managed model store and download settings as normal py-roller runs.
+- Added README project icon branding and a stable Python 3.10+ badge.
 
 Install from PyPI:
 

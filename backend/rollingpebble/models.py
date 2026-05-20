@@ -388,6 +388,11 @@ class ModelCacheRequest(BaseModel):
     transcriber_backend: str | None = None
     transcriber_model_name: str | None = None
     transcriber_model_path: str | None = None
+    transcriber_hf_xet: Literal["auto", "on", "off"] | None = None
+    transcriber_hf_proxy: str | None = None
+    transcriber_hf_etag_timeout: int | None = None
+    transcriber_hf_download_timeout: int | None = None
+    transcriber_hf_max_workers: int | None = None
 
 
 class RuntimeSettingsUpdateRequest(BaseModel):

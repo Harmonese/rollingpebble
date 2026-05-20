@@ -227,6 +227,9 @@ class RuntimeManager:
     def cache_model_command(
         self, profile: str, *, language: str = "mul", backend: str | None = None,
         model_name: str | None = None, model_path: str | None = None,
+        hf_xet: str | None = None, hf_proxy: str | None = None,
+        hf_etag_timeout: int | None = None, hf_download_timeout: int | None = None,
+        hf_max_workers: int | None = None,
     ) -> list[str]:
         info = self.inspect(profile)
         if not info.ready:
@@ -238,8 +241,18 @@ class RuntimeManager:
             command.extend(["--transcriber-backend", backend])
         if model_name:
             command.extend(["--transcriber-model-name", model_name])
-        if model_path:
-            command.extend(["--transcriber-model-path", str(Path(model_path).expanduser())])
+        effective_model_path = model_path or str(self.default_model_store())
+        command.extend(["--transcriber-model-path", str(Path(effective_model_path).expanduser())])
+        if hf_xet:
+            command.extend(["--transcriber-hf-xet", hf_xet])
+        if hf_proxy:
+            command.extend(["--transcriber-hf-proxy", hf_proxy])
+        if hf_etag_timeout is not None:
+            command.extend(["--transcriber-hf-etag-timeout", str(hf_etag_timeout)])
+        if hf_download_timeout is not None:
+            command.extend(["--transcriber-hf-download-timeout", str(hf_download_timeout)])
+        if hf_max_workers is not None:
+            command.extend(["--transcriber-hf-max-workers", str(hf_max_workers)])
         return command
 
     def legacy_dependency_status(self) -> tuple[bool, str | None, str | None]:

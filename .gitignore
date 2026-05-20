@@ -21,3 +21,8 @@ tests/
 # Generated release/package artifacts
 backend/rollingpebble/frontend_dist/
 skill.zip
+
+# Desktop builds
+src-tauri/gen/
+src-tauri/target/
+desktop/bin/

@@ -334,7 +334,12 @@ class RollerService:
     def preview_batch(self, request: BatchRollRequest) -> dict:
         effective = self._effective_request(request)
         tasks = self._build_batch_tasks(request.project_ids, effective)
-        _, manifest_text = build_pyroller_batch_command(effective, tasks)
+        default_model_store = self.runtime_manager.default_model_store() if self.runtime_manager is not None else None
+        _, manifest_text = build_pyroller_batch_command(
+            effective,
+            tasks,
+            default_model_store=str(default_model_store) if default_model_store else None,
+        )
         return {
             "project_count": len(tasks),
             "projects": [t.get("id", "") for t in tasks],
@@ -360,7 +365,11 @@ class RollerService:
             if not audio_path.exists():
                 raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-        command, manifest_text = build_pyroller_batch_command(effective, tasks)
+        command, manifest_text = build_pyroller_batch_command(
+            effective,
+            tasks,
+            default_model_store=str(self.runtime_manager.default_model_store()),
+        )
         runtime_env = self.runtime_manager.runtime_env(runtime.venv_path)
         # Prepend py-roller to PATH via the runtime's bin directory
         bin_dir = runtime.venv_path / ("Scripts" if sys.platform == "win32" else "bin")  # noqa: F821

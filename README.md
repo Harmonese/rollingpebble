@@ -1,7 +1,11 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Harmonese/rollingpebble/main/frontend/public/img/rollingpebble-avatar.png" alt="Rolling Pebble" width="120" height="120">
+</p>
+
 # Rolling Pebble
 
 [![PyPI](https://img.shields.io/pypi/v/rollingpebble.svg)](https://pypi.org/project/rollingpebble/)
-[![Python](https://img.shields.io/pypi/pyversions/rollingpebble.svg)](https://pypi.org/project/rollingpebble/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](https://www.python.org/downloads/)
 
 Rolling Pebble is a local lyrics workstation for searching, editing, timing, organizing, and publishing LRC lyrics.
 
