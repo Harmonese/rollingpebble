@@ -2,6 +2,7 @@
 
 ## 0.6.0 - 2026-05-20
 
+- Initial Release to GitHub Releases.
 - Raised the isolated Auto Timing runtime requirement to `py-roller>=0.6.2,<0.8`.
 - Added a unified backend-to-frontend message i18n path and expanded UI translations across settings, runtime, storage, project, upload, and utility flows.
 - Reworked Settings with a dedicated Storage & Cleanup area, storage usage summaries, local storage location migration controls, project auto-delete settings, and safer cleanup actions.
