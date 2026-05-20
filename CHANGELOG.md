@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0 - 2026-05-20
+
+- Raised the isolated Auto Timing runtime requirement to `py-roller>=0.6.2,<0.8`.
+- Added a unified backend-to-frontend message i18n path and expanded UI translations across settings, runtime, storage, project, upload, and utility flows.
+- Reworked Settings with a dedicated Storage & Cleanup area, storage usage summaries, local storage location migration controls, project auto-delete settings, and safer cleanup actions.
+- Added isolated runtime dependency management and model cache controls for Auto Timing.
+- Improved project deletion stability, undo/restore behavior, and recent-project ordering interactions.
+- Polished Synchronizer & Editor, Storage & Cleanup, Auto Timing, LRC Utilities, About, and Settings UI consistency.
+- Added reusable frontend primitives for modal shells, segmented tabs, panel messages, settings rows, Auto Timing fields, and settings refresh handling.
+- Improved toast/message lifetimes so operation-scoped messages clear when the related task completes instead of relying on fixed timeouts.
+- Improved dialog and panel animations, including About, Settings, LRC Utilities, project cards, panel messages, and main UI transitions.
+- Fixed the Theme Color picker focus/revert behavior.
+- Improved browser-tab/background audio handling and audio decode error reporting.
+- Added storage service support for local migration, cleanup previews, app data classification, and runtime/model/project cleanup metadata.
+
 ## 0.5.5
 
 - Reworked the Synchronizer/Editor workspace artwork as a non-interactive background layer instead of a large image card.

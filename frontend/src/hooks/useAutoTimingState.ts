@@ -33,7 +33,6 @@ export interface AutoTimingState {
     transcriberBackend: string;
     transcriberDevice: string;
     transcriberModel: string;
-    transcriberModelPath: string;
     transcriberComputeType: string;
     transcriberBatchSize: string;
     localOnly: LocalOnly;
@@ -68,7 +67,6 @@ export interface AutoTimingSetters {
     setTranscriberBackend: (v: string) => void;
     setTranscriberDevice: (v: string) => void;
     setTranscriberModel: (v: string) => void;
-    setTranscriberModelPath: (v: string) => void;
     setTranscriberComputeType: (v: string) => void;
     setTranscriberBatchSize: (v: string) => void;
     setLocalOnly: (v: LocalOnly) => void;
@@ -117,7 +115,6 @@ export function useAutoTimingState(): AutoTimingHook {
     const [transcriberBackend, setTranscriberBackend] = useState("faster_whisper");
     const [transcriberDevice, setTranscriberDevice] = useState("cpu");
     const [transcriberModel, setTranscriberModel] = useState("large-v2");
-    const [transcriberModelPath, setTranscriberModelPath] = useState("");
     const [transcriberComputeType, setTranscriberComputeType] = useState("int8");
     const [transcriberBatchSize, setTranscriberBatchSize] = useState("8");
     const [localOnly, setLocalOnly] = useState<LocalOnly>("off");
@@ -176,7 +173,6 @@ export function useAutoTimingState(): AutoTimingHook {
         setTranscriberBackend(backend);
         setTranscriberDevice(normalizeTranscriberDevice((s.auto_timing_transcriber_device as string) || "cpu"));
         setTranscriberModel((s.auto_timing_transcriber_model_name as string) || defaultModelFor(lang, backend));
-        setTranscriberModelPath((s.auto_timing_model_store as string) || "");
         setTranscriberComputeType((s.auto_timing_transcriber_compute_type as string) || "int8");
         setTranscriberBatchSize(textFromOptionalNumber(s.auto_timing_transcriber_batch_size as number | null | undefined) || "8");
         setLocalOnly(s.auto_timing_local_files_only_default ? "on" : "off");
@@ -227,7 +223,6 @@ export function useAutoTimingState(): AutoTimingHook {
             payload.transcriber_backend = transcriberBackend || null;
             payload.transcriber_device = transcriberDevice || null;
             payload.transcriber_model_name = transcriberModel || null;
-            payload.transcriber_model_path = transcriberModelPath.trim() || null;
             payload.transcriber_local_files_only = localOnly === "on";
             payload.transcriber_hf_xet = hfXet;
             payload.transcriber_hf_proxy = hfProxy.trim() || null;
@@ -256,7 +251,7 @@ export function useAutoTimingState(): AutoTimingHook {
         splitterModel, splitterOverlap, splitterSegment, stages,
         transcriberBackend, transcriberBatchSize, transcriberComputeType,
         transcriberDevice, transcriberIsFasterWhisper, transcriberModel,
-        transcriberModelPath, vadFilter, writerBackend, writerByTag,
+        vadFilter, writerBackend, writerByTag,
         writerIsAss, writerKaraokeTag, writerSpacing,
     ]);
 
@@ -278,7 +273,7 @@ export function useAutoTimingState(): AutoTimingHook {
             auto_timing_transcriber_backend: transcriberBackend,
             auto_timing_transcriber_device: transcriberDevice,
             auto_timing_transcriber_model_name: transcriberModel,
-            auto_timing_model_store: transcriberModelPath.trim(),
+            auto_timing_model_store: "",
             auto_timing_transcriber_compute_type: transcriberIsFasterWhisper ? transcriberComputeType : "",
             auto_timing_transcriber_batch_size: transcriberIsFasterWhisper ? optionalPositiveInt(transcriberBatchSize) : null,
             auto_timing_local_files_only_default: localOnly === "on",
@@ -302,7 +297,7 @@ export function useAutoTimingState(): AutoTimingHook {
         splitterDevice, splitterJobs, splitterModel, splitterOverlap,
         splitterSegment, stages, transcriberBackend, transcriberBatchSize,
         transcriberComputeType, transcriberDevice, transcriberIsFasterWhisper,
-        transcriberModel, transcriberModelPath, vadFilter, writerBackend,
+        transcriberModel, vadFilter, writerBackend,
         writerByTag, writerIsAss, writerKaraokeTag, writerSpacing,
     ]);
 
@@ -325,7 +320,6 @@ export function useAutoTimingState(): AutoTimingHook {
         transcriberBackend, setTranscriberBackend,
         transcriberDevice, setTranscriberDevice,
         transcriberModel, setTranscriberModel,
-        transcriberModelPath, setTranscriberModelPath,
         transcriberComputeType, setTranscriberComputeType,
         transcriberBatchSize, setTranscriberBatchSize,
         localOnly, setLocalOnly,

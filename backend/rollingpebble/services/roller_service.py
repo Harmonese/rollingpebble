@@ -17,9 +17,10 @@ from rollingpebble.adapters.pyroller_adapter import (
 )
 from rollingpebble.jobs import JobManager
 from rollingpebble.models import BatchRollRequest, JobModel, RollPreviewResponse, RollRequest, RuntimeSettingsModel
+from rollingpebble.messages import message_from_text
 from rollingpebble.services.project_service import ProjectService
 from rollingpebble.services.runtime_manager import RuntimeManager
-from rollingpebble.storage.files import PLAIN_NAME, PYROLLER_NAME, write_text
+from rollingpebble.storage.files import PLAIN_NAME, PYROLLER_NAME, resolve_audio_path, write_text
 
 _ALLOWED_TRANSCRIBERS: dict[str, set[str]] = {
     "zh": {"faster_whisper", "mms_phonetic"},
@@ -112,7 +113,6 @@ class RollerService:
         use_default("transcriber_backend", "auto_timing_transcriber_backend")
         use_default("transcriber_device", "auto_timing_transcriber_device")
         use_default("transcriber_model_name", "auto_timing_transcriber_model_name")
-        use_default("transcriber_model_path", "auto_timing_model_store")
         use_default("transcriber_compute_type", "auto_timing_transcriber_compute_type")
         if data.get("transcriber_batch_size") is None:
             data["transcriber_batch_size"] = settings.auto_timing_transcriber_batch_size
@@ -198,10 +198,11 @@ class RollerService:
         project = self.project_service.get(project_id)
         stages = set(normalize_stages(stages_text))
         needs_audio = bool(stages.intersection({"s", "f", "t"}))
-        if needs_audio and not project.audio_path:
+        audio_path = resolve_audio_path(self.projects_root, project)
+        if needs_audio and not audio_path:
             raise ValueError("Project has no audio file")
         root = self.projects_root / project_id
-        audio_path = Path(project.audio_path) if project.audio_path else root / "audio"
+        audio_path = audio_path if audio_path else root / "audio"
         lyrics_path = root / PLAIN_NAME
         output_path = root / PYROLLER_NAME
         intermediate_dir = root / "intermediate"
@@ -264,6 +265,7 @@ class RollerService:
             command=command,
             command_text=command_text(command),
             warnings=warnings,
+            warning_messages=[message_from_text(warning) for warning in warnings],
             output_path=str(output_path),
             intermediate_dir=str(intermediate_dir),
         )
@@ -274,14 +276,15 @@ class RollerService:
         request = self._effective_request(request)
         project = self.project_service.get(project_id)
         stages = set(normalize_stages(request.stages))
-        if stages.intersection({"s", "f", "t"}) and not project.audio_path:
+        audio_path = resolve_audio_path(self.projects_root, project)
+        if stages.intersection({"s", "f", "t"}) and not audio_path:
             raise ValueError("Project has no audio file")
         timing_plain = self.project_service.plain_lyrics_for_timing(project_id)
         if "p" in stages and not timing_plain.strip():
             raise ValueError("No lyric lines to time. Import or paste lyrics first.")
 
         root = self.projects_root / project_id
-        audio_path = Path(project.audio_path) if project.audio_path else root / "audio"
+        audio_path = audio_path if audio_path else root / "audio"
         lyrics_path = write_text(self.projects_root, project_id, PLAIN_NAME, timing_plain) if timing_plain.strip() else root / PLAIN_NAME
         output_path = root / PYROLLER_NAME
         intermediate_dir = root / "intermediate"

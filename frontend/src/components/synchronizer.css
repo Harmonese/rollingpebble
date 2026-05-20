@@ -12,21 +12,26 @@
 .space-button {
     touch-action: none;
     position: fixed;
-    bottom: 50px;
+    bottom: 48px;
     right: 32px;
     z-index: 30;
-    width: 100px;
-    height: 100px;
+    min-width: 132px;
+    min-height: 42px;
+    padding: 0 20px;
     margin-bottom: env(safe-area-inset-bottom);
-    color: var(--roller-text);
-    background-color: var(--theme-color);
-    border: none;
-    border-radius: 50%;
-    font-size: 14px;
-    font-weight: 700;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.28);
+    border: 1px solid rgba(var(--theme-rgb), 0.58);
+    border-radius: var(--radius-pill);
+    font: 700 0.88rem/1 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
     cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition:
+        transform 0.16s ease,
+        box-shadow 0.16s ease,
+        background 0.16s ease,
+        border-color 0.16s ease,
+        color 0.16s ease;
     user-select: none;
 }
 
@@ -37,13 +42,15 @@
 }
 
 .space-button:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    transform: translateY(-1px);
+    background: rgba(var(--theme-rgb), 0.38);
+    border-color: rgba(var(--theme-rgb), 0.78);
+    box-shadow: 0 13px 30px rgba(0, 0, 0, 0.28);
 }
 
 .space-button:active {
-    transform: scale(0.95);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transform: translateY(1px);
+    box-shadow: 0 7px 18px rgba(0, 0, 0, 0.28);
 }
 
 .line {
@@ -154,6 +161,6 @@
 }
 
 .space-button {
-    background-color: var(--theme-color);
-    color: var(--theme-contrast-color);
+    background-color: rgba(var(--theme-rgb), 0.28);
+    color: var(--theme-color);
 }

@@ -13,6 +13,7 @@ from rollingpebble.storage.files import (
     PLAIN_NAME,
     PYROLLER_NAME,
     SYNCED_NAME,
+    audio_ref_for_path,
     derive_plain_from_synced,
     plain_for_timing,
     new_project_id,
@@ -64,6 +65,7 @@ class ProjectService:
             project_id=project_id,
             last_opened_at=_utc_now_iso(),
             audio_name=upload.filename,
+            audio_ref=audio_ref_for_path(self.projects_root, project_id, audio_path),
             audio_path=str(audio_path),
             metadata=meta,
         )

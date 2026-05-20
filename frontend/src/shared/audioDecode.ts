@@ -4,6 +4,9 @@ export type PreparedAudioFile = {
     sourceFormat: "audio" | "ncm" | "qmc";
 };
 
+export const AUDIO_UNSUPPORTED_ERROR = "rollingpebble.audio.unsupported";
+export const AUDIO_DECODE_WORKER_ERROR = "rollingpebble.audio.decode_worker_failed";
+
 const PLAIN_AUDIO_RE = /\.(?:mp3|flac|wav|m4a|aac|ogg|opus)$/i;
 const NCM_RE = /\.ncm$/i;
 const QMC_RE = /\.qmc(?:flac|ogg|0|1|2|3)$/i;
@@ -35,7 +38,7 @@ export async function prepareAudioFile(file: File): Promise<PreparedAudioFile> {
         return { file: buildDecodedFile(file, data), decoded: true, sourceFormat: "qmc" };
     }
 
-    throw new Error("Unsupported audio file.");
+    throw new Error(AUDIO_UNSUPPORTED_ERROR);
 }
 
 function decodeWithWorker(file: File, workerUrl: URL): Promise<Uint8Array> {
@@ -59,7 +62,7 @@ function decodeWithWorker(file: File, workerUrl: URL): Promise<Uint8Array> {
             "error",
             (ev) => {
                 worker.terminate();
-                reject(new Error(ev.message || "Audio decode worker failed."));
+                reject(new Error(ev.message || AUDIO_DECODE_WORKER_ERROR));
             },
             { once: true },
         );

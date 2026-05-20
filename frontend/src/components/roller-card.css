@@ -34,6 +34,62 @@
     cursor: pointer;
 }
 
+.roller-card details[open] > :not(summary),
+.settings-section details[open] > :not(summary),
+.about-modal details[open] > :not(summary) {
+    animation: details-content-in 150ms ease-out both;
+}
+
+@keyframes details-content-in {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes roller-message-in {
+    from {
+        opacity: 0;
+        transform: translateY(-7px) scale(0.985);
+        filter: saturate(0.85);
+    }
+    58% {
+        opacity: 1;
+        transform: translateY(1px) scale(1.004);
+        filter: saturate(1.05);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: saturate(1);
+    }
+}
+
+@keyframes roller-message-out {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(-5px) scale(0.99);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .roller-card details[open] > :not(summary),
+    .settings-section details[open] > :not(summary),
+    .about-modal details[open] > :not(summary),
+    .roller-message,
+    .roller-message.fading {
+        animation-duration: 1ms;
+    }
+}
+
 /* Shared text styles */
 .roller-muted,
 .roller-message,
@@ -49,6 +105,7 @@
 }
 
 .roller-message {
+    position: relative;
     color: var(--roller-accent-2);
     overflow-wrap: anywhere;
     background: var(--overlay-subtle);
@@ -56,11 +113,18 @@
     padding: 10px 12px;
     border-radius: var(--radius-md);
     margin: 8px 0;
-    transition: opacity 0.35s ease-out;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+    animation: roller-message-in 230ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+    transition:
+        color 160ms ease,
+        background-color 160ms ease,
+        border-color 160ms ease,
+        box-shadow 160ms ease;
+    will-change: opacity, transform;
 }
 
 .roller-message.fading {
-    opacity: 0;
+    animation: roller-message-out 180ms ease-in both;
 }
 
 .roller-message.success {
@@ -85,6 +149,7 @@
     color: var(--roller-muted);
     background: rgba(255, 255, 255, 0.018);
     border-color: rgba(255, 255, 255, 0.05);
+    box-shadow: none;
 }
 
 .roller-warning {

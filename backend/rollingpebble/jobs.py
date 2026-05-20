@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Any
 
+from rollingpebble.messages import message_from_text, msg
 from rollingpebble.models import JobModel, JobProgressModel, JobStatus
 
 _PYROLLER_EVENT_PREFIX = "PYROLLER_EVENT "
@@ -472,6 +473,7 @@ class JobManager:
                         managed.model.return_code = return_code
                         managed.model.updated_at = _utc_now_iso()
                         managed.model.error = f"Command exited with code {return_code}"
+                        managed.model.error_message = message_from_text(managed.model.error)
                         managed.model.result = result or None
                         if managed.model.progress is not None:
                             managed.model.progress.failed = True
@@ -500,6 +502,7 @@ class JobManager:
                         total=1,
                         unit="task",
                         message=complete_message,
+                        message_message=message_from_text(complete_message) if complete_message else None,
                         percent=1.0,
                         progress=1.0,
                         raw="",
@@ -520,6 +523,7 @@ class JobManager:
                         managed.model.updated_at = now
                         managed.model.last_output_at = managed.model.last_output_at or now
                         managed.model.error = str(exc)
+                        managed.model.error_message = message_from_text(str(exc))
                         managed.model.result = result or None
                         managed.model.logs.append(f"Failed to start or monitor command: {exc}")
 
@@ -560,6 +564,8 @@ class JobManager:
             managed.model.logs.append("Cancellation requested by rollingpebble.")
             if managed.model.progress is not None:
                 managed.model.progress.message = "Cancellation requested"
+                managed.model.progress.message_message = msg("job.cancel_requested", "Cancellation requested")
+            managed.model.error_message = msg("job.cancel_requested", "Cancellation requested")
             process = managed.process
         if process is not None and process.poll() is None:
             self._request_process_stop(managed, process)

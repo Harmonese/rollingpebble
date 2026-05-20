@@ -5,6 +5,7 @@ import shutil
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -22,9 +23,13 @@ from rollingpebble.models import (
     StorageModelItemModel,
     StorageOtherItemModel,
     StorageProjectModel,
+    StorageMigrateRootResponse,
+    StorageRootModel,
     StorageRuntimeItemModel,
     StorageUsageResponse,
 )
+from rollingpebble.messages import message_from_exception, message_from_text
+from rollingpebble.paths import StorageLayout
 from rollingpebble.services.runtime_manager import RuntimeManager
 from rollingpebble.storage.app_settings import SettingsStore
 from rollingpebble.storage.files import AUDIO_NAME, PLAIN_NAME, PROJECT_JSON, PYROLLER_NAME, SYNCED_NAME, read_project, write_project
@@ -61,13 +66,33 @@ _IGNORED_OTHER_NAMES = set(_IGNORED_SYSTEM_NAMES)
 
 
 class StorageService:
-    def __init__(self, *, data_dir: Path, jobs: JobManager, runtime_manager: RuntimeManager | None = None) -> None:
-        self.data_dir = data_dir.expanduser().resolve()
-        self.projects_root = self.data_dir / "projects"
+    def __init__(
+        self,
+        *,
+        data_dir: Path | None = None,
+        layout: StorageLayout | None = None,
+        jobs: JobManager,
+        runtime_manager: RuntimeManager | None = None,
+    ) -> None:
+        if layout is None and data_dir is None:
+            raise ValueError("StorageService requires data_dir or layout")
+        if layout is None:
+            assert data_dir is not None
+            layout = StorageLayout.from_data_dir(data_dir)
+        self.layout = layout
+        self.data_dir = self.layout.app_root.expanduser().resolve()
+        self.projects_root = self.layout.projects_root.expanduser().resolve()
         self.jobs = jobs
-        self.runtime_manager = runtime_manager or RuntimeManager(self.data_dir)
+        self.runtime_manager = runtime_manager or RuntimeManager(self.layout)
         self.settings_store = SettingsStore(self.data_dir)
         self._plans: dict[str, _CachedPlan] = {}
+
+    def update_layout(self, layout: StorageLayout) -> None:
+        self.layout = layout
+        self.data_dir = self.layout.app_root.expanduser().resolve()
+        self.projects_root = self.layout.projects_root.expanduser().resolve()
+        self.runtime_manager.update_layout(layout)
+        self.settings_store = SettingsStore(self.data_dir)
 
     def model_item_path(self, model_id: str) -> Path:
         item = next((item for item in self._model_items() if item.id == model_id), None)
@@ -89,19 +114,21 @@ class StorageService:
         return path
 
     def usage(self) -> StorageUsageResponse:
-        total_bytes, total_count = self._tree_stats(self.data_dir)
+        self._apply_project_auto_delete_policy()
         projects = self._project_summaries()
         model_items = self._model_items()
         runtime_items = self._runtime_items()
         other_items = self._other_items()
+        total_bytes, total_count = self._storage_total_stats()
         categories = [
             self._category_from_stats("projects", sum(item.total_bytes for item in projects), sum(item.file_count for item in projects), self.projects_root),
-            self._category("models", [self.data_dir / "models"]),
-            self._category("runtime_envs", [self.data_dir / "envs"]),
+            self._category("models", [self.layout.models_root]),
+            self._category("runtime_envs", [self.layout.runtime_root]),
             self._category_from_stats("other", sum(item.bytes for item in other_items), sum(item.file_count for item in other_items), self.data_dir),
         ]
         return StorageUsageResponse(
             data_dir=str(self.data_dir),
+            roots=self._storage_roots(projects, model_items, runtime_items, other_items),
             total_bytes=total_bytes,
             file_count=total_count,
             categories=categories,
@@ -109,6 +136,87 @@ class StorageService:
             models=model_items,
             runtimes=runtime_items,
             other_items=other_items,
+        )
+
+    def _storage_total_stats(self) -> tuple[int, int]:
+        roots = [
+            self.layout.app_root,
+            self.layout.projects_root,
+            self.layout.models_root,
+            self.layout.cache_root,
+            self.layout.runtime_root,
+            self.layout.work_root,
+        ]
+        selected: list[Path] = []
+        for root in sorted({path.expanduser().resolve(strict=False) for path in roots}, key=lambda path: len(path.parts)):
+            if any(self._is_relative_to(root, existing) for existing in selected):
+                continue
+            selected.append(root)
+        return self._sum_stats(selected)
+
+    def migrate_root(self, root_id: str, target_path: str) -> StorageMigrateRootResponse:
+        if root_id not in {"projects", "models", "cache", "work"}:
+            raise ValueError(f"Storage root cannot be moved: {root_id}")
+        if self._running_jobs():
+            raise RuntimeError("Storage roots cannot be moved while jobs are running.")
+
+        source = self._root_path(root_id).expanduser().resolve()
+        target = Path(target_path).expanduser().resolve()
+        if source == target:
+            raise ValueError("Target path is already the active storage location.")
+        if self._is_relative_to(target, source) or self._is_relative_to(source, target):
+            raise ValueError("Target path cannot be inside the current storage root or contain it.")
+        target_parent = target.parent
+        target_parent.mkdir(parents=True, exist_ok=True)
+        if target.exists() and any(target.iterdir()):
+            raise ValueError("Target directory must be empty.")
+
+        source.mkdir(parents=True, exist_ok=True)
+        moved_bytes, file_count = self._tree_stats(source)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+        tmp = target_parent / f".{target.name}.rollingpebble-migrate-{stamp}-{uuid.uuid4().hex[:8]}"
+        backup = source.parent / f"{source.name}.backup-{stamp}"
+        try:
+            shutil.copytree(source, tmp, symlinks=True)
+            if target.exists():
+                target.rmdir()
+            tmp.rename(target)
+            if source.exists() and not source.is_symlink():
+                backup_candidate = backup
+                index = 1
+                while backup_candidate.exists():
+                    backup_candidate = source.parent / f"{source.name}.backup-{stamp}-{index}"
+                    index += 1
+                source.rename(backup_candidate)
+                backup = backup_candidate
+            else:
+                backup = None
+        except Exception:
+            if tmp.exists():
+                shutil.rmtree(tmp, ignore_errors=True)
+            raise
+
+        settings = self.settings_store.read()
+        setattr(settings, self._settings_field_for_root(root_id), str(target))
+        self.settings_store.write(settings)
+        new_layout = StorageLayout.from_data_dir(
+            self.data_dir,
+            projects_root=settings.storage_projects_root or None,
+            models_root=settings.storage_models_root or None,
+            cache_root=settings.storage_cache_root or None,
+            runtime_root=settings.storage_runtime_root or None,
+            work_root=settings.storage_work_root or None,
+        ).ensure()
+        self.update_layout(new_layout)
+        usage = self.usage()
+        root = next(item for item in usage.roots if item.id == root_id)
+        return StorageMigrateRootResponse(
+            root=root,
+            old_path=str(source),
+            backup_path=str(backup) if backup else None,
+            moved_bytes=moved_bytes,
+            file_count=file_count,
+            usage=usage,
         )
 
     def preview(self, request: StorageCleanupPreviewRequest) -> StorageCleanupPlanResponse:
@@ -172,6 +280,7 @@ class StorageService:
             entry_count=len(entries),
             entries=entries,
             warnings=list(dict.fromkeys(warnings)),
+            warning_messages=[message_from_text(warning) for warning in list(dict.fromkeys(warnings))],
         )
         self._plans[plan.plan_id] = _CachedPlan(plan=plan)
         self._prune_plans()
@@ -213,6 +322,7 @@ class StorageService:
                         entry_id=entry.id,
                         relative_path=entry.relative_path,
                         error=str(exc),
+                        error_message=message_from_exception(exc),
                     )
                 )
         return StorageCleanupRunResponse(
@@ -296,16 +406,51 @@ class StorageService:
             file_count=count,
             risk=risk,  # type: ignore[arg-type]
             reason=reason,
+            reason_message=message_from_text(reason),
             removable=removable and size >= 0,
         )
 
     def _relative(self, path: Path) -> str:
+        managed_roots = [
+            ("projects", self.layout.projects_root),
+            ("models", self.layout.models_root),
+            ("envs", self.layout.runtime_root),
+            ("cache", self.layout.cache_root),
+            ("work", self.layout.work_root),
+        ]
+        resolved = path.resolve(strict=False)
+        for prefix, root in managed_roots:
+            try:
+                return str(Path(prefix) / resolved.relative_to(root.resolve(strict=False))).replace("\\", "/")
+            except ValueError:
+                continue
         try:
             return path.relative_to(self.data_dir).as_posix()
         except ValueError:
             return path.as_posix()
 
     def _absolute_from_relative(self, relative_path: str) -> Path:
+        raw = Path(relative_path)
+        if raw.is_absolute():
+            return raw
+        parts = raw.parts
+        if parts:
+            root_map = {
+                "projects": self.layout.projects_root,
+                "models": self.layout.models_root,
+                "envs": self.layout.runtime_root,
+                "cache": self.layout.cache_root,
+                "work": self.layout.work_root,
+            }
+            root = root_map.get(parts[0])
+            if root is not None:
+                path = root.joinpath(*parts[1:])
+                resolved = path.resolve(strict=False)
+                try:
+                    resolved.relative_to(root.resolve(strict=False))
+                except ValueError as exc:
+                    raise RuntimeError("Cleanup path escaped the rollingpebble data directory.") from exc
+                return path
         path = self.data_dir / relative_path
         resolved = path.resolve(strict=False)
         try:
@@ -373,6 +518,36 @@ class StorageService:
         except OSError:
             return None
 
+    def _apply_project_auto_delete_policy(self) -> None:
+        try:
+            days = int(self.settings_store.read().project_auto_delete_days or 0)
+        except Exception:
+            return
+        if days <= 0:
+            return
+        for project in self._project_summaries():
+            if project.active or not self._project_is_older_than(project, days):
+                continue
+            project_dir = self.projects_root / project.project_id
+            try:
+                resolved = project_dir.resolve(strict=False)
+                resolved.relative_to(self.projects_root.resolve(strict=False))
+                if project_dir.exists() and project_dir.is_dir() and not project_dir.is_symlink():
+                    shutil.rmtree(project_dir)
+            except Exception:
+                continue
+
+    def _project_is_older_than(self, project: StorageProjectModel, days: int) -> bool:
+        if project.updated_at:
+            try:
+                updated = datetime.fromisoformat(project.updated_at.replace("Z", "+00:00"))
+                if updated.tzinfo is None:
+                    updated = updated.replace(tzinfo=timezone.utc)
+                return (datetime.now(timezone.utc) - updated.astimezone(timezone.utc)).total_seconds() >= days * 86400
+            except ValueError:
+                pass
+        return self._is_older_than(self.projects_root / project.project_id, days)
+
     def _sum_stats(self, paths: Iterable[Path]) -> tuple[int, int]:
         total_bytes = 0
         total_count = 0
@@ -381,6 +556,87 @@ class StorageService:
             total_bytes += size
             total_count += count
         return total_bytes, total_count
+
+    def _root_path(self, root_id: str) -> Path:
+        if root_id == "app":
+            return self.layout.app_root
+        if root_id == "projects":
+            return self.layout.projects_root
+        if root_id == "models":
+            return self.layout.models_root
+        if root_id == "cache":
+            return self.layout.cache_root
+        if root_id == "runtime":
+            return self.layout.runtime_root
+        if root_id == "work":
+            return self.layout.work_root
+        raise ValueError(f"Unknown storage root: {root_id}")
+
+    def _settings_field_for_root(self, root_id: str) -> str:
+        return {
+            "projects": "storage_projects_root",
+            "models": "storage_models_root",
+            "cache": "storage_cache_root",
+            "runtime": "storage_runtime_root",
+            "work": "storage_work_root",
+        }[root_id]
+
+    def _storage_roots(
+        self,
+        projects: list[StorageProjectModel],
+        models: list[StorageModelItemModel],
+        runtimes: list[StorageRuntimeItemModel],
+        other_items: list[StorageOtherItemModel],
+    ) -> list[StorageRootModel]:
+        defaults = StorageLayout.from_data_dir(self.data_dir)
+        model_bytes = sum(item.bytes for item in models)
+        model_count = sum(item.file_count for item in models)
+        runtime_bytes = sum(item.bytes for item in runtimes)
+        runtime_count = sum(item.file_count for item in runtimes)
+        other_bytes = sum(item.bytes for item in other_items)
+        other_count = sum(item.file_count for item in other_items)
+        return [
+            StorageRootModel(
+                id="projects",
+                label="Projects",
+                path=str(self.layout.projects_root),
+                default_path=str(defaults.projects_root),
+                bytes=sum(item.total_bytes for item in projects),
+                file_count=sum(item.file_count for item in projects),
+                movable=True,
+                active=any(item.active for item in projects),
+            ),
+            StorageRootModel(
+                id="models",
+                label="Models",
+                path=str(self.layout.models_root),
+                default_path=str(defaults.models_root),
+                bytes=model_bytes,
+                file_count=model_count,
+                movable=True,
+                active=any(item.active for item in models),
+            ),
+            StorageRootModel(
+                id="runtime",
+                label="Runtime Environments",
+                path=str(self.layout.runtime_root),
+                default_path=str(defaults.runtime_root),
+                bytes=runtime_bytes,
+                file_count=runtime_count,
+                movable=False,
+                active=any(item.active for item in runtimes),
+            ),
+            StorageRootModel(
+                id="other",
+                label="Other",
+                path=str(self.layout.app_root),
+                default_path=str(defaults.app_root),
+                bytes=other_bytes,
+                file_count=other_count,
+                movable=False,
+                active=False,
+            ),
+        ]
 
     def _project_audio_paths(self, project_dir: Path) -> list[Path]:
         return sorted(path for path in project_dir.iterdir() if path.is_file() and path.name.startswith(_AUDIO_PREFIX)) if project_dir.exists() else []
@@ -423,10 +679,10 @@ class StorageService:
         return age_seconds >= days * 86400
 
     def _model_roots(self) -> list[Path]:
-        return [self.data_dir / "models"]
+        return [self.layout.models_root]
 
     def _manifest_records(self) -> list[dict]:
-        manifest_path = self.data_dir / "models" / "transcriber" / "manifests" / "transcriber-index.json"
+        manifest_path = self.layout.models_root / "transcriber" / "manifests" / "transcriber-index.json"
         if not manifest_path.exists():
             return []
         try:
@@ -506,7 +762,7 @@ class StorageService:
         )
 
     def _model_items(self) -> list[StorageModelItemModel]:
-        models_root = self.data_dir / "models"
+        models_root = self.layout.models_root
         if not models_root.exists():
             return []
         records = self._manifest_records()
@@ -598,7 +854,7 @@ class StorageService:
         return False
 
     def _prune_transcriber_manifest_for_deleted_model(self, deleted_path: Path) -> None:
-        manifest_path = self.data_dir / "models" / "transcriber" / "manifests" / "transcriber-index.json"
+        manifest_path = self.layout.models_root / "transcriber" / "manifests" / "transcriber-index.json"
         if not manifest_path.exists() or manifest_path.is_symlink():
             return
         try:
@@ -620,7 +876,7 @@ class StorageService:
             return
 
     def _runtime_items(self) -> list[StorageRuntimeItemModel]:
-        envs = self.data_dir / "envs"
+        envs = self.layout.runtime_root
         if not envs.exists():
             return []
         active_runtime_id = self._active_runtime_id()
@@ -656,6 +912,12 @@ class StorageService:
 
     def _other_items(self) -> list[StorageOtherItemModel]:
         excluded = {"projects", "models", "envs"}
+        for root in (self.layout.projects_root, self.layout.models_root, self.layout.runtime_root, self.layout.work_root):
+            try:
+                if root.resolve(strict=False).parent == self.data_dir.resolve(strict=False):
+                    excluded.add(root.name)
+            except OSError:
+                continue
         if not self.data_dir.exists():
             return []
         items: list[StorageOtherItemModel] = []
@@ -677,6 +939,20 @@ class StorageService:
                     removable=child.name != "settings.json" and not child.is_symlink() and not (child.name == "cache" and self._runtime_busy()),
                 )
             )
+        cache_root = self.layout.cache_root.resolve(strict=False)
+        if not self._is_relative_to(cache_root, self.data_dir.resolve(strict=False)):
+            size, count = self._tree_stats(self.layout.cache_root)
+            if size or count:
+                items.append(
+                    StorageOtherItemModel(
+                        label="External Cache",
+                        relative_path="cache",
+                        bytes=size,
+                        file_count=count,
+                        updated_at=self._mtime_iso(self.layout.cache_root),
+                        removable=not self._runtime_busy(),
+                    )
+                )
         items.sort(key=lambda item: item.bytes, reverse=True)
         return items
 
@@ -844,7 +1120,7 @@ class StorageService:
         return entries
 
     def _model_cache_entries(self, model_ids: Iterable[str] | None = None) -> list[StorageCleanupEntryModel]:
-        models_root = self.data_dir / "models"
+        models_root = self.layout.models_root
         if self._runtime_busy():
             return [
                 self._entry(
@@ -875,7 +1151,7 @@ class StorageService:
         return entries
 
     def _runtime_entries(self, runtime_ids: Iterable[str] | None = None) -> list[StorageCleanupEntryModel]:
-        envs = self.data_dir / "envs"
+        envs = self.layout.runtime_root
         if not envs.exists():
             return []
         active_runtime_id = self._active_runtime_id()
@@ -923,10 +1199,16 @@ class StorageService:
         if path.is_symlink():
             raise RuntimeError("Refusing to delete symbolic links during cleanup.")
         resolved = path.resolve(strict=False)
-        try:
-            resolved.relative_to(self.data_dir)
-        except ValueError as exc:
-            raise RuntimeError("Cleanup path escaped the rollingpebble data directory.") from exc
+        allowed_roots = [
+            self.layout.app_root,
+            self.layout.projects_root,
+            self.layout.models_root,
+            self.layout.cache_root,
+            self.layout.runtime_root,
+            self.layout.work_root,
+        ]
+        if not any(self._is_relative_to(resolved, root.resolve(strict=False)) for root in allowed_roots):
+            raise RuntimeError("Cleanup path escaped the rollingpebble data directory.")
         parts = Path(entry.relative_path).parts
         if not parts:
             raise RuntimeError("Invalid cleanup path.")
@@ -945,7 +1227,7 @@ class StorageService:
                 raise RuntimeError("Current runtime is protected.")
             return
         if entry.category == "model_cache":
-            models_root = (self.data_dir / "models").resolve(strict=False)
+            models_root = self.layout.models_root.resolve(strict=False)
             if not self._is_relative_to(resolved, models_root):
                 raise RuntimeError("Model cleanup can only delete managed model cache paths.")
             if Path(entry.relative_path).parts == ("models",):
@@ -1006,6 +1288,7 @@ class StorageService:
             project = read_project(self.projects_root, project_id)
             if entry.category == "project_audio" and not self._project_audio_paths(project_dir):
                 project.audio_name = None
+                project.audio_ref = None
                 project.audio_path = None
                 write_project(self.projects_root, project)
             elif entry.category == "project_lyrics_output":

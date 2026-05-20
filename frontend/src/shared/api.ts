@@ -9,6 +9,7 @@ export type ProjectModel = {
     project_id: string;
     last_opened_at?: string | null;
     audio_name?: string | null;
+    audio_ref?: string | null;
     audio_path?: string | null;
     metadata: MetaModel;
     plain_lyrics: string;
@@ -66,6 +67,7 @@ export type JobProgress = {
     total: number;
     unit: string;
     message: string;
+    message_message?: BackendMessage | null;
     percent?: number | null;
     progress?: number | null;
     raw: string;
@@ -79,6 +81,12 @@ export type JobProgress = {
     detail?: Record<string, unknown>;
 };
 
+export type BackendMessage = {
+    code: string;
+    params?: Record<string, string | number | boolean | null>;
+    fallback?: string;
+};
+
 export type JobModel = {
     job_id: string;
     kind: string;
@@ -88,6 +96,7 @@ export type JobModel = {
     logs: string[];
     result?: Record<string, unknown> | null;
     error?: string | null;
+    error_message?: BackendMessage | null;
     progress?: JobProgress | null;
     completed_stages: string[];
     events?: Record<string, unknown>[];
@@ -102,6 +111,7 @@ export type RollPreview = {
     command: string[];
     command_text: string;
     warnings: string[];
+    warning_messages?: BackendMessage[];
     output_path?: string | null;
     intermediate_dir?: string | null;
 };
@@ -110,10 +120,18 @@ export type UploadPlan = {
     can_upload: boolean;
     mode: string;
     reason: string;
+    reason_message?: BackendMessage | null;
     plain_lines: number;
     synced_lines: number;
     warnings: string[];
+    warning_messages?: BackendMessage[];
     payload_preview: Record<string, unknown>;
+};
+
+export type UploadRunResponse = {
+    success: boolean;
+    message: string;
+    message_message?: BackendMessage | null;
 };
 
 export type RuntimeSettings = {
@@ -163,6 +181,12 @@ export type RuntimeSettings = {
     auto_timing_writer_ass_karaoke_tag_type: "" | "k" | "K" | "kf" | "ko";
 
     recent_projects_limit: number;
+    project_auto_delete_days: number;
+    storage_projects_root: string;
+    storage_models_root: string;
+    storage_cache_root: string;
+    storage_runtime_root: string;
+    storage_work_root: string;
 
     audio_filename_regex: string;
     audio_filename_regex_enabled: boolean;
@@ -220,6 +244,17 @@ export type StorageCategory = {
     description: string;
 };
 
+export type StorageRoot = {
+    id: "projects" | "models" | "runtime" | "other";
+    label: string;
+    path: string;
+    default_path: string;
+    bytes: number;
+    file_count: number;
+    movable: boolean;
+    active: boolean;
+};
+
 export type StorageProject = {
     project_id: string;
     title: string;
@@ -246,6 +281,7 @@ export type StorageProject = {
 
 export type StorageUsage = {
     data_dir: string;
+    roots: StorageRoot[];
     total_bytes: number;
     file_count: number;
     categories: StorageCategory[];
@@ -277,6 +313,7 @@ export type StorageCleanupEntry = {
     file_count: number;
     risk: "safe" | "caution" | "danger" | "blocked";
     reason: string;
+    reason_message?: BackendMessage | null;
     removable: boolean;
 };
 
@@ -287,6 +324,7 @@ export type StorageCleanupPlan = {
     entry_count: number;
     entries: StorageCleanupEntry[];
     warnings: string[];
+    warning_messages?: BackendMessage[];
 };
 
 export type StorageCleanupRunResult = {
@@ -294,8 +332,17 @@ export type StorageCleanupRunResult = {
     deleted_bytes: number;
     deleted_count: number;
     skipped_count: number;
-    failed: { entry_id: string; relative_path: string; error: string }[];
+    failed: { entry_id: string; relative_path: string; error: string; error_message?: BackendMessage | null }[];
     usage?: StorageUsage | null;
+};
+
+export type StorageMigrateRootResult = {
+    root: StorageRoot;
+    old_path: string;
+    backup_path?: string | null;
+    moved_bytes: number;
+    file_count: number;
+    usage: StorageUsage;
 };
 
 export type AutoRollerRuntime = {
@@ -309,6 +356,7 @@ export type AutoRollerRuntime = {
     model_store: string;
     settings: RuntimeSettings;
     detail?: string | null;
+    detail_message?: BackendMessage | null;
     runtime_id?: string | null;
     runtime_status: string;
     runtime_profile?: string | null;
@@ -349,6 +397,55 @@ function extractErrorDetail(payload: unknown, fallback: string): string {
     return JSON.stringify(payload);
 }
 
+function isBackendMessage(value: unknown): value is BackendMessage {
+    return Boolean(value && typeof value === "object" && "code" in value && typeof (value as { code?: unknown }).code === "string");
+}
+
+function extractBackendMessage(payload: unknown): BackendMessage | null {
+    if (isBackendMessage(payload)) return payload;
+    if (payload && typeof payload === "object" && "detail" in payload) {
+        const detail = (payload as { detail?: unknown }).detail;
+        return isBackendMessage(detail) ? detail : null;
+    }
+    return null;
+}
+
+function renderMessageTemplate(template: string, params?: BackendMessage["params"]): string {
+    return template.replace(/\{([a-zA-Z0-9_]+)\}/g, (match, key) => {
+        const value = params?.[key];
+        return value === undefined || value === null ? match : String(value);
+    });
+}
+
+export class BackendApiError extends Error {
+    backendMessage: BackendMessage | null;
+    status: number;
+
+    constructor(message: string, options: { backendMessage?: BackendMessage | null; status: number }) {
+        super(message);
+        this.name = "BackendApiError";
+        this.backendMessage = options.backendMessage || null;
+        this.status = options.status;
+    }
+}
+
+export function backendMessageText(value: unknown, messages: Record<string, string | undefined>): string {
+    const backendMessage = value instanceof BackendApiError
+        ? value.backendMessage
+        : isBackendMessage(value)
+            ? value
+            : null;
+    if (backendMessage) {
+        const template = messages[backendMessage.code];
+        if (template) return renderMessageTemplate(template, backendMessage.params);
+        if (backendMessage.fallback) return renderMessageTemplate(backendMessage.fallback, backendMessage.params);
+        return backendMessage.code;
+    }
+    if (value instanceof Error) return value.message;
+    if (typeof value === "string") return value;
+    return String(value);
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
     const response = await fetch(url, {
         ...init,
@@ -365,7 +462,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     const payload = parseResponseText(text);
 
     if (!response.ok) {
-        throw new Error(extractErrorDetail(payload, response.statusText));
+        const backendMessage = extractBackendMessage(payload);
+        const message = backendMessage?.fallback || extractErrorDetail(payload, response.statusText);
+        throw new BackendApiError(message, { backendMessage, status: response.status });
     }
 
     return payload as T;
@@ -441,7 +540,7 @@ export const api = {
     uploadPlan: (projectId: string, payload: Record<string, unknown>) =>
         request<UploadPlan>(`/api/projects/${projectId}/upload/plan`, { method: "POST", body: JSON.stringify(payload) }),
     uploadRun: (projectId: string, payload: Record<string, unknown>) =>
-        request<{ success: boolean; message: string }>(`/api/projects/${projectId}/upload/run`, {
+        request<UploadRunResponse>(`/api/projects/${projectId}/upload/run`, {
             method: "POST",
             body: JSON.stringify(payload),
         }),
@@ -451,6 +550,8 @@ export const api = {
         request<StorageCleanupPlan>("/api/storage/cleanup/preview", { method: "POST", body: JSON.stringify(payload) }),
     openStorageFolder: () =>
         request<{ status: string; path: string }>("/api/storage/open-folder", { method: "POST" }),
+    migrateStorageRoot: (payload: { root_id: "projects" | "models" | "cache"; target_path: string }) =>
+        request<StorageMigrateRootResult>("/api/storage/migrate-root", { method: "POST", body: JSON.stringify(payload) }),
     openModelFolder: (modelId: string) =>
         request<{ status: string; path: string }>("/api/storage/models/open-folder", { method: "POST", body: JSON.stringify({ model_id: modelId }) }),
     openRuntimeFolder: (runtimeId: string) =>

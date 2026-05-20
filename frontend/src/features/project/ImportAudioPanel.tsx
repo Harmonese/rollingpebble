@@ -1,14 +1,23 @@
 import { useContext, useRef, useState } from "react";
-import { useMessage, type MessageType } from "../../hooks/useMessage.js";
+import { useMessage } from "../../hooks/useMessage.js";
 import { toastPubSub } from "../../components/toast.js";
+import { SegmentedTabs } from "../../components/SegmentedTabs.js";
+import { PanelMessage } from "../../components/PanelMessage.js";
 import { appContext, ChangBits } from "../../components/app.context.js";
-import { api, type NeteaseSong, type ProjectModel } from "../../shared/api.js";
-import { prepareAudioFile } from "../../shared/audioDecode.js";
+import { api, backendMessageText, type NeteaseSong, type ProjectModel } from "../../shared/api.js";
+import { AUDIO_DECODE_WORKER_ERROR, AUDIO_UNSUPPORTED_ERROR, prepareAudioFile } from "../../shared/audioDecode.js";
 import { loadProjectAudioForPlayback, loadProjectAudioUrlForPlayback } from "../../shared/audioEvents.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
 
 type AudioSourceKind = "local" | "netease";
+
+function audioImportErrorText(error: unknown, u: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string }, backendMessages: Record<string, string | undefined>): string {
+    const message = (error as Error).message;
+    if (message === AUDIO_UNSUPPORTED_ERROR) return u.unsupportedAudioFile;
+    if (message === AUDIO_DECODE_WORKER_ERROR) return u.audioDecodeWorkerFailed;
+    return backendMessageText(error, backendMessages);
+}
 
 export const ImportAudioPanel: React.FC<{
     project: ProjectModel | null;
@@ -17,28 +26,26 @@ export const ImportAudioPanel: React.FC<{
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [source, setSource] = useState<AudioSourceKind>("local");
     const [busy, setBusy] = useState(false);
-    const [message, setMessage, , messageFading, messageType] = useMessage();
+    const [message, setMessage, , messageFading, messageType, messageKey] = useMessage();
     const { lang } = useContext(appContext, ChangBits.lang);
     const u = lang.ui;
     const t = lang.toast;
-    const showMessage = (text: string, type: MessageType, _duration?: number) => {
-        toastPubSub.pub({ type, text });
-    };
 
     const onAudioUpload = async (ev: React.ChangeEvent<HTMLInputElement>) => {
         const file = ev.target.files?.[0];
         if (!file) return;
         setBusy(true);
-        setMessage(t.import.preparing, "info", 10000);
+        setMessage(t.import.preparing, "info");
         try {
             const prepared = await prepareAudioFile(file);
             loadProjectAudioForPlayback(prepared.file);
-            setMessage(prepared.decoded ? t.import.decoded : t.import.creating, "info", 10000);
+            setMessage(prepared.decoded ? t.import.decoded : t.import.creating, "info");
             const created = await api.createProject(prepared.file);
             onProject(created, true);
+            setMessage("");
             toastPubSub.pub({ type: "success", text: t.project.created.replace("{id}", created.project_id) });
         } catch (error) {
-            setMessage((error as Error).message, "error");
+            setMessage(audioImportErrorText(error, u, lang.backendMessages), "error");
         } finally {
             setBusy(false);
             ev.target.value = "";
@@ -87,7 +94,7 @@ export const ImportAudioPanel: React.FC<{
             <NeteaseSearch
                 defaultQuery=""
                 meta={{ track: project?.metadata.track, artist: project?.metadata.artist, album: project?.metadata.album }}
-                onMessage={showMessage}
+                onMessage={setMessage}
                 renderResultActions={renderNeteaseActions}
             />
         </div>
@@ -96,28 +103,14 @@ export const ImportAudioPanel: React.FC<{
     return (
         <section className="roller-card audio-import-card">
             <h2>{u.importAudio}</h2>
-            <div className="library-strip" role="tablist" aria-label="Audio sources">
-                <button
-                    className={`library-chip ${source === "local" ? "active" : ""}`}
-                    type="button"
-                    role="tab"
-                    aria-selected={source === "local"}
-                    onClick={() => setSource("local")}
-                >
-                    {u.localFiles}
-                </button>
-                <button
-                    className={`library-chip ${source === "netease" ? "active" : ""}`}
-                    type="button"
-                    role="tab"
-                    aria-selected={source === "netease"}
-                    onClick={() => setSource("netease")}
-                >
-                    {u.netease}
-                </button>
-            </div>
+            <SegmentedTabs
+                ariaLabel="Audio sources"
+                items={[{ value: "local", label: u.localFiles }, { value: "netease", label: u.netease }]}
+                value={source}
+                onChange={setSource}
+            />
             {source === "local" ? renderLocal() : renderNetease()}
-            {message && <p className={`roller-message ${messageType}${messageFading ? " fading" : ""}`}>{message}</p>}
+            <PanelMessage message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
         </section>
     );
 };

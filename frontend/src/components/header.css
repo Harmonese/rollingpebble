@@ -50,7 +50,7 @@
     }
 }
 
-.app-header a,
+.app-header .app-title,
 .app-header span.app-tab {
     display: inline-flex;
     align-items: center;
@@ -88,7 +88,7 @@
 }
 
 .app-nav .app-tab:hover,
-.app-nav > a:target {
+.app-nav .app-tab:focus-visible {
     color: var(--theme-color);
 }
 
@@ -107,15 +107,8 @@
     content: "";
 }
 
-.app-tab:target::before, .app-tab:hover::before {
-    transform: scaleX(1);
-}
-
-:hover > .app-tab:target::before {
-    transform: scaleX(0);
-}
-
-.app-tab:hover:target::before {
+.app-tab:hover::before,
+.app-tab:focus-visible::before {
     transform: scaleX(1);
 }
 

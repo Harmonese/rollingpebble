@@ -17,6 +17,7 @@ class ProjectModel(BaseModel):
     project_id: str
     last_opened_at: str | None = None
     audio_name: str | None = None
+    audio_ref: str | None = None
     audio_path: str | None = None
     metadata: MetaModel = Field(default_factory=MetaModel)
     plain_lyrics: str = ""
@@ -38,6 +39,11 @@ class HealthResponse(BaseModel):
     pylrclib: HealthDependency
     pyroller: HealthDependency
 
+
+class MessageModel(BaseModel):
+    code: str
+    params: dict[str, Any] = Field(default_factory=dict)
+    fallback: str = ""
 
 
 
@@ -209,6 +215,7 @@ class RollPreviewResponse(BaseModel):
     command: list[str]
     command_text: str
     warnings: list[str] = Field(default_factory=list)
+    warning_messages: list[MessageModel] = Field(default_factory=list)
     output_path: str | None = None
     intermediate_dir: str | None = None
 
@@ -220,6 +227,7 @@ class JobProgressModel(BaseModel):
     total: int = 0
     unit: str = ""
     message: str = ""
+    message_message: MessageModel | None = None
     percent: float | None = None
     progress: float | None = None
     raw: str = ""
@@ -250,6 +258,7 @@ class JobModel(BaseModel):
     logs: list[str] = Field(default_factory=list)
     result: dict[str, Any] | None = None
     error: str | None = None
+    error_message: MessageModel | None = None
     progress: JobProgressModel | None = None
     completed_stages: list[str] = Field(default_factory=list)
     events: list[dict[str, Any]] = Field(default_factory=list)
@@ -320,6 +329,13 @@ class RuntimeSettingsModel(BaseModel):
     auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] = "kf"
 
     recent_projects_limit: int = 8
+    project_auto_delete_days: int = 0
+
+    storage_projects_root: str = ""
+    storage_models_root: str = ""
+    storage_cache_root: str = ""
+    storage_runtime_root: str = ""
+    storage_work_root: str = ""
 
     audio_filename_regex: str = ""
     audio_filename_regex_enabled: bool = False
@@ -342,6 +358,7 @@ class AutoRollerRuntimeResponse(BaseModel):
     model_store: str
     settings: RuntimeSettingsModel
     detail: str | None = None
+    detail_message: MessageModel | None = None
     runtime_id: str | None = None
     runtime_status: str = "missing"
     runtime_profile: str | None = None
@@ -421,6 +438,13 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     auto_timing_writer_ass_karaoke_tag_type: Literal["", "k", "K", "kf", "ko"] | None = None
 
     recent_projects_limit: int | None = None
+    project_auto_delete_days: int | None = None
+
+    storage_projects_root: str | None = None
+    storage_models_root: str | None = None
+    storage_cache_root: str | None = None
+    storage_runtime_root: str | None = None
+    storage_work_root: str | None = None
 
     audio_filename_regex: str | None = None
     audio_filename_regex_enabled: bool | None = None
@@ -438,9 +462,11 @@ class UploadPlanResponse(BaseModel):
     can_upload: bool
     mode: str
     reason: str
+    reason_message: MessageModel | None = None
     plain_lines: int = 0
     synced_lines: int = 0
     warnings: list[str] = Field(default_factory=list)
+    warning_messages: list[MessageModel] = Field(default_factory=list)
     payload_preview: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -451,6 +477,7 @@ class UploadRunRequest(UploadPlanRequest):
 class UploadRunResponse(BaseModel):
     success: bool
     message: str
+    message_message: MessageModel | None = None
 
 
 CleanupTarget = Literal[
@@ -544,8 +571,20 @@ class StorageCategoryModel(BaseModel):
     description: str = ""
 
 
+class StorageRootModel(BaseModel):
+    id: Literal["projects", "models", "runtime", "other"]
+    label: str
+    path: str
+    default_path: str
+    bytes: int = 0
+    file_count: int = 0
+    movable: bool = True
+    active: bool = False
+
+
 class StorageUsageResponse(BaseModel):
     data_dir: str
+    roots: list[StorageRootModel] = Field(default_factory=list)
     total_bytes: int = 0
     file_count: int = 0
     categories: list[StorageCategoryModel] = Field(default_factory=list)
@@ -573,6 +612,7 @@ class StorageCleanupEntryModel(BaseModel):
     file_count: int = 0
     risk: Literal["safe", "caution", "danger", "blocked"] = "safe"
     reason: str = ""
+    reason_message: MessageModel | None = None
     removable: bool = True
 
 
@@ -583,6 +623,7 @@ class StorageCleanupPlanResponse(BaseModel):
     entry_count: int = 0
     entries: list[StorageCleanupEntryModel] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    warning_messages: list[MessageModel] = Field(default_factory=list)
 
 
 class StorageCleanupRunRequest(BaseModel):
@@ -594,6 +635,7 @@ class StorageCleanupFailureModel(BaseModel):
     entry_id: str
     relative_path: str
     error: str
+    error_message: MessageModel | None = None
 
 
 class StorageCleanupRunResponse(BaseModel):
@@ -615,3 +657,17 @@ class StorageOpenRuntimeRequest(BaseModel):
 
 class StorageOpenOtherRequest(BaseModel):
     relative_path: str
+
+
+class StorageMigrateRootRequest(BaseModel):
+    root_id: Literal["projects", "models", "cache", "work"]
+    target_path: str
+
+
+class StorageMigrateRootResponse(BaseModel):
+    root: StorageRootModel
+    old_path: str
+    backup_path: str | None = None
+    moved_bytes: int = 0
+    file_count: int = 0
+    usage: StorageUsageResponse

@@ -1,19 +1,16 @@
 import { useContext } from "react";
 import type React from "react";
 import { appContext, ChangBits } from "../../components/app.context.js";
+import { ModalShell } from "../../components/ModalShell.js";
 
 export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
-    if (!open) return null;
-
     const version = import.meta.env.app?.version || "dev";
     const { lang } = useContext(appContext, ChangBits.lang);
     const a = lang.about;
     const u = lang.ui;
 
     return (
-        <div className="about-overlay" role="dialog" aria-modal="true" aria-label={`About ${lang.app?.name || "Rolling Pebble"}`}>
-            <button className="about-backdrop" type="button" onClick={onClose} aria-label="Close about" />
-            <section className="about-modal">
+        <ModalShell open={open} onClose={onClose} ariaLabel={`About ${lang.app?.name || "Rolling Pebble"}`} closeLabel={u.close} exitMs={200}>
                 <div className="about-header">
                     <div>
                         <p className="about-kicker">{a.kicker}</p>
@@ -68,7 +65,6 @@ export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ o
                     <h3>{a.rightsNote}</h3>
                     <p>{a.rightsNoteText}</p>
                 </section>
-            </section>
-        </div>
+        </ModalShell>
     );
 };

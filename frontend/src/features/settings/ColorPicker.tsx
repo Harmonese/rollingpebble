@@ -16,9 +16,13 @@ const PALETTE: string[][] = [
 export const ColorPicker: React.FC<{
     value: string;
     onChange: (color: string) => void;
-}> = ({ value, onChange }) => {
+    title: string;
+}> = ({ value, onChange, title }) => {
     const [open, setOpen] = useState(false);
+    const [rendered, setRendered] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
+    const swatchRef = useRef<HTMLButtonElement>(null);
+    const activeValue = value.toLowerCase();
 
     const close = useCallback((e: MouseEvent) => {
         if (ref.current && !ref.current.contains(e.target as Node)) {
@@ -28,30 +32,41 @@ export const ColorPicker: React.FC<{
 
     useEffect(() => {
         if (open) {
+            setRendered(true);
             document.addEventListener("mousedown", close);
             return () => document.removeEventListener("mousedown", close);
         }
+        const timer = window.setTimeout(() => setRendered(false), 130);
+        return () => window.clearTimeout(timer);
     }, [open, close]);
 
     return (
         <div className="cp-root" ref={ref}>
             <button
+                ref={swatchRef}
                 type="button"
                 className="cp-swatch"
                 onClick={() => setOpen(!open)}
-                title="Color picker"
+                title={title}
+                aria-label={title}
             />
-            {open && (
-                <div className="cp-popover">
+            {rendered && (
+                <div className="cp-popover" data-state={open ? "open" : "closed"}>
                     {PALETTE.map((row, ri) => (
                         <div key={ri} className="cp-row">
                             {row.map((color) => (
                                 <button
                                     key={color}
                                     type="button"
-                                    className={`cp-cell${value === color ? " active" : ""}`}
+                                    className={`cp-cell${activeValue === color.toLowerCase() ? " active" : ""}`}
                                     style={{ backgroundColor: color }}
-                                    onClick={() => { onChange(color); setOpen(false); }}
+                                    onMouseDown={(ev) => ev.preventDefault()}
+                                    onClick={(ev) => {
+                                        ev.stopPropagation();
+                                        onChange(color);
+                                        setOpen(false);
+                                        window.requestAnimationFrame(() => swatchRef.current?.focus());
+                                    }}
                                 />
                             ))}
                         </div>

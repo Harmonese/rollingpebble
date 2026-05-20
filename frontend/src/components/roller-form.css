@@ -18,6 +18,24 @@
     padding: 8px 10px;
 }
 
+.roller-form select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 36px;
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--roller-muted) 50%),
+        linear-gradient(135deg, var(--roller-muted) 50%, transparent 50%);
+    background-position:
+        calc(100% - 16px) 50%,
+        calc(100% - 11px) 50%;
+    background-repeat: no-repeat;
+    background-size: 5px 5px;
+}
+
+.roller-form select:disabled {
+    opacity: 0.58;
+}
+
 .roller-file input[type="file"] {
     background: var(--roller-surface-2);
     color: var(--roller-text);
@@ -32,7 +50,8 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.roller-form label {
+.roller-form label,
+.roller-form .settings-form-field {
     display: flex;
     flex-direction: column;
     gap: 5px;
@@ -112,8 +131,7 @@
     padding-inline: 0.75rem;
 }
 
-.browse-row button,
-.settings-inline-action > button {
+.browse-row button {
     min-height: 36px;
     padding: 0 14px;
     border: 1px solid rgba(var(--theme-rgb), 0.38);
@@ -130,48 +148,15 @@
         color var(--transition-duration) ease;
 }
 
-.browse-row button:hover:not(:disabled),
-.settings-inline-action > button:hover:not(:disabled) {
+.browse-row button:hover:not(:disabled) {
     transform: translateY(-1px);
     background: rgba(var(--theme-rgb), 0.16);
     border-color: rgba(var(--theme-rgb), 0.68);
 }
 
-.browse-row button:disabled,
-.settings-inline-action > button:disabled {
+.browse-row button:disabled {
     cursor: not-allowed;
     opacity: 0.48;
-}
-
-.settings-inline-action {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.settings-inline-action .settings-check-row {
-    flex: 1 1 auto;
-    margin: 0;
-}
-
-.settings-inline-action .settings-check-row span {
-    transform: translateY(-1px);
-}
-
-.settings-inline-action > button {
-    flex: 0 0 auto;
-}
-
-@media (max-width: 720px) {
-    .settings-inline-action {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .settings-inline-action > button {
-        width: fit-content;
-        align-self: flex-end;
-    }
 }
 
 .roller-hidden-file {

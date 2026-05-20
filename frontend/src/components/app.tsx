@@ -5,6 +5,7 @@ import { AppProvider, AudioContext } from "./app.context.js";
 import { Content } from "./content.js";
 import { Footer } from "./footer.js";
 import { Header } from "./header.js";
+import { ThemeEffects } from "./theme-effects.js";
 import { Toast } from "./toast.js";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -28,14 +29,15 @@ export const App: React.FC = () => {
         <React.StrictMode>
             <ErrorBoundary>
                 <AudioContext.Provider value={audioElRef}>
-                <AppProvider>
-                    <Header onAbout={() => setAboutOpen(true)} onSettings={() => setSettingsOpen(true)} />
-                    <Content />
-                    <Footer />
-                    <Toast />
-                    <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
-                    <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-                </AppProvider>
+                    <AppProvider>
+                        <ThemeEffects />
+                        <Header onAbout={() => setAboutOpen(true)} onSettings={() => setSettingsOpen(true)} />
+                        <Content />
+                        <Footer />
+                        <Toast />
+                        <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
+                        <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+                    </AppProvider>
                 </AudioContext.Provider>
             </ErrorBoundary>
         </React.StrictMode>

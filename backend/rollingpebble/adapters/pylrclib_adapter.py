@@ -12,6 +12,7 @@ from rollingpebble.models import (
     MetaModel,
     UploadPlanResponse,
 )
+from rollingpebble.messages import message_from_text
 
 
 def _common_options():
@@ -211,9 +212,11 @@ class PylrclibAdapter:
             can_upload=can_upload,
             mode=plan.mode,
             reason=plan.reason,
+            reason_message=message_from_text(plan.reason, default_code="upload.plan.reason"),
             plain_lines=len((plan.plain or "").splitlines()) if plan.plain else 0,
             synced_lines=len((plan.synced or "").splitlines()) if plan.synced else 0,
             warnings=warnings,
+            warning_messages=[message_from_text(warning, default_code="upload.plan.warning") for warning in warnings],
             payload_preview=payload_preview,
         )
 

@@ -1,5 +1,5 @@
 import React, { useContext, useMemo, useState } from "react";
-import { api, type NeteaseSong } from "../../shared/api.js";
+import { api, backendMessageText, type NeteaseSong } from "../../shared/api.js";
 import { appContext, ChangBits } from "../../components/app.context.js";
 import { formatDuration } from "../../shared/format.js";
 import type { MessageType } from "../../hooks/useMessage.js";
@@ -18,7 +18,7 @@ export interface NeteaseSearchRenderProps {
 interface NeteaseSearchProps {
     defaultQuery: string;
     meta: NeteaseSearchMeta;
-    onMessage: (text: string, type: MessageType, duration?: number) => void;
+    onMessage: (text: string, type: MessageType) => void;
     renderResultActions: (props: NeteaseSearchRenderProps) => React.ReactNode;
 }
 
@@ -41,18 +41,18 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
     const matchLink = async () => {
         const value = link.trim();
         if (!value) {
-            onMessage(t.netease.enterLink, "warning", 5000);
+            onMessage(t.netease.enterLink, "warning");
             return;
         }
         setBusy(true);
         setSearched(true);
-        onMessage(t.netease.matching, "info", 10000);
+        onMessage(t.netease.matching, "info");
         try {
             const response = await api.neteaseResolve(value);
             setResults([response.song]);
-            onMessage(t.netease.oneResult, "success", 4000);
+            onMessage(t.netease.oneResult, "success");
         } catch (error) {
-            onMessage((error as Error).message, "error");
+            onMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
             setBusy(false);
         }
@@ -61,12 +61,12 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
     const search = async () => {
         const q = (query || placeholderQuery).trim();
         if (!q) {
-            onMessage(t.netease.enterQuery, "warning", 5000);
+            onMessage(t.netease.enterQuery, "warning");
             return;
         }
         setBusy(true);
         setSearched(true);
-        onMessage(t.netease.searching, "info", 10000);
+        onMessage(t.netease.searching, "info");
         try {
             const response = await api.neteaseSearch({
                 query: q,
@@ -76,9 +76,9 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
                 limit: 20,
             });
             setResults(response.results);
-            onMessage(t.netease.results.replace("{n}", String(response.results.length)), "success", 4000);
+            onMessage(t.netease.results.replace("{n}", String(response.results.length)), "success");
         } catch (error) {
-            onMessage((error as Error).message, "error");
+            onMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
             setBusy(false);
         }

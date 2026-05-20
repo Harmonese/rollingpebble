@@ -52,13 +52,17 @@ from rollingpebble.models import (
     StorageCleanupPreviewRequest,
     StorageCleanupRunRequest,
     StorageCleanupRunResponse,
+    StorageMigrateRootRequest,
+    StorageMigrateRootResponse,
     StorageOpenModelRequest,
     StorageOpenOtherRequest,
     StorageOpenRuntimeRequest,
     StorageUsageResponse,
 )
-from rollingpebble.paths import ensure_data_dirs
+from rollingpebble.paths import ensure_storage_layout
+from rollingpebble.storage.files import resolve_audio_path
 from rollingpebble.version import app_version
+from rollingpebble.messages import message_from_exception, message_from_text
 from rollingpebble.services.lrclib_service import LrclibService
 from rollingpebble.services.netease_service import NeteaseService
 from rollingpebble.services.project_service import ProjectService
@@ -68,11 +72,13 @@ from rollingpebble.services.runtime_manager import RuntimeManager
 from rollingpebble.services.runtime_service import RuntimeService
 from rollingpebble.services.storage_service import StorageService
 from rollingpebble.services.local_dialog import select_local_path
+from rollingpebble.storage.app_settings import SettingsStore
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
-    paths = ensure_data_dirs(settings.data_dir)
+    initial_runtime_settings = SettingsStore(settings.data_dir).read()
+    layout = ensure_storage_layout(settings.data_dir, initial_runtime_settings)
 
     app = FastAPI(title="rollingpebble", version=app_version())
     app.add_middleware(
@@ -84,20 +90,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     jobs = JobManager()
-    projects = ProjectService(paths["projects"])
+    projects = ProjectService(layout.projects_root)
     lrclib = LrclibService()
     netease = NeteaseService()
-    runtime_manager = RuntimeManager(paths["root"])
-    runtime = RuntimeService(data_dir=paths["root"], jobs=jobs, manager=runtime_manager)
+    runtime_manager = RuntimeManager(layout)
+    runtime = RuntimeService(layout=layout, jobs=jobs, manager=runtime_manager)
     roller = RollerService(
-        projects_root=paths["projects"],
+        projects_root=layout.projects_root,
         project_service=projects,
         jobs=jobs,
         settings_provider=runtime.get_settings,
         runtime_manager=runtime_manager,
     )
     upload = UploadService(projects)
-    storage = StorageService(data_dir=paths["root"], jobs=jobs, runtime_manager=runtime_manager)
+    storage = StorageService(layout=layout, jobs=jobs, runtime_manager=runtime_manager)
+
+    def apply_storage_layout(next_layout) -> None:
+        projects.projects_root = next_layout.projects_root
+        roller.projects_root = next_layout.projects_root
+        runtime.update_layout(next_layout)
+        storage.update_layout(next_layout)
+
+    def error_detail(exc: Exception, *, default_code: str = "system.error") -> dict:
+        return message_from_exception(exc, default_code=default_code).model_dump()
+
+    def text_detail(text: str, *, default_code: str = "system.error") -> dict:
+        return message_from_text(text, default_code=default_code).model_dump()
+
+    def raise_http_error(status_code: int, exc: Exception, *, default_code: str = "system.error") -> None:
+        raise HTTPException(status_code=status_code, detail=error_detail(exc, default_code=default_code)) from exc
 
     def open_folder(folder: Path) -> dict[str, str]:
         try:
@@ -110,7 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 subprocess.Popen(["xdg-open", str(folder)])
             return {"status": "ok", "path": str(folder)}
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"Could not open folder: {exc}") from exc
+            raise HTTPException(status_code=400, detail=text_detail(f"Could not open folder: {exc}", default_code="system.open_folder_failed")) from exc
 
     @app.get("/api/health", response_model=HealthResponse)
     def health() -> HealthResponse:
@@ -130,7 +151,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings = runtime.get_settings()
             return await projects.create_from_audio(audio, settings=settings)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.get("/api/projects", response_model=list[ProjectModel])
     def list_projects() -> list[ProjectModel]:
@@ -141,7 +162,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             return projects.get(project_id, touch=True)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
 
 
     @app.get("/api/projects/{project_id}/audio")
@@ -149,12 +170,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             project = projects.get(project_id)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        if not project.audio_path:
-            raise HTTPException(status_code=404, detail="Project has no audio file")
-        audio_path = Path(project.audio_path)
+            raise_http_error(404, exc)
+        audio_path = resolve_audio_path(projects.projects_root, project)
+        if not audio_path:
+            raise HTTPException(status_code=404, detail=text_detail("Project has no audio file"))
         if not audio_path.exists():
-            raise HTTPException(status_code=404, detail="Project audio file is missing")
+            raise HTTPException(status_code=404, detail=text_detail("Project audio file is missing"))
         media_type = mimetypes.guess_type(audio_path.name)[0] or "application/octet-stream"
         return FileResponse(audio_path, filename=project.audio_name or audio_path.name, media_type=media_type)
 
@@ -164,7 +185,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             folder = projects.project_folder(project_id)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         return open_folder(folder)
 
     @app.post("/api/projects/{project_id}/lyrics", response_model=ProjectModel)
@@ -172,14 +193,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             return projects.apply_lyrics(project_id, request)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
 
     @app.post("/api/projects/{project_id}/editor", response_model=ProjectModel)
     def save_editor(project_id: str, request: SaveEditorRequest) -> ProjectModel:
         try:
             return projects.save_editor(project_id, request)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
 
     @app.delete("/api/projects/{project_id}")
     def delete_project(project_id: str) -> dict[str, str]:
@@ -187,56 +208,56 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             projects.delete_project(project_id)
             return {"deleted": project_id}
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
 
     @app.post("/api/lrclib/search", response_model=LrclibSearchResponse)
     def lrclib_search(request: LrclibSearchRequest) -> LrclibSearchResponse:
         try:
             return lrclib.search(request)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/lrclib/get", response_model=LrclibGetResponse)
     def lrclib_get(request: LrclibGetRequest) -> LrclibGetResponse:
         try:
             return lrclib.get_cached_then_external(request)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/lrclib/id", response_model=LyricsRecordModel | None)
     def lrclib_get_by_id(request: LrclibIdRequest) -> LyricsRecordModel | None:
         try:
             return lrclib.get_by_id(request)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/netease/search", response_model=NeteaseSearchResponse)
     def netease_search(request: NeteaseSongSearchRequest) -> NeteaseSearchResponse:
         try:
             return netease.search(request)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/netease/resolve", response_model=NeteaseResolveResponse)
     def netease_resolve(request: NeteaseResolveRequest) -> NeteaseResolveResponse:
         try:
             return netease.resolve(request.value)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.get("/api/netease/lyrics/{song_id}", response_model=NeteaseLyricResponse)
     def netease_lyrics(song_id: int) -> NeteaseLyricResponse:
         try:
             return netease.fetch_lyrics(song_id)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.get("/api/netease/audio/{song_id}")
     def netease_audio(song_id: int, range: str | None = Header(default=None)) -> StreamingResponse:
         try:
             upstream = netease.open_audio(song_id, range_header=range)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
         def stream_audio():
             try:
@@ -265,56 +286,56 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             return roller.preview(project_id, request)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/projects/{project_id}/roll", response_model=JobModel)
     def roll(project_id: str, request: RollRequest) -> JobModel:
         try:
             return roller.roll(project_id, request)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/batch/preview")
     def batch_preview(request: BatchRollRequest) -> dict:
         try:
             return roller.preview_batch(request)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/batch/roll", response_model=JobModel)
     def batch_roll(request: BatchRollRequest) -> JobModel:
         try:
             return roller.run_batch(request)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/jobs/{job_id}/cancel", response_model=JobModel)
     def cancel_job(job_id: str) -> JobModel:
         try:
             return jobs.cancel(job_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}") from exc
+            raise HTTPException(status_code=404, detail=text_detail(f"Job not found: {job_id}")) from exc
 
     @app.post("/api/jobs/{job_id}/open-folder")
     def open_job_folder(job_id: str) -> dict[str, str]:
         try:
             job = jobs.get(job_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}") from exc
+            raise HTTPException(status_code=404, detail=text_detail(f"Job not found: {job_id}")) from exc
         if not job.project_id:
-            raise HTTPException(status_code=400, detail="This job is not attached to a project folder.")
+            raise HTTPException(status_code=400, detail=text_detail("This job is not attached to a project folder."))
         try:
             folder = projects.project_folder(job.project_id)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         return open_folder(folder)
 
     @app.get("/api/jobs/{job_id}", response_model=JobModel)
@@ -322,7 +343,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             return jobs.get(job_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=f"Job not found: {job_id}") from exc
+            raise HTTPException(status_code=404, detail=text_detail(f"Job not found: {job_id}")) from exc
 
 
     @app.get("/api/settings", response_model=RuntimeSettingsModel)
@@ -339,7 +360,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             return LocalPathResponse(path=selected, canceled=not bool(selected))
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
 
     @app.post("/api/settings", response_model=RuntimeSettingsModel)
@@ -357,7 +378,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             path.write_bytes(await bg.read())
             return {"ok": "true"}
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.delete("/api/settings/workspace-bg")
     def delete_workspace_bg() -> dict[str, str]:
@@ -381,7 +402,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 default_path = candidate / "img" / "rollingpebble-workspace-bg.webp"
                 if default_path.exists():
                     return FileResponse(default_path, media_type="image/webp")
-            raise HTTPException(status_code=404, detail="No background available.")
+            raise HTTPException(status_code=404, detail=text_detail("No background available."))
         media_type, _ = mimetypes.guess_type(path.name)
         return FileResponse(
             path,
@@ -398,58 +419,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             return runtime.run_doctor()
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/runtime/auto-roller/install", response_model=JobModel)
     def run_auto_roller_install(request: RuntimeInstallRequest) -> JobModel:
         try:
             return runtime.run_install(request)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/runtime/auto-roller/upgrade", response_model=JobModel)
     def run_auto_roller_upgrade(request: RuntimeUpgradeRequest) -> JobModel:
         try:
             return runtime.run_upgrade(request)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/runtime/auto-roller/cache-model", response_model=JobModel)
     def run_auto_roller_cache_model(request: ModelCacheRequest) -> JobModel:
         try:
             return runtime.run_cache_model(request)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/projects/{project_id}/upload/plan", response_model=UploadPlanResponse)
     def upload_plan(project_id: str, request: UploadPlanRequest) -> UploadPlanResponse:
         try:
             return upload.plan(project_id, request)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/projects/{project_id}/upload/run", response_model=UploadRunResponse)
     def upload_run(project_id: str, request: UploadRunRequest) -> UploadRunResponse:
         try:
             return upload.run(project_id, request)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
 
 
     @app.post("/api/storage/projects/open-folder")
     def open_projects_folder() -> dict[str, str]:
-        folder = paths["projects"]
+        folder = storage.layout.projects_root
         folder.mkdir(parents=True, exist_ok=True)
         return open_folder(folder)
 
     @app.post("/api/storage/open-folder")
     def open_storage_folder() -> dict[str, str]:
-        folder = paths["root"]
+        folder = storage.layout.app_root
         folder.mkdir(parents=True, exist_ok=True)
         return open_folder(folder)
 
@@ -457,48 +478,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def storage_usage() -> StorageUsageResponse:
         return storage.usage()
 
+    @app.post("/api/storage/migrate-root", response_model=StorageMigrateRootResponse)
+    def storage_migrate_root(request: StorageMigrateRootRequest) -> StorageMigrateRootResponse:
+        try:
+            result = storage.migrate_root(request.root_id, request.target_path)
+            apply_storage_layout(storage.layout)
+            return result
+        except Exception as exc:
+            raise_http_error(400, exc)
+
     @app.post("/api/storage/models/open-folder")
     def open_model_folder(request: StorageOpenModelRequest) -> dict[str, str]:
         try:
             return open_folder(storage.model_item_path(request.model_id))
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/storage/runtimes/open-folder")
     def open_runtime_folder(request: StorageOpenRuntimeRequest) -> dict[str, str]:
         try:
             return open_folder(storage.runtime_item_path(request.runtime_id))
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/storage/other/open-folder")
     def open_other_folder(request: StorageOpenOtherRequest) -> dict[str, str]:
         try:
             return open_folder(storage.other_item_open_path(request.relative_path))
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/storage/cleanup/preview", response_model=StorageCleanupPlanResponse)
     def storage_cleanup_preview(request: StorageCleanupPreviewRequest) -> StorageCleanupPlanResponse:
         try:
             return storage.preview(request)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     @app.post("/api/storage/cleanup/run", response_model=StorageCleanupRunResponse)
     def storage_cleanup_run(request: StorageCleanupRunRequest) -> StorageCleanupRunResponse:
         try:
             return storage.run(request)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
+            raise_http_error(404, exc)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise_http_error(400, exc)
 
     frontend_dist = resolve_frontend_dist(settings)
     if frontend_dist and frontend_dist.exists():

@@ -17,6 +17,8 @@ from rollingpebble.models import (
     ModelCacheRequest,
 )
 from rollingpebble.runtime_constants import PYROLLER_RUNTIME_SPEC
+from rollingpebble.messages import message_from_text
+from rollingpebble.paths import StorageLayout
 from rollingpebble.services.runtime_manager import RuntimeManager
 from rollingpebble.storage.app_settings import SettingsStore, utc_now_iso
 
@@ -41,11 +43,30 @@ def _is_running(job: JobModel) -> bool:
 
 
 class RuntimeService:
-    def __init__(self, *, data_dir: Path, jobs: JobManager, manager: RuntimeManager | None = None) -> None:
-        self.data_dir = data_dir
+    def __init__(
+        self,
+        *,
+        data_dir: Path | None = None,
+        layout: StorageLayout | None = None,
+        jobs: JobManager,
+        manager: RuntimeManager | None = None,
+    ) -> None:
+        if layout is None and data_dir is None:
+            raise ValueError("RuntimeService requires data_dir or layout")
+        if layout is None:
+            assert data_dir is not None
+            layout = StorageLayout.from_data_dir(data_dir)
+        self.layout = layout
+        self.data_dir = self.layout.app_root
         self.jobs = jobs
-        self.settings_store = SettingsStore(data_dir)
-        self.manager = manager or RuntimeManager(data_dir)
+        self.settings_store = SettingsStore(self.data_dir)
+        self.manager = manager or RuntimeManager(self.layout)
+
+    def update_layout(self, layout: StorageLayout) -> None:
+        self.layout = layout
+        self.data_dir = layout.app_root
+        self.settings_store = SettingsStore(self.data_dir)
+        self.manager.update_layout(layout)
 
     def _has_running_job(self, kind: str) -> bool:
         if not hasattr(self.jobs, "list"):
@@ -64,6 +85,7 @@ class RuntimeService:
             model_store=str(self.manager.default_model_store()),
             settings=settings,
             detail=runtime.detail,
+            detail_message=message_from_text(runtime.detail) if runtime.detail else None,
             runtime_id=runtime.runtime_id,
             runtime_status=runtime.status,
             runtime_profile=runtime.profile,
@@ -189,7 +211,12 @@ class RuntimeService:
                 if new_version:
                     self.manager.update_metadata(
                         settings.auto_roller_profile,
-                        {"pyroller_version": new_version, "last_upgrade_status": "passed", "last_upgrade_at": utc_now_iso()},
+                        {
+                            "pyroller_version": new_version,
+                            "pyroller_source": self.manager.dependency_source_label(),
+                            "last_upgrade_status": "passed",
+                            "last_upgrade_at": utc_now_iso(),
+                        },
                     )
             return {
                 "profile": request.profile,
@@ -237,7 +264,7 @@ class RuntimeService:
                 language=request.language,
                 backend=request.transcriber_backend or settings.auto_timing_transcriber_backend,
                 model_name=request.transcriber_model_name or settings.auto_timing_transcriber_model_name,
-                model_path=request.transcriber_model_path or settings.auto_timing_model_store or None,
+                model_path=request.transcriber_model_path or None,
             ),
             cwd=runtime.runtime_root,
             on_success=lambda job: finalize(job, succeeded=True),

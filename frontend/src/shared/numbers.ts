@@ -4,6 +4,9 @@
  * - Throwing variants raise on invalid input (used in settings save)
  */
 
+export const NUMERIC_POSITIVE_ERROR = "rollingpebble.settings.numeric_positive";
+export const INTEGER_POSITIVE_ERROR = "rollingpebble.settings.integer_positive";
+
 /** Return a positive finite number, or null if input is empty/invalid. */
 export function optionalNumberValue(value: string): number | null {
     const text = value.trim();
@@ -26,7 +29,7 @@ export function optionalNumber(value: string): number | null {
     if (!text) return null;
     const parsed = Number(text);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-        throw new Error("Numeric settings must be positive numbers.");
+        throw new Error(NUMERIC_POSITIVE_ERROR);
     }
     return parsed;
 }
@@ -37,7 +40,7 @@ export function optionalPositiveInt(value: string): number | null {
     if (!text) return null;
     const parsed = Number(text);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-        throw new Error("Integer settings must be positive numbers.");
+        throw new Error(INTEGER_POSITIVE_ERROR);
     }
     return Math.max(1, Math.round(parsed));
 }

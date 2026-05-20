@@ -2,7 +2,7 @@ import SSK from "#const/session_key.json" with { type: "json" };
 import { useCallback, useContext, useEffect, useReducer, useRef } from "react";
 import { useAudio } from "../hooks/useAudio.js";
 import { useKeyBindings } from "../hooks/useKeyBindings.js";
-import { prepareAudioFile } from "../shared/audioDecode.js";
+import { AUDIO_DECODE_WORKER_ERROR, AUDIO_UNSUPPORTED_ERROR, prepareAudioFile } from "../shared/audioDecode.js";
 import { LOAD_PROJECT_AUDIO_EVENT, type ProjectAudioLoadDetail } from "../shared/audioEvents.js";
 import { AudioActionType, audioStatePubSub, currentTimePubSub } from "../utils/audiomodule.js";
 import { InputAction } from "../utils/input-action.js";
@@ -83,7 +83,7 @@ export const Footer: React.FC = () => {
             if (detail?.file) {
                 fallbackAudioUrlRef.current = "";
                 sessionStorage.removeItem(SSK.audioSrc);
-                receiveFile(detail.file, setAudioSrc);
+                receiveFile(detail.file, setAudioSrc, lang);
                 return;
             }
             if (detail?.url) {
@@ -94,13 +94,16 @@ export const Footer: React.FC = () => {
         };
         window.addEventListener(LOAD_PROJECT_AUDIO_EVENT, onProjectAudio as EventListener);
         return () => window.removeEventListener(LOAD_PROJECT_AUDIO_EVENT, onProjectAudio as EventListener);
-    }, []);
+    }, [lang]);
 
-    // Pause audio when the tab becomes hidden (visibilitychange)
     useEffect(() => {
         const handler = () => {
-            if (!audio.paused) {
-                audio.toggle();
+            if (!document.hidden) {
+                currentTimePubSub.pub(audio.currentTime);
+                audioStatePubSub.pub({
+                    type: AudioActionType.pause,
+                    payload: audio.paused,
+                });
             }
         };
         document.addEventListener("visibilitychange", handler);
@@ -208,7 +211,13 @@ export const Footer: React.FC = () => {
 
 type TsetAudioSrc = (src: string) => void;
 
-const receiveFile = (file: File, setAudioSrc: TsetAudioSrc): void => {
+function audioImportErrorText(error: Error, lang: { ui: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string } }): string {
+    if (error.message === AUDIO_UNSUPPORTED_ERROR) return lang.ui.unsupportedAudioFile;
+    if (error.message === AUDIO_DECODE_WORKER_ERROR) return lang.ui.audioDecodeWorkerFailed;
+    return error.message;
+}
+
+const receiveFile = (file: File, setAudioSrc: TsetAudioSrc, lang: { ui: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string } }): void => {
     void prepareAudioFile(file)
         .then(({ file: prepared }) => {
             setAudioSrc(URL.createObjectURL(prepared));
@@ -216,7 +225,7 @@ const receiveFile = (file: File, setAudioSrc: TsetAudioSrc): void => {
         .catch((error: Error) => {
             toastPubSub.pub({
                 type: "warning",
-                text: error.message,
+                text: audioImportErrorText(error, lang),
             });
         });
 };

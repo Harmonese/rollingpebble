@@ -153,13 +153,13 @@ export const Editor: React.FC<{
         <div className="app-editor">
             <div className="editor-header-row">
                 <details ref={details} open={detailsOpened} onToggle={onDetailsToggle}>
-                        <summary>{u.metadata || "Metadata"}</summary>
+                        <summary>{u.metadata}</summary>
                         <section className="app-editor-infobox" onBlur={setInfo}>
                             <label htmlFor="info-ti">[ti:</label>
                             <input
                                 id="info-ti"
                                 name="ti"
-                                placeholder={u.titleTrack || "Title"}
+                                placeholder={u.titleTrack}
                                 {...disableCheck}
                                 {...useDefaultValue(lrcState.info.get("ti") || "")}
                             />
@@ -168,7 +168,7 @@ export const Editor: React.FC<{
                             <input
                                 id="info-ar"
                                 name="ar"
-                                placeholder={u.artist || "Artist"}
+                                placeholder={u.artist}
                                 {...disableCheck}
                                 {...useDefaultValue(lrcState.info.get("ar") || "")}
                             />
@@ -177,7 +177,7 @@ export const Editor: React.FC<{
                             <input
                                 id="info-al"
                                 name="al"
-                                placeholder={u.album || "Album"}
+                                placeholder={u.album}
                                 {...disableCheck}
                                 {...useDefaultValue(lrcState.info.get("al") || "")}
                             />
@@ -186,16 +186,16 @@ export const Editor: React.FC<{
                     </details>
 
                 <section className="editor-tools">
-                    <label className={`editor-tools-item ripple${importing ? " importing" : ""}`} title={u.importLyricsText || "Import lyrics text"}>
+                    <label className={`editor-tools-item ripple${importing ? " importing" : ""}`} title={u.importLyricsText}>
                         <input hidden={true} type="file" accept="text/*, .txt, .lrc" onChange={onTextFileUpload} disabled={importing} />
                         <OpenFileSVG />
                     </label>
-                    <button className="editor-tools-item ripple" title={u.selectAllCopy || "Select all and copy"} onClick={onCopyClick}>
+                    <button className="editor-tools-item ripple" title={u.selectAllCopy} onClick={onCopyClick}>
                         <CopySVG />
                     </button>
                     <a
                         className="editor-tools-item ripple"
-                        title={u.downloadLRC || "Download LRC"}
+                        title={u.downloadLRC}
                         href={href}
                         onClick={onDownloadClick}
                         download={downloadName}
@@ -203,7 +203,7 @@ export const Editor: React.FC<{
                         <DownloadSVG />
                     </a>
                     {onOpenUtils && (
-                        <button className="editor-tools-item ripple" title={u.lrcUtilities || "LRC Utilities"} type="button" onClick={onOpenUtils}>
+                        <button className="editor-tools-item ripple" title={u.lrcUtilities} type="button" onClick={onOpenUtils}>
                             <UtilitySVG />
                         </button>
                     )}
@@ -212,7 +212,7 @@ export const Editor: React.FC<{
 
             <textarea
                 className="app-textarea"
-                aria-label={u.lrcInputHere || "LRC input here"}
+                aria-label={u.lrcInputHere}
                 onBlur={parse}
                 {...disableCheck}
                 {...useDefaultValue(text, textarea)}

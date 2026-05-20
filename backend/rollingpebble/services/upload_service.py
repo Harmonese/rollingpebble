@@ -4,6 +4,7 @@ from pathlib import Path
 
 from rollingpebble.adapters.pylrclib_adapter import PylrclibAdapter
 from rollingpebble.models import UploadPlanRequest, UploadPlanResponse, UploadRunRequest, UploadRunResponse
+from rollingpebble.messages import message_from_text
 from rollingpebble.storage.files import plain_for_timing
 from rollingpebble.services.project_service import ProjectService
 
@@ -40,4 +41,4 @@ class UploadService:
             mode=request.mode,
             allow_derived_plain=request.allow_derived_plain,
         )
-        return UploadRunResponse(success=ok, message=message)
+        return UploadRunResponse(success=ok, message=message, message_message=message_from_text(message, default_code="upload.run.message"))

@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
-import os
-import platform
 import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from rollingpebble.models import RuntimeSettingsModel
+from rollingpebble.paths import StorageLayout
+from rollingpebble.runtime_environment import build_runtime_env, runtime_python_path
+from rollingpebble.runtime_recipe import DEFAULT_RUNTIME_RECIPE
 from rollingpebble.runtime_python import select_runtime_python, target_runtime_python_tag
 
 
@@ -39,10 +40,17 @@ class IsolatedRuntimeInfo:
 
 
 class RuntimeManager:
-    def __init__(self, data_dir: Path) -> None:
-        self.data_dir = data_dir
-        self.envs_root = data_dir / "envs"
-        self.models_root = data_dir / "models" / "transcriber"
+    def __init__(self, data_dir: Path | StorageLayout) -> None:
+        self.layout = data_dir if isinstance(data_dir, StorageLayout) else StorageLayout.from_data_dir(data_dir)
+        self.data_dir = self.layout.app_root
+        self.envs_root = self.layout.runtime_root
+        self.models_root = self.layout.models_root / "transcriber"
+
+    def update_layout(self, layout: StorageLayout) -> None:
+        self.layout = layout
+        self.data_dir = layout.app_root
+        self.envs_root = layout.runtime_root
+        self.models_root = layout.models_root / "transcriber"
 
     def runtime_id(self, profile: str) -> str:
         try:
@@ -74,10 +82,7 @@ class RuntimeManager:
         return self.runtime_root(profile) / ".venv"
 
     def python_path(self, profile: str) -> Path:
-        venv = self.venv_path(profile)
-        if platform.system().lower() == "windows":
-            return venv / "Scripts" / "python.exe"
-        return venv / "bin" / "python"
+        return runtime_python_path(self.venv_path(profile))
 
     def default_model_store(self) -> Path:
         return self.models_root
@@ -175,24 +180,7 @@ class RuntimeManager:
             return None
 
     def runtime_env(self, venv: Path) -> dict[str, str]:
-        env = os.environ.copy()
-        bin_dir = venv / ("Scripts" if platform.system().lower() == "windows" else "bin")
-        env.update(
-            {
-                "PYTHONUNBUFFERED": "1",
-                "PYTHONNOUSERSITE": "1",
-                "PIP_DISABLE_PIP_VERSION_CHECK": "1",
-                "PIP_PROGRESS_BAR": "off",
-                "PIP_CACHE_DIR": str(self.data_dir / "cache" / "pip"),
-                "XDG_CACHE_HOME": str(self.data_dir / "cache" / "xdg"),
-                "TORCH_HOME": str(self.data_dir / "models" / "torch"),
-                "HF_HOME": str(self.data_dir / "models" / "transcriber" / "providers" / "huggingface"),
-                "HUGGINGFACE_HUB_CACHE": str(self.data_dir / "models" / "transcriber" / "providers" / "huggingface" / "hub"),
-                "VIRTUAL_ENV": str(venv),
-                "PATH": f"{bin_dir}{os.pathsep}{env.get('PATH', '')}",
-            }
-        )
-        return env
+        return build_runtime_env(venv, self.layout)
 
     def command_prefix(self, profile: str) -> list[str]:
         info = self.inspect(profile)
@@ -220,11 +208,21 @@ class RuntimeManager:
             raise RuntimeError(
                 "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before upgrading."
             )
-        from rollingpebble.runtime_constants import PYROLLER_RUNTIME_SPEC
         return [
-            str(info.python_path), "-m", "pip", "install", "--upgrade",
-            PYROLLER_RUNTIME_SPEC,
+            sys.executable,
+            "-m",
+            "rollingpebble.runtime_dependencies",
+            "upgrade",
+            "--data-dir",
+            str(self.data_dir),
+            "--venv",
+            str(info.venv_path),
         ]
+
+    def dependency_source_label(self) -> str:
+        return DEFAULT_RUNTIME_RECIPE.source_label(
+            DEFAULT_RUNTIME_RECIPE.source_from_env()
+        )
 
     def cache_model_command(
         self, profile: str, *, language: str = "mul", backend: str | None = None,

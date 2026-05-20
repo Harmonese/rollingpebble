@@ -16,7 +16,8 @@ export const LrcRollerSideMascot: React.FC = () => {
 };
 
 export const LrcRollerEmptyState: React.FC = () => {
-    return <div className="roller-empty-state" aria-label="No lyrics loaded" />;
+    const { lang } = useContext(appContext);
+    return <div className="roller-empty-state" aria-label={lang.ui.noLyrics} />;
 };
 
 export const LrcRollerLoading: React.FC = () => {
@@ -24,7 +25,7 @@ export const LrcRollerLoading: React.FC = () => {
     return (
         <img
             className="roller-legacy-loading start-loading roller-avatar-legacy"
-            alt={`Loading ${lang.app?.name || "Rolling Pebble"}`}
+            alt={lang.ui.loadingApp.replace("{name}", lang.app?.name || "Rolling Pebble")}
             src={avatar}
             crossOrigin="anonymous"
         />

@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import subprocess
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from rollingpebble.runtime_environment import build_runtime_env, runtime_python_path
 from rollingpebble.runtime_constants import (
     PYROLLER_EVENT_PREFIX,
-    PYROLLER_RUNTIME_SPEC,
-    PYROLLER_RUNTIME_SUPPORT_SPECS,
 )
+from rollingpebble.runtime_recipe import DEFAULT_RUNTIME_RECIPE
 from rollingpebble.runtime_python import select_runtime_python
 
 
@@ -35,9 +33,7 @@ def _runtime_id(profile: str, python_tag: str) -> str:
 
 
 def _venv_python(venv: Path) -> Path:
-    if platform.system().lower() == "windows":
-        return venv / "Scripts" / "python.exe"
-    return venv / "bin" / "python"
+    return runtime_python_path(venv)
 
 
 def _run(command: list[str], *, env: dict[str, str] | None = None) -> None:
@@ -86,27 +82,6 @@ def _run_json(command: list[str], *, env: dict[str, str] | None = None) -> dict[
     if return_code != 0:
         raise JsonCommandError(command, return_code, report)
     return report
-
-
-def _runtime_env(venv: Path, data_dir: Path) -> dict[str, str]:
-    env = os.environ.copy()
-    bin_dir = venv / ("Scripts" if platform.system().lower() == "windows" else "bin")
-    env.update(
-        {
-            "PYTHONUNBUFFERED": "1",
-            "PYTHONNOUSERSITE": "1",
-            "PIP_DISABLE_PIP_VERSION_CHECK": "1",
-            "PIP_PROGRESS_BAR": "off",
-            "PIP_CACHE_DIR": str(data_dir / "cache" / "pip"),
-            "XDG_CACHE_HOME": str(data_dir / "cache" / "xdg"),
-            "TORCH_HOME": str(data_dir / "models" / "torch"),
-            "HF_HOME": str(data_dir / "models" / "transcriber" / "providers" / "huggingface"),
-            "HUGGINGFACE_HUB_CACHE": str(data_dir / "models" / "transcriber" / "providers" / "huggingface" / "hub"),
-            "VIRTUAL_ENV": str(venv),
-            "PATH": f"{bin_dir}{os.pathsep}{env.get('PATH', '')}",
-        }
-    )
-    return env
 
 
 def _pyroller_version(python: Path, env: dict[str, str]) -> str | None:
@@ -167,24 +142,21 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
         else:
             print(f"Reusing existing virtual environment: {venv}", flush=True)
 
-        env = _runtime_env(venv, data_dir)
-        _run([str(python), "-m", "pip", "install", "-U", "pip", "setuptools", "wheel"], env=env)
+        env = build_runtime_env(venv, data_dir)
+        _run(DEFAULT_RUNTIME_RECIPE.bootstrap_command(python), env=env)
 
-        source = os.environ.get("LRC_ROLLER_PYROLLER_SOURCE", "").strip()
+        source = DEFAULT_RUNTIME_RECIPE.source_from_env()
         if source:
             source_path = Path(source).expanduser().resolve()
             print(f"Installing py-roller from local editable source: {source_path}", flush=True)
-            _run([str(python), "-m", "pip", "install", "-e", str(source_path)], env=env)
-            source_label = f"editable:{source_path}"
+            source_label = DEFAULT_RUNTIME_RECIPE.source_label(source)
         else:
-            print(f"Installing/upgrading py-roller runtime package: {PYROLLER_RUNTIME_SPEC}", flush=True)
-            _run([str(python), "-m", "pip", "install", "--upgrade", PYROLLER_RUNTIME_SPEC], env=env)
-            source_label = PYROLLER_RUNTIME_SPEC
+            source_label = DEFAULT_RUNTIME_RECIPE.pyroller_spec
+            print(f"Installing/upgrading py-roller runtime package: {source_label}", flush=True)
 
-        if PYROLLER_RUNTIME_SUPPORT_SPECS:
-            support_specs = list(PYROLLER_RUNTIME_SUPPORT_SPECS)
-            print(f"Installing/upgrading py-roller runtime support packages: {', '.join(support_specs)}", flush=True)
-            _run([str(python), "-m", "pip", "install", "--upgrade", *support_specs], env=env)
+        dependency_commands = DEFAULT_RUNTIME_RECIPE.dependency_install_commands(python, source=source)
+        for command in dependency_commands:
+            _run(command, env=env)
 
         install_report = _run_json(
             [

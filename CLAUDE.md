@@ -54,8 +54,9 @@ Python package `rollingpebble` installed from the monorepo root with `pip instal
 - `jobs.py` — `JobManager` runs long-running commands (Auto Timing, runtime install/doctor) as threaded subprocesses. Progress is parsed from stdout via `pyroller.progress` log lines, JSONL events (`PYROLLER_EVENT ` prefix), and tqdm download bars. Job status is polled by the frontend via `/api/jobs/{job_id}`.
 - `config.py` — `Settings` dataclass resolved from env vars (`LRC_ROLLER_HOST`, `LRC_ROLLER_PORT`, `LRC_ROLLER_DATA_DIR`, `LRC_ROLLER_FRONTEND_DIST`). Frontend asset resolution order: explicit env → bundled wheel `frontend_dist/` → source checkout `frontend/dist/`.
 - `paths.py` — `ensure_data_dirs()` creates the data directory tree (`projects/`, `models/`, `envs/`, `cache/`) and returns path dicts.
-- `runtime_constants.py` — Shared constants: `PYROLLER_RUNTIME_SPEC` (`py-roller>=0.6.0,<0.8`), support package specs, JSONL event prefix.
+- `runtime_recipe.py` / `runtime_constants.py` — Shared runtime dependency recipe and compatibility constants: `PYROLLER_RUNTIME_SPEC` (`py-roller>=0.6.2,<0.8`), support package specs, JSONL event prefix.
 - `runtime_installer.py` — Creates/repairs the isolated py-roller venv. Can be invoked directly as `python -m rollingpebble.runtime_installer` (used by CLI `setup` and by `runtime_service.py` via `JobManager`).
+- `runtime_dependencies.py` — Single-command subprocess entry point for upgrading the isolated runtime dependencies from the shared recipe.
 - `version.py` — `app_version()` returns the installed package version.
 
 **services/** — Business logic layer:
@@ -95,7 +96,7 @@ React 18 SPA, forked from `lrc-maker`. Uses `@lrc-maker/lrc-parser` for lyrics p
 
 - **Auto Timing** is the user-facing feature name; **py-roller** is the technical engine invoked as a subprocess.
 - The py-roller runtime runs in an **isolated venv** under `<data_dir>/envs/pyroller-py<ver>-<profile>/.venv`. Models are stored separately under `<data_dir>/models/`.
-- The py-roller version spec is `py-roller>=0.6.0,<0.8` (see `runtime_constants.py`). The README may be out of date.
+- The py-roller dependency recipe is centralized in `runtime_recipe.py`; compatibility constants are re-exported from `runtime_constants.py`. The README may be out of date.
 - The six-stage pipeline (`s,f,t,p,a,w`) must be a continuous subsequence. Only options relevant to the selected stages are passed to the CLI.
 - `RuntimeSettingsModel` (saved as `settings.json`) holds defaults for all Auto Timing parameters. `RollerService._effective_request()` merges them with each request.
 - Data directory structure: `projects/`, `models/`, `envs/`, `cache/`, `settings.json`.

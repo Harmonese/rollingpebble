@@ -15,6 +15,7 @@ export function useMessage(initial = "") {
     const [message, setMessageState] = useState(initial);
     const [type, setType] = useState<MessageType>("info");
     const [fading, setFading] = useState(false);
+    const [key, setKey] = useState(0);
     const timerRef = useRef<ReturnType<typeof setTimeout>>();
 
     const clearMessage = useCallback(() => {
@@ -31,6 +32,7 @@ export function useMessage(initial = "") {
         clearTimeout(timerRef.current);
         setFading(false);
         setMessageState(text);
+        setKey((current) => current + 1);
 
         let msgType: MessageType = "info";
         let duration = 0;
@@ -61,5 +63,5 @@ export function useMessage(initial = "") {
         return () => clearTimeout(timerRef.current);
     }, []);
 
-    return [message, setMessage, clearMessage, fading, type] as const;
+    return [message, setMessage, clearMessage, fading, type, key] as const;
 }

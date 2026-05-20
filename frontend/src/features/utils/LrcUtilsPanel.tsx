@@ -1,6 +1,10 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { toastPubSub } from "../../components/toast.js";
 import { appContext, ChangBits } from "../../components/app.context.js";
+import { ModalShell } from "../../components/ModalShell.js";
+import { PanelMessage } from "../../components/PanelMessage.js";
+import { SettingsActionRow } from "../../components/SettingsRows.js";
+import { toastPubSub } from "../../components/toast.js";
+import { useMessage } from "../../hooks/useMessage.js";
 
 function shiftTimestamps(text: string, offsetMs: number): { text: string; count: number } {
     if (!offsetMs) return { text, count: 0 };
@@ -106,6 +110,7 @@ export const LrcUtilsPanel: React.FC<{
     const [transformA, setTransformA] = useState("1");
     const [transformB, setTransformB] = useState("0");
     const [overwriteText, setOverwriteText] = useState("");
+    const [message, setMessage, clearMessage, messageFading, messageType, messageKey] = useMessage();
     const { lang } = useContext(appContext, ChangBits.lang);
     const tu = lang.toast.utils;
     const u = lang.ui;
@@ -115,12 +120,17 @@ export const LrcUtilsPanel: React.FC<{
             const { text: newText, count } = transform(text);
             if (newText !== text) {
                 onApply(newText);
-                toastPubSub.pub({ type: "success", text: tu.linesChanged.replace("{label}", label).replace("{count}", String(count)) });
+                clearMessage();
+                toastPubSub.pub({
+                    type: "success",
+                    text: tu.linesChanged.replace("{label}", label).replace("{count}", String(count)),
+                });
             } else {
+                clearMessage();
                 toastPubSub.pub({ type: "info", text: tu.noChanges.replace("{label}", label) });
             }
         },
-        [text, onApply],
+        [clearMessage, text, onApply, tu.linesChanged, tu.noChanges],
     );
 
     const handleOverwrite = useCallback(() => {
@@ -129,11 +139,16 @@ export const LrcUtilsPanel: React.FC<{
         const overwriteLines = overwriteText.split("\n").filter((l) => l.trim());
         if (overwriteLines.length === 0) return;
         if (timedLines.length === 0) {
-            toastPubSub.pub({ type: "warning", text: tu.noTimedLines || "No timed lines found in the current lyrics." });
+            setMessage(tu.noTimedLines, "warning");
             return;
         }
         if (overwriteLines.length !== timedLines.length) {
-            toastPubSub.pub({ type: "warning", text: tu.lineMismatch.replace("{a}", String(overwriteLines.length)).replace("{b}", String(timedLines.length)) });
+            setMessage(
+                tu.lineMismatch.replace("{a}", String(overwriteLines.length)).replace("{b}", String(timedLines.length)),
+                "warning",
+            );
+        } else {
+            clearMessage();
         }
         let changed = 0;
         const newLines = timedLines.map((line, i) => {
@@ -147,7 +162,16 @@ export const LrcUtilsPanel: React.FC<{
         const result = [...newLines, ...(nonTimed.length ? [""] : []), ...nonTimed].join("\n");
         onApply(result);
         toastPubSub.pub({ type: "success", text: tu.overwriteReplaced.replace("{count}", String(changed)) });
-    }, [text, overwriteText, onApply]);
+    }, [
+        clearMessage,
+        text,
+        overwriteText,
+        onApply,
+        setMessage,
+        tu.lineMismatch,
+        tu.noTimedLines,
+        tu.overwriteReplaced,
+    ]);
 
     const quickUtils = useMemo(() => [
         { label: tu.compressTags, desc: tu.compressTagsDesc, action: compressTags },
@@ -156,71 +180,111 @@ export const LrcUtilsPanel: React.FC<{
         { label: tu.splitTranslations, desc: tu.splitTranslationsDesc, action: splitTranslations },
     ], [tu]);
 
-    if (!open) return null;
-
     return (
-        <div className="about-overlay" role="dialog" aria-modal="true" aria-label="LRC Utilities">
-            <button className="about-backdrop" type="button" onClick={onClose} />
-            <section className="about-modal">
-                <div className="about-header">
-                    <div>
-                        <p className="about-kicker">{u.tools}</p>
-                        <h2>{u.lrcUtilities}</h2>
-                    </div>
-                    <button type="button" onClick={onClose} autoFocus>{u.close}</button>
+        <ModalShell open={open} onClose={onClose} ariaLabel={u.lrcUtilities} closeLabel={u.close} exitMs={200}>
+            <div className="about-header">
+                <div>
+                    <p className="about-kicker">{u.tools}</p>
+                    <h2>{u.lrcUtilities}</h2>
                 </div>
+                <button type="button" onClick={onClose} autoFocus>{u.close}</button>
+            </div>
 
-                <div className="lrc-utils-grid">
-                    {quickUtils.map((item) => (
-                        <button key={item.label} type="button" onClick={() => apply(item.label, item.action)}>
-                            <b>{item.label}</b>
-                            <small>{item.desc}</small>
-                        </button>
-                    ))}
+            <PanelMessage message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
 
-                    <label>
+            <div className="lrc-utils-list">
+                {quickUtils.map((item) => (
+                    <SettingsActionRow
+                        title={item.label}
+                        description={item.desc}
+                        className="lrc-utils-action-row"
+                        key={item.label}
+                    >
+                        <button type="button" onClick={() => apply(item.label, item.action)}>{u.apply}</button>
+                    </SettingsActionRow>
+                ))}
+
+                <div className="settings-action-row lrc-utils-action-row">
+                    <div className="settings-action-main">
                         <b>{tu.timeOffset}</b>
                         <small>{tu.timeOffsetDesc}</small>
-                        <span className="utils-input-row">
-                            <input
-                                type="number"
-                                value={offsetMs}
-                                onChange={(ev) => setOffsetMs(ev.target.value)}
-                                placeholder="0"
-                            />
-                            <button type="button" onClick={() => apply(`Time Offset (${offsetMs || "0"} ms)`, (t) => shiftTimestamps(t, parseInt(offsetMs) || 0))}>
-                                {u.apply}
-                            </button>
-                        </span>
-                    </label>
+                    </div>
+                    <div className="lrc-utils-controls">
+                        <input
+                            type="number"
+                            value={offsetMs}
+                            onChange={(ev) => setOffsetMs(ev.target.value)}
+                            placeholder="0"
+                        />
+                        <button
+                            type="button"
+                            onClick={() =>
+                                apply(
+                                    `${tu.timeOffset} (${offsetMs || "0"} ms)`,
+                                    (t) => shiftTimestamps(t, parseInt(offsetMs) || 0),
+                                )}
+                        >
+                            {u.apply}
+                        </button>
+                    </div>
+                </div>
 
-                    <label>
+                <div className="settings-action-row lrc-utils-action-row">
+                    <div className="settings-action-main">
                         <b>{tu.linearTransform}</b>
                         <small>{tu.linearTransformDesc}</small>
-                        <span className="utils-input-row">
-                            <span className="transform-expr">
-                                f = <input type="number" value={transformA} onChange={(ev) => setTransformA(ev.target.value)} placeholder="1" step="any" />
-                                × t + <input type="number" value={transformB} onChange={(ev) => setTransformB(ev.target.value)} placeholder="0" />
-                            </span>
-                            <button type="button" onClick={() => apply("Linear Transform", (t) => linearTransform(t, parseFloat(transformA) || 1, parseFloat(transformB) || 0))}>
-                                {u.apply}
-                            </button>
+                    </div>
+                    <div className="lrc-utils-controls">
+                        <span className="transform-expr">
+                            f ={" "}
+                            <input
+                                type="number"
+                                value={transformA}
+                                onChange={(ev) => setTransformA(ev.target.value)}
+                                placeholder="1"
+                                step="any"
+                            />
+                            × t +{" "}
+                            <input
+                                type="number"
+                                value={transformB}
+                                onChange={(ev) => setTransformB(ev.target.value)}
+                                placeholder="0"
+                            />
                         </span>
-                    </label>
+                        <button
+                            type="button"
+                            onClick={() =>
+                                apply(
+                                    tu.linearTransform,
+                                    (t) => linearTransform(t, parseFloat(transformA) || 1, parseFloat(transformB) || 0),
+                                )}
+                        >
+                            {u.apply}
+                        </button>
+                    </div>
+                </div>
 
-                    <label>
-                        <b>{tu.overwriteLyrics}</b>
-                        <small>{tu.overwriteLyricsDesc}</small>
+                <div className="settings-action-row lrc-utils-action-row lrc-utils-text-row">
+                    <div className="lrc-utils-text-header">
+                        <div className="settings-action-main">
+                            <b>{tu.overwriteLyrics}</b>
+                            <small>{tu.overwriteLyricsDesc}</small>
+                        </div>
+                        <div className="lrc-utils-controls">
+                            <button type="button" onClick={handleOverwrite}>{u.apply}</button>
+                        </div>
+                    </div>
+                    <div className="lrc-utils-text-controls">
                         <textarea
                             value={overwriteText}
                             onChange={(ev) => setOverwriteText(ev.target.value)}
                             placeholder={tu.pastePlaceholder}
                             rows={4}
                         />
-                        <button type="button" onClick={handleOverwrite}>{u.apply}</button>
-                    </label>
+                    </div>
                 </div>
-            </section>
-        </div>
+            </div>
+        </ModalShell>
     );
 };

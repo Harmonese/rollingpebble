@@ -9,6 +9,7 @@ dist/
 
 # Node
 node_modules/
+.pnpm-store/
 frontend/dist/
 frontend/.vite/
 
@@ -16,3 +17,7 @@ frontend/.vite/
 .lrc-roller-data/
 .DS_Store
 tests/
+
+# Generated release/package artifacts
+backend/rollingpebble/frontend_dist/
+skill.zip
