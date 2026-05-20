@@ -1,18 +1,19 @@
 # Release Checklist
 
-This project currently releases through GitHub Releases. A PyPI release can be added later after the install flow has been tested more broadly.
+This project releases through GitHub Releases. Publishing a GitHub Release triggers the PyPI publishing workflow.
 
 ## Version
 
-Current release target: `v0.6.0`
+Current release target: `v0.6.1`
 
 Before tagging:
 
 1. Confirm `pyproject.toml` has the target version.
 2. Update `CHANGELOG.md`.
 3. Run the frontend and backend checks.
-4. Build release artifacts.
-5. Create and push the git tag.
+4. Create and push the git tag.
+5. Publish the GitHub Release.
+6. Confirm the PyPI workflow succeeds.
 
 ## Verify
 
@@ -27,7 +28,9 @@ If backend tests are added, run them before tagging.
 
 ## Build Artifacts
 
-The Python wheel should include the built frontend. Build it like this:
+The GitHub Actions workflow builds release artifacts automatically. It must build the frontend first and copy it into the Python package data directory before running `python -m build`.
+
+For a local release build or smoke test, use:
 
 ```bash
 pnpm -C frontend build
@@ -37,10 +40,26 @@ cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
 python -m build
 ```
 
-Upload these files from `dist/` to the GitHub Release:
+Expected files in `dist/`:
 
-- `rollingpebble-0.6.0-py3-none-any.whl`
-- `rollingpebble-0.6.0.tar.gz`
+- `rollingpebble-0.6.1-py3-none-any.whl`
+- `rollingpebble-0.6.1.tar.gz`
+
+## PyPI Publishing
+
+Publishing a GitHub Release runs `.github/workflows/publish-to-pypi.yml`.
+
+The workflow:
+
+1. Checks that the release tag matches `pyproject.toml`.
+2. Installs frontend dependencies with pnpm.
+3. Builds the frontend.
+4. Copies `frontend/dist` to `backend/rollingpebble/frontend_dist`.
+5. Builds wheel and sdist.
+6. Uploads the distributions as a GitHub Actions artifact.
+7. Publishes the distributions to PyPI using trusted publishing.
+
+PyPI must be configured with a trusted publisher for this repository and the `pypi` GitHub environment.
 
 ## Smoke Test Wheel
 
@@ -48,7 +67,7 @@ Upload these files from `dist/` to the GitHub Release:
 python -m venv /tmp/rollingpebble-release-test
 . /tmp/rollingpebble-release-test/bin/activate
 python -m pip install -U pip
-python -m pip install dist/rollingpebble-0.6.0-py3-none-any.whl
+python -m pip install dist/rollingpebble-0.6.1-py3-none-any.whl
 rollingpebble --help
 rollingpebble doctor
 ```
@@ -64,9 +83,9 @@ Open `http://127.0.0.1:6790`.
 ## Tag
 
 ```bash
-git tag -a v0.6.0 -m "Release v0.6.0"
+git tag -a v0.6.1 -m "Release v0.6.1"
 git push origin main
-git push origin v0.6.0
+git push origin v0.6.1
 ```
 
 ## GitHub Release Notes
@@ -74,28 +93,24 @@ git push origin v0.6.0
 Title:
 
 ```text
-Rolling Pebble v0.6.0
+Rolling Pebble v0.6.1
 ```
 
 Body:
 
 ```markdown
-First formal GitHub release for Rolling Pebble.
+Maintenance release for Rolling Pebble.
 
 Highlights:
 
-- Local lyrics workflow: import, edit, synchronize, Auto Timing, export, and LRCLIB publishing.
-- Isolated Auto Timing runtime with `py-roller>=0.6.2,<0.8`.
-- Storage & Cleanup panel with project/model/runtime usage, cleanup actions, local migration controls, and project auto-delete settings.
-- Expanded i18n coverage for frontend and backend-originated user messages.
-- Improved project deletion/restore behavior and project ordering UI.
-- Polished Settings, About, LRC Utilities, Synchronizer & Editor, Auto Timing, and Storage UI consistency.
-- Improved operation messages, toasts, modal animations, and audio/background behavior.
+- Converted `CHANGELOG.md` to a Keep a Changelog style structure.
+- Added GitHub Actions publishing to PyPI when a GitHub Release is published.
+- The release workflow builds the frontend and includes it in the Python wheel before publishing.
 
-Install from the attached wheel:
+Install from PyPI:
 
 ```bash
-python -m pip install rollingpebble-0.6.0-py3-none-any.whl
+python -m pip install rollingpebble
 rollingpebble
 ```
 
@@ -109,5 +124,6 @@ Notes:
 
 - Auto Timing creates an isolated py-roller runtime under the Rolling Pebble data directory.
 - Large model downloads are managed separately from runtime environments.
-- This release is distributed through GitHub Releases first; PyPI distribution may follow after more install testing.
+- Auto Timing creates an isolated py-roller runtime under the Rolling Pebble data directory.
+- Large model downloads are managed separately from runtime environments.
 ```

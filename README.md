@@ -1,24 +1,114 @@
-# rollingpebble
+# Rolling Pebble
 
-Local WebUI for lyrics lookup, automatic timing, manual LRC editing, export, and LRCLIB publishing.
+[![PyPI](https://img.shields.io/pypi/v/rollingpebble.svg)](https://pypi.org/project/rollingpebble/)
+[![Python](https://img.shields.io/pypi/pyversions/rollingpebble.svg)](https://pypi.org/project/rollingpebble/)
 
-Rolling Pebble runs locally. The browser UI talks to a local FastAPI backend, and Auto Timing uses an isolated `py-roller` runtime so heavy audio dependencies stay separate from the main app environment.
+Rolling Pebble is a local lyrics workstation for searching, editing, timing, organizing, and publishing LRC lyrics.
 
-Current highlights:
+It gives you a browser-based interface backed by a local Python server. Your projects, audio, lyrics, runtime environments, and model caches stay on your machine. Auto Timing is powered by `py-roller` in an isolated runtime so large audio dependencies do not pollute the main app environment.
 
-- Import audio files and lyrics from local files, LRCLIB, and supported online sources.
-- Edit and synchronize LRC lyrics manually.
-- Run Auto Timing through `py-roller` with isolated runtime profiles.
-- Manage projects, model caches, runtime environments, storage locations, and cleanup.
-- Publish prepared lyrics through LRCLIB workflows.
-- Use the UI in multiple languages through the built-in i18n layer.
+## What It Does
 
-Default ports:
+- **Import** audio and lyrics from local files, LRCLIB, and supported online sources.
+- **Edit** metadata and lyric text in a focused LRC editor.
+- **Synchronize** timestamps manually when you want frame-level control.
+- **Auto-time** lyrics with `py-roller` using isolated CPU/CUDA runtime profiles.
+- **Review and clean up** projects, model caches, runtime environments, and app data.
+- **Publish** prepared lyrics through LRCLIB workflows.
+- **Use multiple languages** through the built-in i18n layer.
 
-- Backend/API: `http://127.0.0.1:6789`
-- Vite frontend in development: `http://127.0.0.1:5173`
+## Typical Workflow
 
-## Clean development setup
+1. Create or import a project with an audio file.
+2. Import lyrics from LRCLIB, a local file, or the editor.
+3. Clean up the lyric text and metadata.
+4. Use the Synchronizer for manual timing, or Auto Timing for py-roller based alignment.
+5. Review the generated LRC, export it, or publish it through LRCLIB.
+
+## Install
+
+Rolling Pebble requires Python 3.10 or newer. Auto Timing additionally needs a Python 3.12 executable available on your system because the isolated `py-roller` runtime is built on Python 3.12.
+
+Recommended install:
+
+```bash
+python -m venv rollingpebble-env
+. rollingpebble-env/bin/activate
+python -m pip install -U pip
+python -m pip install rollingpebble
+rollingpebble
+```
+
+On Windows PowerShell:
+
+```powershell
+py -m venv rollingpebble-env
+.\rollingpebble-env\Scripts\Activate.ps1
+python -m pip install -U pip
+python -m pip install rollingpebble
+rollingpebble
+```
+
+Then open:
+
+```text
+http://127.0.0.1:6789
+```
+
+## First Run
+
+Start Rolling Pebble:
+
+```bash
+rollingpebble
+```
+
+Then open:
+
+```text
+http://127.0.0.1:6789
+```
+
+The default server binds to `127.0.0.1`, so it is intended for local use.
+
+## Auto Timing
+
+Auto Timing uses `py-roller` for lyric alignment. Rolling Pebble does not install Torch, Demucs, faster-whisper, or other heavy audio dependencies into the main app environment. Instead, it creates a separate runtime under the app data directory.
+
+To set it up:
+
+1. Open **Settings -> Auto Timing -> Runtime**.
+2. Choose a runtime profile.
+3. Click **Create Runtime**.
+4. Run **Runtime Check** after creation completes.
+
+If Python 3.12 is not detected automatically, set:
+
+```bash
+export LRC_ROLLER_RUNTIME_PYTHON=/path/to/python3.12
+```
+
+The current supported py-roller range is:
+
+```text
+py-roller>=0.6.2,<0.8
+```
+
+## Storage and Privacy
+
+Rolling Pebble is local-first. It stores data under the user data directory, for example:
+
+```text
+~/.local/share/rollingpebble
+```
+
+Inside the app, **Settings -> Storage & Cleanup** shows project data, model caches, runtime environments, and other app data. Model caches are stored separately from runtime environments so they can be reused across runtime repairs.
+
+Rolling Pebble only contacts external services when you use features that need them, such as LRCLIB lookup/publishing, supported online source import, or model downloads for Auto Timing.
+
+## Developer Notes
+
+For source development:
 
 ```bash
 python -m venv .venv
@@ -28,20 +118,14 @@ python -m pip install -e .
 pnpm install
 ```
 
-Start both backend and frontend with one command:
+Run the backend and frontend together:
 
 ```bash
 . .venv/bin/activate
 rollingpebble dev
 ```
 
-Then open:
-
-```text
-http://127.0.0.1:5173
-```
-
-You can still run two terminals if preferred:
+Or use two terminals:
 
 ```bash
 # terminal 1
@@ -52,69 +136,4 @@ rollingpebble serve --reload
 pnpm dev
 ```
 
-## Auto Timing runtime setup
-
-The main workflow calls this feature **Auto Timing**. The technical engine is `py-roller`.
-
-rollingpebble runs py-roller from an **isolated runtime virtual environment** under the rollingpebble data directory instead of installing or repairing py-roller inside the backend `.venv`. This keeps FastAPI/pylrclib separate from heavy audio dependencies such as Torch, Demucs, and faster-whisper.
-
-Open **Settings -> Auto Timing -> Runtime** and choose:
-
-- **Create Runtime** to create or repair the isolated py-roller runtime for the selected profile.
-- **Runtime Check** to run `py-roller doctor` inside that isolated runtime.
-- **Upgrade py-roller** to upgrade the isolated runtime package within Rolling Pebble's supported range.
-
-The runtime is created under a path similar to:
-
-```text
-~/.local/share/rollingpebble/envs/pyroller-py312-cpu/.venv
-```
-
-Model files are stored separately from the runtime, for example:
-
-```text
-~/.local/share/rollingpebble/models/transcriber
-```
-
-This means the runtime can be repaired or recreated without deleting multi-gigabyte model caches.
-
-For py-roller development, point rollingpebble at a local py-roller checkout before creating the runtime:
-
-```bash
-export LRC_ROLLER_PYROLLER_SOURCE=/path/to/py-roller
-```
-
-Then use **Create / Repair Runtime** from Settings.
-
-When using the default PyPI source, runtime creation and upgrade install py-roller within the compatible runtime range declared by rollingpebble. The current requirement is `py-roller>=0.6.2,<0.8`.
-
-After a model has been downloaded, enable local cache-only model use in Settings or Auto Timing to avoid unnecessary Hugging Face network access. For restricted networks, prefer `socks5h://` proxies so DNS resolution also goes through the SOCKS proxy.
-
-## Production-like local server
-
-Build the frontend and serve everything from the backend port:
-
-```bash
-pnpm build
-rollingpebble
-```
-
-Then open:
-
-```text
-http://127.0.0.1:6789
-```
-
-## GitHub release build
-
-For a GitHub Release asset, build the frontend, copy it into the Python package data directory, then build the Python distributions:
-
-```bash
-pnpm -C frontend build
-rm -rf backend/rollingpebble/frontend_dist
-mkdir -p backend/rollingpebble/frontend_dist
-cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
-python -m build
-```
-
-Upload the generated files from `dist/` to the GitHub Release. The source checkout can still serve `frontend/dist` directly during local testing, but wheels should include `backend/rollingpebble/frontend_dist`.
+Release packaging details live in [RELEASE.md](./RELEASE.md).
