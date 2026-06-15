@@ -1,0 +1,249 @@
+audio {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 32px;
+    margin-bottom: env(safe-area-inset-bottom);
+    background-color: rgba(12, 14, 16, 0.96);
+}
+
+audio::-webkit-media-controls-enclosure {
+    border-radius: 0;
+}
+
+audio[disabled],
+.lrc-audio [disabled],
+.lrc-audio button[disabled] {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.lrc-audio {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    min-height: var(--app-footer-height);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    color: var(--studio-text);
+    font-size: 14px;
+    background: transparent;
+    user-select: none;
+}
+
+.lrc-audio > button, .lrc-audio > span {
+    flex: 0 0 auto;
+}
+
+.slider {
+    --slider-height: 32px;
+
+    position: relative;
+    height: var(--slider-height);
+    margin: 0 5px;
+}
+
+.slider > progress, .slider > input {
+    position: absolute;
+    right: 0;
+    left: 0;
+    width: 100%;
+}
+
+.waveform-container {
+    flex: 1;
+}
+
+.waveform-container > .waveform {
+    height: 100%;
+}
+
+@media (width <= 768px) {
+    .timeline-slider {
+        --slider-height: 4px;
+
+        position: absolute;
+        bottom: 100%;
+        width: 100%;
+        margin: 0;
+    }
+
+    .waveform-container {
+        position: absolute;
+        bottom: 100%;
+        margin: 0;
+        padding: 0 8px;
+        width: 100%;
+        background-color: rgba(12, 14, 16, 0.96);
+    }
+
+    .app-main {
+        padding-bottom: 64px;
+    }
+}
+
+.lrc-audio > button {
+    height: 32px;
+    color: var(--studio-text);
+}
+
+audio + .lrc-audio > .loadaudio-button > svg {
+    animation: drop-shadow-flash 1s ease-in-out infinite;
+}
+
+audio[src] + .lrc-audio > .loadaudio-button > svg {
+    animation: none;
+}
+
+@keyframes drop-shadow-flash {
+    0% {
+        filter: 0;
+    }
+
+    50% {
+        filter: drop-shadow(0 0 4px currentColor);
+    }
+}
+
+.lrc-audio section {
+    margin: 0 5px;
+}
+
+.timeline-slider {
+    flex: 4 0 auto;
+}
+
+.playbackrate-slider {
+    flex: 1 1 auto;
+    max-width: 150px;
+}
+
+input[type="range"] {
+    --thumb-size: 16px;
+
+    height: var(--slider-height);
+    margin: 0;
+    padding: 0;
+    color: var(--theme-color);
+    background-color: transparent;
+    appearance: none;
+}
+
+input[type="range"]:focus {
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+    height: var(--slider-height);
+    background-color: transparent;
+    border: 0;
+}
+
+input[type="range"]::-moz-range-track {
+    height: var(--slider-height);
+    background-color: transparent;
+    border: 0;
+}
+
+input[type="range"]::-ms-track {
+    top: -6px;
+    color: transparent;
+    background-color: transparent;
+    border-color: transparent;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    z-index: 10;
+    width: var(--thumb-size);
+    height: var(--thumb-size);
+    margin-top: calc((var(--slider-height) - var(--thumb-size)) / 2);
+    background-color: currentColor;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: 0 0 4px 1px var(--studio-bg);
+    filter: brightness(120%);
+    transition: box-shadow var(--transition-duration) ease-in-out;
+    -webkit-appearance: none;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+    box-shadow: 0 0 4px 1px var(--studio-text);
+}
+
+input[type="range"]::-moz-range-thumb {
+    z-index: 10;
+    width: var(--thumb-size);
+    height: var(--thumb-size);
+    margin-top: calc((var(--slider-height) - var(--thumb-size)) / 2);
+    background-color: currentColor;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: 0 0 4px 1px var(--studio-bg);
+    filter: brightness(120%);
+    transition: box-shadow var(--transition-duration) ease-in-out;
+    -moz-appearance: none;
+}
+
+input[type="range"]:hover::-moz-range-thumb {
+    box-shadow: 0 0 4px var(--studio-text);
+}
+
+input[type="range"]::-ms-fill-upper, input[type="range"]::-ms-fill-lower {
+    background-color: transparent;
+}
+
+input[type="range"]::-ms-thumb {
+    /* In Edge css variables nor work in pseudo elements */
+    width: 16px;
+    height: 16px;
+    margin-top: -1px;
+    background-color: currentColor;
+    border-radius: 50%;
+}
+
+input[type="range"]::-ms-tooltip {
+    display: none;
+}
+
+.slider > progress {
+    --progress-meter-color: var(--theme-color);
+
+    display: inline-block;
+    box-sizing: border-box;
+    height: 4px;
+    margin: calc(var(--slider-height) / 2 - 2px) 0;
+    color: var(--progress-meter-color);
+    vertical-align: 0;
+    background: var(--studio-surface-2);
+    border: none;
+    border-radius: 2px;
+    box-shadow: none;
+    transition: box-shadow var(--transition-duration) ease-in-out;
+    appearance: none;
+}
+
+.slider:hover progress {
+    box-shadow: 0 0 4px var(--studio-text);
+}
+
+progress::-moz-progress-bar {
+    background-color: var(--theme-color);
+    background-image: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0));
+    background-size: 35px 20px, 100% 100%, 100% 100%;
+    border-radius: 2px;
+}
+
+progress::-webkit-progress-bar {
+    background-color: var(--studio-surface-2);
+    border-radius: 2px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+progress::-webkit-progress-value {
+    background-color: var(--theme-color);
+    background-image: linear-gradient(90deg, rgba(255,255,255,0.12), rgba(255,255,255,0));
+    background-repeat: repeat-x;
+    background-size: 40px 40px, 100% 100%, 100% 100%;
+    border-radius: 2px;
+}

@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-
-export type MessageType = "info" | "success" | "warning" | "error";
+import type { MessageType } from "../shared/messageTypes.js";
 
 /**
  * Message state with optional auto-dismiss and typed styling.

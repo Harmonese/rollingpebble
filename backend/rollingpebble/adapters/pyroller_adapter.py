@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import os
 import shlex
 import shutil
 import sys
-import tempfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 from urllib.parse import urlparse
-
-import yaml
 
 from rollingpebble.models import BatchRollRequest, RollRequest
 
@@ -115,7 +115,6 @@ def build_pyroller_env(request: RollRequest, base_env: dict[str, str] | None = N
 def dependency_status() -> tuple[bool, str | None, str | None]:
     cli = shutil.which("py-roller")
     version = None
-    detail = None
     try:
         version = importlib.metadata.version("py-roller")
     except importlib.metadata.PackageNotFoundError:
@@ -176,9 +175,228 @@ def normalized_stage_text(stages: str | None) -> str:
     return ",".join(normalize_stages(stages))
 
 
-def _add_option(command: list[str], name: str, value: object | None) -> None:
+def _string_value(value: object | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _set_if_present(target: dict[str, object], key: str, value: object | None) -> None:
     if value is not None and not (isinstance(value, str) and not value.strip()):
-        command.extend([name, str(value)])
+        target[key] = value
+
+
+def _backend_config(request: RollRequest, *, default_model_store: Path | str | None = None) -> dict[str, object]:
+    splitter: dict[str, object] = {"two_stems": "vocals"}
+    _set_if_present(splitter, "backend", request.splitter_backend)
+    _set_if_present(splitter, "model", request.splitter_demucs_model)
+    _set_if_present(splitter, "device", request.splitter_demucs_device)
+    _set_if_present(splitter, "jobs", request.splitter_demucs_jobs)
+    _set_if_present(splitter, "overlap", request.splitter_demucs_overlap)
+    _set_if_present(splitter, "segment", request.splitter_demucs_segment)
+
+    filter_config: dict[str, object] = {}
+    if _string_value(request.filter_chain):
+        filter_config["chain"] = [item.strip() for item in str(request.filter_chain).split(",") if item.strip()]
+
+    transcriber: dict[str, object] = {}
+    _set_if_present(transcriber, "backend", request.transcriber_backend)
+    _set_if_present(transcriber, "device", request.transcriber_device)
+    _set_if_present(transcriber, "model_name", request.transcriber_model_name)
+    model_path = request.transcriber_model_path or (str(default_model_store) if default_model_store else None)
+    if _string_value(model_path):
+        transcriber["model_path"] = str(Path(str(model_path)).expanduser())
+    _set_if_present(transcriber, "local_files_only", request.transcriber_local_files_only)
+    _set_if_present(transcriber, "compute_type", request.transcriber_compute_type)
+    _set_if_present(transcriber, "batch_size", request.transcriber_batch_size)
+    _set_if_present(transcriber, "vad_filter", request.transcriber_vad_filter)
+    _set_if_present(transcriber, "hf_xet", request.transcriber_hf_xet)
+    _set_if_present(transcriber, "hf_proxy", request.transcriber_hf_proxy)
+    _set_if_present(transcriber, "hf_etag_timeout", request.transcriber_hf_etag_timeout)
+    _set_if_present(transcriber, "hf_download_timeout", request.transcriber_hf_download_timeout)
+    _set_if_present(transcriber, "hf_max_workers", request.transcriber_hf_max_workers)
+
+    parser: dict[str, object] = {}
+    _set_if_present(parser, "lyrics_encoding", request.parser_lyrics_encoding)
+
+    aligner: dict[str, object] = {}
+    _set_if_present(aligner, "backend", request.aligner_backend)
+    _set_if_present(aligner, "min_gap", request.aligner_min_gap)
+    _set_if_present(aligner, "repetition", request.aligner_repetition)
+
+    writer: dict[str, object] = {}
+    _set_if_present(writer, "backend", request.writer_backend)
+    _set_if_present(writer, "spacing", request.writer_spacing)
+    _set_if_present(writer, "by_tag", request.writer_by_tag)
+    _set_if_present(writer, "tag_type", request.writer_ass_karaoke_tag_type)
+
+    return {
+        "splitter": splitter,
+        "filter": filter_config,
+        "parser": parser,
+        "transcriber": transcriber,
+        "aligner": aligner,
+        "writer": writer,
+    }
+
+
+def _artifact_paths(artifacts_dir: Path | None, output_path: Path) -> dict[str, Path]:
+    if artifacts_dir:
+        return {
+            "vocal_audio": artifacts_dir / VOCAL_AUDIO_NAME,
+            "filtered_audio": artifacts_dir / FILTERED_AUDIO_NAME,
+            "timed_units": artifacts_dir / TIMED_UNITS_NAME,
+            "parsed_lyrics": artifacts_dir / PARSED_LYRICS_NAME,
+            "alignment_result": artifacts_dir / ALIGNMENT_RESULT_NAME,
+        }
+    return artifacts_for(output_path.parent)
+
+
+def build_pyroller_request(
+    *,
+    audio_path: Path,
+    lyrics_path: Path,
+    output_path: Path,
+    intermediate_dir: Path,
+    request: RollRequest,
+    artifacts_dir: Path | None = None,
+    default_model_store: Path | str | None = None,
+) -> dict[str, object]:
+    stages = normalize_stages(request.stages)
+    stage_set = set(stages)
+    first_stage = stages[0]
+    artifacts = _artifact_paths(artifacts_dir, output_path)
+    payload: dict[str, object] = {
+        "protocol_version": 1,
+        "request": {
+            "stages": stages,
+            "language": request.language,
+            "cleanup": request.cleanup,
+            "intermediate": str(intermediate_dir),
+            "log_level": request.log_level,
+            "backend_config": _backend_config(request, default_model_store=default_model_store),
+        },
+    }
+    body = payload["request"]
+    assert isinstance(body, dict)
+
+    if stage_set.intersection({"s", "f", "t"}):
+        body["audio"] = str(audio_path)
+    if "p" in stage_set:
+        body["lyrics"] = str(lyrics_path)
+    if first_stage == "a":
+        body["timed_units"] = str(artifacts["timed_units"])
+        body["parsed_lyrics"] = str(artifacts["parsed_lyrics"])
+    if first_stage == "w":
+        body["alignment_result"] = str(artifacts["alignment_result"])
+    if "w" in stage_set:
+        body["output_roller"] = str(output_path)
+
+    if "s" in stage_set:
+        body["output_vocal_audio"] = str(artifacts["vocal_audio"])
+    if "f" in stage_set:
+        body["output_filtered_audio"] = str(artifacts["filtered_audio"])
+    if "t" in stage_set:
+        body["output_timed_units"] = str(artifacts["timed_units"])
+    if "p" in stage_set:
+        body["output_parsed_lyrics"] = str(artifacts["parsed_lyrics"])
+    if "a" in stage_set:
+        body["output_alignment_result"] = str(artifacts["alignment_result"])
+    return payload
+
+
+def build_pyroller_batch_request(
+    request: BatchRollRequest,
+    tasks: list[dict[str, str]],
+    *,
+    manifest_path: Path,
+    intermediate_dir: Path,
+    default_model_store: str | None = None,
+) -> dict[str, object]:
+    stages = normalize_stages(request.stages)
+    return {
+        "protocol_version": 1,
+        "request": {
+            "stages": stages,
+            "language": request.language or "mul",
+            "cleanup": request.cleanup or "on-success",
+            "intermediate": str(intermediate_dir),
+            "log_level": request.log_level or "INFO",
+            "backend_config": _backend_config(request, default_model_store=default_model_store),
+        },
+        "batch": {
+            "manifest": str(manifest_path),
+            "continue_on_error": bool(getattr(request, "continue_on_error", False)),
+            "skip_existing": bool(getattr(request, "skip_existing", False)),
+            "jobs": int(getattr(request, "jobs", 1) or 1),
+        },
+    }
+
+
+def ensure_private_work_dir(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    if os.name != "nt":
+        path.chmod(0o700)
+    return path
+
+
+def write_protocol_request(payload: dict[str, object], directory: Path, *, filename: str = "request.json") -> tuple[Path, str]:
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    directory = ensure_private_work_dir(directory)
+    path = directory / filename
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    with os.fdopen(os.open(path, flags, 0o600), "w", encoding="utf-8") as file:
+        file.write(text)
+    if os.name != "nt":
+        path.chmod(0o600)
+    return path, text
+
+
+class EngineProtocol(Protocol):
+    def capabilities_command(self) -> list[str]:
+        ...
+
+    def run_command(self, request_path: Path) -> list[str]:
+        ...
+
+    def batch_command(self, request_path: Path) -> list[str]:
+        ...
+
+
+@dataclass(slots=True)
+class PyRollerProtocolClient:
+    command_prefix: list[str] | None = None
+
+    def _prefix(self) -> list[str]:
+        return self.command_prefix or ["py-roller"]
+
+    def capabilities_command(self) -> list[str]:
+        return [*self._prefix(), "capabilities", "--output-format", "json"]
+
+    def run_command(self, request_path: Path) -> list[str]:
+        return [
+            *self._prefix(),
+            "run",
+            "--request",
+            str(request_path),
+            "--progress-format",
+            "jsonl",
+            "--output-format",
+            "json",
+        ]
+
+    def batch_command(self, request_path: Path) -> list[str]:
+        return [
+            *self._prefix(),
+            "batch",
+            "--request",
+            str(request_path),
+            "--progress-format",
+            "jsonl",
+            "--output-format",
+            "json",
+        ]
 
 
 def build_pyroller_command(
@@ -191,178 +409,36 @@ def build_pyroller_command(
     artifacts_dir: Path | None = None,
     command_prefix: list[str] | None = None,
     default_model_store: Path | None = None,
+    request_dir: Path,
 ) -> list[str]:
-    stages = normalize_stages(request.stages)
-    stage_set = set(stages)
-    first_stage = stages[0]
-    artifacts = artifacts_for(artifacts_dir.parent) if artifacts_dir else artifacts_for(output_path.parent)
-    if artifacts_dir:
-        artifacts = {
-            "vocal_audio": artifacts_dir / VOCAL_AUDIO_NAME,
-            "filtered_audio": artifacts_dir / FILTERED_AUDIO_NAME,
-            "timed_units": artifacts_dir / TIMED_UNITS_NAME,
-            "parsed_lyrics": artifacts_dir / PARSED_LYRICS_NAME,
-            "alignment_result": artifacts_dir / ALIGNMENT_RESULT_NAME,
-        }
-
-    command = [
-        *(command_prefix or ["py-roller"]),
-        "run",
-        "--stages",
-        ",".join(stages),
-        "--language",
-        request.language,
-        "--cleanup",
-        request.cleanup,
-        "--intermediate",
-        str(intermediate_dir),
-        "--log-level",
-        request.log_level,
-        "--progress-format",
-        "jsonl",
-    ]
-
-    if stage_set.intersection({"s", "f", "t"}):
-        command.extend(["--audio", str(audio_path)])
-    if "p" in stage_set:
-        command.extend(["--lyrics", str(lyrics_path)])
-    if first_stage == "a":
-        command.extend(["--timed-units", str(artifacts["timed_units"])])
-        command.extend(["--parsed-lyrics", str(artifacts["parsed_lyrics"])])
-    if first_stage == "w":
-        command.extend(["--alignment-result", str(artifacts["alignment_result"])])
-    if "w" in stage_set:
-        command.extend(["--output-roller", str(output_path)])
-
-    if "s" in stage_set:
-        _add_option(command, "--splitter-backend", request.splitter_backend)
-        _add_option(command, "--splitter-demucs-model", request.splitter_demucs_model)
-        _add_option(command, "--splitter-demucs-device", request.splitter_demucs_device)
-        _add_option(command, "--splitter-demucs-jobs", request.splitter_demucs_jobs)
-        _add_option(command, "--splitter-demucs-overlap", request.splitter_demucs_overlap)
-        _add_option(command, "--splitter-demucs-segment", request.splitter_demucs_segment)
-        command.extend(["--output-vocal-audio", str(artifacts["vocal_audio"])])
-
-    if "f" in stage_set:
-        _add_option(command, "--filter-chain", request.filter_chain)
-        command.extend(["--output-filtered-audio", str(artifacts["filtered_audio"])])
-
-    if "t" in stage_set:
-        _add_option(command, "--transcriber-backend", request.transcriber_backend)
-        _add_option(command, "--transcriber-device", request.transcriber_device)
-        _add_option(command, "--transcriber-model-name", request.transcriber_model_name)
-        model_path_value = request.transcriber_model_path or (str(default_model_store) if default_model_store else "")
-        if model_path_value:
-            model_path = Path(model_path_value).expanduser()
-            command.extend(["--transcriber-model-path", str(model_path)])
-        if request.transcriber_local_files_only:
-            command.append("--transcriber-local-files-only")
-        _add_option(command, "--transcriber-compute-type", request.transcriber_compute_type)
-        _add_option(command, "--transcriber-batch-size", request.transcriber_batch_size)
-        _add_option(command, "--transcriber-hf-xet", request.transcriber_hf_xet)
-        _add_option(command, "--transcriber-hf-proxy", request.transcriber_hf_proxy)
-        _add_option(command, "--transcriber-hf-etag-timeout", request.transcriber_hf_etag_timeout)
-        _add_option(command, "--transcriber-hf-download-timeout", request.transcriber_hf_download_timeout)
-        _add_option(command, "--transcriber-hf-max-workers", request.transcriber_hf_max_workers)
-        if request.transcriber_vad_filter:
-            command.append("--transcriber-vad-filter")
-        command.extend(["--output-timed-units", str(artifacts["timed_units"])])
-
-    if "p" in stage_set:
-        _add_option(command, "--parser-lyrics-encoding", request.parser_lyrics_encoding)
-        command.extend(["--output-parsed-lyrics", str(artifacts["parsed_lyrics"])])
-
-    if "a" in stage_set:
-        _add_option(command, "--aligner-backend", request.aligner_backend)
-        _add_option(command, "--aligner-min-gap", request.aligner_min_gap)
-        _add_option(command, "--aligner-repetition", request.aligner_repetition)
-        command.extend(["--output-alignment-result", str(artifacts["alignment_result"])])
-
-    if "w" in stage_set:
-        _add_option(command, "--writer-backend", request.writer_backend)
-        _add_option(command, "--writer-spacing", request.writer_spacing)
-        _add_option(command, "--writer-by-tag", request.writer_by_tag)
-        _add_option(command, "--writer-ass-karaoke-tag-type", request.writer_ass_karaoke_tag_type)
-    return command
+    payload = build_pyroller_request(
+        audio_path=audio_path,
+        lyrics_path=lyrics_path,
+        output_path=output_path,
+        intermediate_dir=intermediate_dir,
+        artifacts_dir=artifacts_dir,
+        request=request,
+        default_model_store=default_model_store,
+    )
+    request_path, _text = write_protocol_request(payload, request_dir)
+    return PyRollerProtocolClient(command_prefix=command_prefix).run_command(request_path)
 
 
 def build_pyroller_batch_command(
     request: BatchRollRequest,
     tasks: list[dict[str, str]],
     *,
+    request_dir: Path,
     default_model_store: str | None = None,
-) -> tuple[list[str], str]:
-    """Build a py-roller batch command with a YAML manifest.
-
-    Returns (command, manifest_yaml_text) so callers can log the manifest.
-    """
-    manifest = {"tasks": tasks}
-    manifest_text = yaml.safe_dump(manifest, default_flow_style=False, allow_unicode=True,
-                                   sort_keys=False)
-
-    # Write manifest to a temp file alongside the first project's intermediate dir
-    # so it lives in the rollingpebble data directory.
-    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", prefix="batch_manifest_",
-                                      delete=False, encoding="utf-8")
-    tmp.write(manifest_text)
-    tmp.close()
-    manifest_path = tmp.name
-
-    stage_set = set(normalize_stages(request.stages or "s,f,t,p,a,w"))
-    command = ["py-roller", "batch", "--manifest", manifest_path,
-               "--progress-format", "jsonl",
-               "--stages", ",".join(sorted(stage_set, key=lambda s: PIPELINE_INDEX.get(s, 99))),
-               "--language", request.language or "zh",
-               "--cleanup", request.cleanup or "on-success",
-               "--log-level", request.log_level or "INFO"]
-
-    if request.continue_on_error:
-        command.append("--continue-on-error")
-    if request.skip_existing:
-        command.append("--skip-existing")
-
-    if "s" in stage_set:
-        _add_option(command, "--splitter-backend", request.splitter_backend)
-        _add_option(command, "--splitter-demucs-model", request.splitter_demucs_model)
-        _add_option(command, "--splitter-demucs-device", request.splitter_demucs_device)
-        _add_option(command, "--splitter-demucs-jobs", request.splitter_demucs_jobs)
-        _add_option(command, "--splitter-demucs-overlap", request.splitter_demucs_overlap)
-        _add_option(command, "--splitter-demucs-segment", request.splitter_demucs_segment)
-
-    if "f" in stage_set:
-        _add_option(command, "--filter-chain", request.filter_chain)
-
-    if "t" in stage_set:
-        _add_option(command, "--transcriber-backend", request.transcriber_backend)
-        _add_option(command, "--transcriber-device", request.transcriber_device)
-        _add_option(command, "--transcriber-model-name", request.transcriber_model_name)
-        model_path_value = request.transcriber_model_path or (str(default_model_store) if default_model_store else "")
-        if model_path_value:
-            command.extend(["--transcriber-model-path", str(Path(model_path_value).expanduser())])
-        if request.transcriber_local_files_only:
-            command.append("--transcriber-local-files-only")
-        if request.transcriber_vad_filter:
-            command.append("--transcriber-vad-filter")
-        _add_option(command, "--transcriber-compute-type", request.transcriber_compute_type)
-        _add_option(command, "--transcriber-batch-size", request.transcriber_batch_size)
-        _add_option(command, "--transcriber-hf-xet", request.transcriber_hf_xet)
-        _add_option(command, "--transcriber-hf-proxy", request.transcriber_hf_proxy)
-        _add_option(command, "--transcriber-hf-etag-timeout", request.transcriber_hf_etag_timeout)
-        _add_option(command, "--transcriber-hf-download-timeout", request.transcriber_hf_download_timeout)
-        _add_option(command, "--transcriber-hf-max-workers", request.transcriber_hf_max_workers)
-
-    if "p" in stage_set:
-        _add_option(command, "--parser-lyrics-encoding", request.parser_lyrics_encoding)
-
-    if "a" in stage_set:
-        _add_option(command, "--aligner-backend", request.aligner_backend)
-        _add_option(command, "--aligner-min-gap", request.aligner_min_gap)
-        _add_option(command, "--aligner-repetition", request.aligner_repetition)
-
-    if "w" in stage_set:
-        _add_option(command, "--writer-backend", request.writer_backend)
-        _add_option(command, "--writer-spacing", request.writer_spacing)
-        _add_option(command, "--writer-by-tag", request.writer_by_tag)
-        _add_option(command, "--writer-ass-karaoke-tag-type", request.writer_ass_karaoke_tag_type)
-
-    return command, manifest_text
+) -> tuple[list[str], str, str]:
+    """Build a py-roller protocol v1 batch command and request JSON."""
+    manifest_path, manifest_text = write_protocol_request({"tasks": tasks}, request_dir, filename="manifest.json")
+    payload = build_pyroller_batch_request(
+        request=request,
+        tasks=tasks,
+        manifest_path=manifest_path,
+        intermediate_dir=request_dir / "intermediate",
+        default_model_store=default_model_store,
+    )
+    request_path, request_text = write_protocol_request(payload, request_dir, filename="request.json")
+    return PyRollerProtocolClient().batch_command(request_path), request_text, manifest_text

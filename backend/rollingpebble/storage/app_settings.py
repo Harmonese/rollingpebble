@@ -17,13 +17,16 @@ class SettingsStore:
         self.path = data_dir / SETTINGS_JSON
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def read(self) -> RuntimeSettingsModel:
-        if not self.path.exists():
-            return RuntimeSettingsModel()
+    def _read_settings_or_default(self) -> RuntimeSettingsModel:
         try:
             return RuntimeSettingsModel.model_validate_json(self.path.read_text(encoding="utf-8"))
         except Exception:
             return RuntimeSettingsModel()
+
+    def read(self) -> RuntimeSettingsModel:
+        if not self.path.exists():
+            return RuntimeSettingsModel()
+        return self._read_settings_or_default()
 
     def write(self, settings: RuntimeSettingsModel) -> RuntimeSettingsModel:
         self.path.write_text(settings.model_dump_json(indent=2), encoding="utf-8")

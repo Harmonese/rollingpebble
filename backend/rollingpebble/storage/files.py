@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-import json
-import shutil
 import uuid
 from pathlib import Path
-from typing import Any
 
 from fastapi import UploadFile
 
 from rollingpebble.lyrics_utils import clean_plain_lyrics, is_lrc_metadata_line, normalize_newlines, strip_leading_timestamps
 
-from rollingpebble.models import MetaModel, ProjectModel
+from rollingpebble.models import ProjectModel
 
 PROJECT_JSON = "project.json"
 AUDIO_NAME = "audio"

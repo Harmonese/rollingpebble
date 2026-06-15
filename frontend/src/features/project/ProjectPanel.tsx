@@ -1,30 +1,26 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { appContext, ChangBits } from "../../components/app.context.js";
-import { PanelMessage } from "../../components/PanelMessage.js";
-import { toastPubSub } from "../../components/toast.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { Message, Panel } from "../../ui/index.js";
+import { toastPubSub } from "../../ui/Toast.js";
 import { useMessage } from "../../hooks/useMessage.js";
 import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
-import { api, backendMessageText, type ProjectModel } from "../../shared/api.js";
+import { backendMessageText } from "../../shared/api/request.js";
+import { deleteProject, getProject, listProjects, projectAudioUrl } from "../../shared/api/projects.js";
+import { settings } from "../../shared/api/settings.js";
+import type { ProjectModel } from "../../shared/api/types.js";
 import { loadProjectAudioUrlForPlayback } from "../../shared/audioEvents.js";
+import { readLocalText, writeLocalText } from "../../storage/browserStorage.js";
+import { ProjectSummary } from "./parts/ProjectSummary.js";
+import { ProjectSwitcher } from "./parts/ProjectSwitcher.js";
+import { RecentProjectList } from "./parts/RecentProjectList.js";
 
 const DEFAULT_RECENT_PROJECTS_LIMIT = 8;
 const DELETE_UNDO_MS = 10_000;
 const PROJECT_ORDER_KEY = "rollingpebble.projectOrder";
 
-function formatLyricsSource(
-    source: string | null | undefined,
-    labels: { manual: string; sourceLrclib: string; sourceLocalFile: string; sourceAutoTiming: string },
-): string {
-    if (!source || source === "manual") return labels.manual;
-    if (source === "lrclib") return labels.sourceLrclib;
-    if (source === "local file") return labels.sourceLocalFile;
-    if (source === "automatic timing") return labels.sourceAutoTiming;
-    return source || "";
-}
-
 function readProjectOrder(): string[] {
     try {
-        const parsed = JSON.parse(localStorage.getItem(PROJECT_ORDER_KEY) || "[]");
+        const parsed = JSON.parse(readLocalText(PROJECT_ORDER_KEY, "[]"));
         return Array.isArray(parsed) ? parsed.filter((id: unknown) => typeof id === "string") : [];
     } catch {
         return [];
@@ -32,7 +28,7 @@ function readProjectOrder(): string[] {
 }
 
 function writeProjectOrder(ids: string[]): void {
-    localStorage.setItem(PROJECT_ORDER_KEY, JSON.stringify(ids));
+    writeLocalText(PROJECT_ORDER_KEY, JSON.stringify(ids));
 }
 
 function applyOrder(projects: ProjectModel[], order: string[]): ProjectModel[] {
@@ -58,7 +54,7 @@ export const ProjectPanel: React.FC<{
     const [projectOrder, setProjectOrder] = useState<string[]>(() => readProjectOrder());
     const [recentLimit, setRecentLimit] = useState(DEFAULT_RECENT_PROJECTS_LIMIT);
     const [_busy, setBusy] = useState(false);
-    const { lang } = useContext(appContext, ChangBits.lang);
+    const { lang } = useContext(appContext, AppContextBits.lang);
     const t = lang.toast;
     const u = lang.ui;
     const [message, setMessage, clearMessage, messageFading, messageType, messageKey] = useMessage();
@@ -87,8 +83,8 @@ export const ProjectPanel: React.FC<{
 
     const refreshSettings = async () => {
         try {
-            const settings = await api.settings();
-            const value = Number(settings.recent_projects_limit || DEFAULT_RECENT_PROJECTS_LIMIT);
+            const runtimeSettings = await settings();
+            const value = Number(runtimeSettings.recent_projects_limit || DEFAULT_RECENT_PROJECTS_LIMIT);
             setRecentLimit(
                 Number.isFinite(value) && value > 0 ? Math.max(1, Math.round(value)) : DEFAULT_RECENT_PROJECTS_LIMIT,
             );
@@ -98,7 +94,7 @@ export const ProjectPanel: React.FC<{
     };
 
     const refresh = async () => {
-        const list = await api.listProjects();
+        const list = await listProjects();
         setProjects(list);
     };
 
@@ -131,10 +127,10 @@ export const ProjectPanel: React.FC<{
     const loadProject = async (projectId: string) => {
         setBusy(true);
         try {
-            const loaded = await api.getProject(projectId);
+            const loaded = await getProject(projectId);
             onProject(loaded, true);
             if (loaded.audio_name) {
-                loadProjectAudioUrlForPlayback(api.projectAudioUrl(projectId));
+                loadProjectAudioUrlForPlayback(projectAudioUrl(projectId));
             }
             toastPubSub.pub({ type: "success", text: t.project.loaded.replace("{id}", projectId) });
         } catch (error) {
@@ -156,7 +152,7 @@ export const ProjectPanel: React.FC<{
     const finalizeDelete = async (projectId: string) => {
         removePendingDelete(projectId);
         try {
-            await api.deleteProject(projectId);
+            await deleteProject(projectId);
             toastPubSub.pub({ type: "warning", text: t.project.deleted.replace("{id}", projectId) });
             setProjectOrder((prev) => {
                 const next = prev.filter((id) => id !== projectId);
@@ -248,132 +244,27 @@ export const ProjectPanel: React.FC<{
     };
 
     return (
-        <section className="roller-card">
-            <h2>{u.project}</h2>
-            {project && (
-                <div className="roller-kv">
-                    <b>{u.id}</b>
-                    <span>{project.project_id}</span>
-                    <b>{u.audio}</b>
-                    <span>{project.audio_name || "-"}</span>
-                    <b>{u.title}</b>
-                    <span>{project.metadata.track || "-"}</span>
-                    <b>{u.artist}</b>
-                    <span>{project.metadata.artist || "-"}</span>
-                    <b>{u.duration}</b>
-                    <span>{project.metadata.duration ? `${project.metadata.duration}s` : "-"}</span>
-                    <b>{u.lyricsSource}</b>
-                    <span>{formatLyricsSource(project.source, u)}</span>
-                </div>
-            )}
-
-            <div className="project-switcher">
-                <button
-                    type="button"
-                    className="project-switcher-btn"
-                    aria-label={u.previousProject}
-                    disabled={currentIndex <= 0}
-                    onClick={() => switchProject(-1)}
-                >
-                    ←
-                </button>
-                <span className="project-switcher-label">
-                    {currentIndex >= 0 ? `${currentIndex + 1} / ${orderedProjects.length}` : "- / -"}
-                </span>
-                <button
-                    type="button"
-                    className="project-switcher-btn"
-                    aria-label={u.nextProject}
-                    disabled={currentIndex < 0 || currentIndex >= orderedProjects.length - 1}
-                    onClick={() => switchProject(1)}
-                >
-                    →
-                </button>
-            </div>
-
-            <details>
-                <summary>{u.projectList}</summary>
-                <div className="recent-projects-head">
-                    <span>
-                        {u.shown.replace("{n}", String(visibleProjects.length)).replace(
-                            "{total}",
-                            String(orderedProjects.length),
-                        )}
-                    </span>
-                    <div>
-                        {pendingDeleteIds.size > 0 && (
-                            <button type="button" className="project-restore-btn" onClick={handleRestoreAll}>
-                                {u.restore} ({pendingDeleteIds.size})
-                            </button>
-                        )}
-                    </div>
-                </div>
-                <div className="roller-list recent-projects-list">
-                    {visibleProjects.map((item) => {
-                        const pendingDelete = pendingDeleteIds.has(item.project_id);
-                        return (
-                            <div
-                                key={item.project_id}
-                                className={[
-                                    "recent-project-row",
-                                    pendingDelete ? "pending-delete" : "",
-                                    dragProjectId === item.project_id ? "dragging" : "",
-                                    dragOverProjectId === item.project_id && dragProjectId !== item.project_id
-                                        ? "drag-target"
-                                        : "",
-                                ].filter(Boolean).join(" ")}
-                                draggable={!pendingDelete}
-                                onDragStart={(ev) => onDragStart(ev, item.project_id)}
-                                onDragOver={(ev) => onDragOver(ev, item.project_id)}
-                                onDragLeave={() => setDragOverProjectId(null)}
-                                onDragEnd={clearDragState}
-                                onDrop={() => onDrop(item.project_id)}
-                            >
-                                <span className="recent-project-grip" title={u.dragToReorder}>⋮⋮</span>
-                                <button
-                                    className="recent-project-open"
-                                    type="button"
-                                    disabled={pendingDelete}
-                                    onClick={() => loadProject(item.project_id)}
-                                >
-                                    <span>{item.audio_name || item.project_id}</span>
-                                    <small>
-                                        {item.metadata.artist || item.metadata.track
-                                            ? `${item.metadata.artist || u.unknownArtist} · ${
-                                                item.metadata.track || u.untitled
-                                            }`
-                                            : item.project_id}
-                                    </small>
-                                </button>
-                                {pendingDelete
-                                    ? (
-                                        <button
-                                            className="recent-project-restore-inline"
-                                            type="button"
-                                            onClick={() => handleRestore(item.project_id)}
-                                            title={u.restore}
-                                        >
-                                            {u.restore}
-                                        </button>
-                                    )
-                                    : (
-                                        <button
-                                            className="recent-project-dismiss"
-                                            type="button"
-                                            aria-label={`${u.deleteProject}: ${item.audio_name || item.project_id}`}
-                                            title={u.deleteProject}
-                                            onClick={() => handleDismiss(item.project_id)}
-                                        >
-                                            ×
-                                        </button>
-                                    )}
-                            </div>
-                        );
-                    })}
-                    {!visibleProjects.length && <p className="roller-message subtle">{u.noProjects}</p>}
-                </div>
-            </details>
-            <PanelMessage message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
-        </section>
+        <Panel title={u.project}>
+            <ProjectSummary project={project} labels={u} />
+            <ProjectSwitcher currentIndex={currentIndex} total={orderedProjects.length} labels={u} onSwitch={switchProject} />
+            <RecentProjectList
+                projects={visibleProjects}
+                total={orderedProjects.length}
+                pendingDeleteIds={pendingDeleteIds}
+                dragProjectId={dragProjectId}
+                dragOverProjectId={dragOverProjectId}
+                labels={u}
+                onRestoreAll={handleRestoreAll}
+                onDragStart={onDragStart}
+                onDragOver={onDragOver}
+                onDragLeave={() => setDragOverProjectId(null)}
+                onDragEnd={clearDragState}
+                onDrop={onDrop}
+                onLoadProject={(projectId) => void loadProject(projectId)}
+                onRestore={handleRestore}
+                onDismiss={handleDismiss}
+            />
+            <Message message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
+        </Panel>
     );
 };

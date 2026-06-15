@@ -1,0 +1,138 @@
+/* LRC utilities panel reuses the modal shell, but owns its controls. */
+.lrc-utils-list {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.lrc-utils-action-row {
+    margin-top: 0;
+}
+
+.lrc-utils-controls,
+.lrc-utils-text-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    min-width: 0;
+}
+
+.lrc-utils-text-controls {
+    align-items: stretch;
+    min-width: 0;
+}
+
+.lrc-utils-text-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    align-items: stretch;
+}
+
+.lrc-utils-text-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: start;
+    min-width: 0;
+}
+
+.lrc-utils-text-controls textarea {
+    width: 100%;
+    min-height: 150px;
+    resize: vertical;
+    box-sizing: border-box;
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    background: var(--studio-surface-2);
+    color: var(--studio-text);
+    border: 1px solid #3b444d;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    outline: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.lrc-utils-text-controls textarea:focus {
+    border-color: rgba(var(--theme-rgb), 0.7);
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
+}
+
+.lrc-utils-controls input[type="number"] {
+    width: 80px;
+    min-height: 30px;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid #3b444d;
+    background: var(--studio-surface-2);
+    color: var(--studio-text);
+    font-size: 0.84rem;
+    outline: none;
+    text-align: center;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.lrc-utils-controls input[type="number"]::-webkit-outer-spin-button,
+.lrc-utils-controls input[type="number"]::-webkit-inner-spin-button {
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.lrc-utils-controls input[type="number"]:focus {
+    border-color: rgba(var(--theme-rgb), 0.7);
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
+}
+
+.about-modal .lrc-utils-controls button {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 12px;
+    border: 1px solid rgba(var(--theme-rgb), 0.3);
+    border-radius: var(--radius-pill);
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--theme-color);
+    font-size: 0.8rem;
+    font-weight: 650;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+.about-modal .lrc-utils-controls button:hover:not(:disabled) {
+    background: rgba(var(--theme-rgb), 0.16);
+    border-color: rgba(var(--theme-rgb), 0.55);
+}
+
+.transform-expr {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--studio-muted);
+    font-size: 0.84rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+@media (max-width: 680px) {
+    .lrc-utils-action-row {
+        grid-template-columns: 1fr;
+    }
+
+    .lrc-utils-controls,
+    .lrc-utils-text-controls {
+        justify-content: flex-start;
+    }
+
+    .lrc-utils-text-header {
+        grid-template-columns: 1fr;
+    }
+}

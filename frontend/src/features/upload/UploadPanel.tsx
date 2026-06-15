@@ -1,12 +1,16 @@
 import { useContext, useEffect, useState } from "react";
-import { appContext, ChangBits } from "../../components/app.context.js";
-import { PanelMessage } from "../../components/PanelMessage.js";
-import { SegmentedTabs } from "../../components/SegmentedTabs.js";
-import { toastPubSub } from "../../components/toast.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { ButtonGroup, FormGrid, KeyValueList, LogBlock, Message, Panel, Tabs, WarningText } from "../../ui/index.js";
+
+import { toastPubSub } from "../../ui/Toast.js";
 import { useMessage } from "../../hooks/useMessage.js";
 import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
 import type { Language } from "../../languages/index.js";
-import { api, backendMessageText, type MetaModel, type ProjectModel, type UploadPlan } from "../../shared/api.js";
+import { saveEditor } from "../../shared/api/projects.js";
+import { backendMessageText } from "../../shared/api/request.js";
+import { settings } from "../../shared/api/settings.js";
+import type { MetaModel, ProjectModel, UploadPlan } from "../../shared/api/types.js";
+import { uploadPlan, uploadRun } from "../../shared/api/upload.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
 
@@ -32,15 +36,15 @@ export const UploadPanel: React.FC<{
     const [allowDerivedPlain, setAllowDerivedPlain] = useState(true);
     const [plan, setPlan] = useState<UploadPlan | null>(null);
     const [message, setMessage, , messageFading, messageType, messageKey] = useMessage();
-    const { lang } = useContext(appContext, ChangBits.lang);
+    const { lang } = useContext(appContext, AppContextBits.lang);
     const u = lang.ui;
     const modeLabels = uploadModeLabels(u);
     const [busy, setBusy] = useState(false);
 
     useSettingsUpdated(async () => {
         try {
-            const settings = await api.settings();
-            setAllowDerivedPlain(settings.upload_derive_plain_from_synced);
+            const runtimeSettings = await settings();
+            setAllowDerivedPlain(runtimeSettings.upload_derive_plain_from_synced);
         } catch {
             setAllowDerivedPlain(true);
         }
@@ -65,13 +69,13 @@ export const UploadPanel: React.FC<{
         }
         setBusy(true);
         try {
-            const updated = await api.saveEditor(project.project_id, {
+            const updated = await saveEditor(project.project_id, {
                 plain_lyrics: plainLyrics,
                 synced_lyrics: syncedLyrics,
                 metadata: editorMeta,
             });
             onProject(updated, false);
-            const response = await api.uploadPlan(project.project_id, payload());
+            const response = await uploadPlan(project.project_id, payload());
             setPlan(response);
             setMessage(response.can_upload ? u.planReady : u.planWarnings, response.can_upload ? "success" : "warning");
         } catch (error) {
@@ -85,7 +89,7 @@ export const UploadPanel: React.FC<{
         if (!project) return;
         setBusy(true);
         try {
-            const response = await api.uploadRun(project.project_id, payload());
+            const response = await uploadRun(project.project_id, payload());
             toastPubSub.pub({
                 type: "success",
                 text: response.message_message
@@ -101,7 +105,7 @@ export const UploadPanel: React.FC<{
 
     const renderLrclibUpload = () => (
         <>
-            <div className="roller-form">
+            <FormGrid>
                 <label>
                     {u.mode}
                     <select value={mode} onChange={(ev) => setMode(ev.target.value)}>
@@ -112,16 +116,16 @@ export const UploadPanel: React.FC<{
                         <option value="instrumental">{u.instrumental}</option>
                     </select>
                 </label>
-            </div>
-            <div className="roller-actions">
+            </FormGrid>
+            <ButtonGroup>
                 <button type="button" disabled={busy || !project} onClick={makePlan}>{u.generatePlan}</button>
                 <button type="button" disabled={busy || !project || !plan?.can_upload} onClick={runUpload}>
                     {u.confirmUpload}
                 </button>
-            </div>
+            </ButtonGroup>
             {plan && (
-                <div className="roller-plan">
-                    <div className="roller-kv">
+                <div className="studio-plan">
+                    <KeyValueList>
                         <b>{u.canUpload}</b>
                         <span>{plan.can_upload ? u.yes : u.no}</span>
                         <b>{u.mode}</b>
@@ -136,17 +140,17 @@ export const UploadPanel: React.FC<{
                         <span>{plan.plain_lines}</span>
                         <b>{u.syncedLines}</b>
                         <span>{plan.synced_lines}</span>
-                    </div>
+                    </KeyValueList>
                     {plan.warnings.length > 0 && (
-                        <p className="roller-warning">
+                        <WarningText>
                             {u.warnings}: {(plan.warning_messages?.length
                                 ? plan.warning_messages.map((warning) =>
                                     backendMessageText(warning, lang.backendMessages)
                                 )
                                 : plan.warnings).join(", ")}
-                        </p>
+                        </WarningText>
                     )}
-                    <pre className="roller-log">{JSON.stringify(plan.payload_preview, null, 2)}</pre>
+                    <LogBlock>{JSON.stringify(plan.payload_preview, null, 2)}</LogBlock>
                 </div>
             )}
         </>
@@ -175,16 +179,15 @@ export const UploadPanel: React.FC<{
     );
 
     return (
-        <section className="roller-card">
-            <h2>{u.uploadLyrics}</h2>
-            <SegmentedTabs
+        <Panel title={u.uploadLyrics}>
+            <Tabs
                 ariaLabel="Upload destinations"
                 items={[{ value: "lrclib", label: u.lrclib }, { value: "netease", label: u.netease }]}
                 value={destination}
                 onChange={setDestination}
             />
             {destination === "lrclib" ? renderLrclibUpload() : renderNeteaseUpload()}
-            <PanelMessage message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
-        </section>
+            <Message message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
+        </Panel>
     );
 };

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from rollingpebble.adapters.pylrclib_adapter import PylrclibAdapter
 from rollingpebble.models import UploadPlanRequest, UploadPlanResponse, UploadRunRequest, UploadRunResponse
 from rollingpebble.messages import message_from_text

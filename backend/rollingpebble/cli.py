@@ -16,7 +16,7 @@ import uvicorn
 
 from rollingpebble.config import DEFAULT_HOST, DEFAULT_PORT, Settings
 from rollingpebble.main import create_app
-from rollingpebble.services.runtime_manager import RuntimeManager
+from rollingpebble.runtime.manager import RuntimeManager
 from rollingpebble.storage.app_settings import SettingsStore
 
 
@@ -91,6 +91,20 @@ def _print_port_help(host: str, port: int) -> None:
     )
 
 
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower()
+    return normalized in {"127.0.0.1", "localhost", "::1"}
+
+
+def _warn_non_loopback_host(host: str) -> None:
+    if not _is_loopback_host(host):
+        print(
+            f"Warning: rollingpebble is binding to {host}. This local app has no authentication; "
+            "only expose it on trusted networks.",
+            file=sys.stderr,
+        )
+
+
 def _settings_from_args(args: argparse.Namespace) -> Settings:
     settings = Settings.from_env()
     settings.host = args.host
@@ -116,6 +130,7 @@ def _apply_settings_env(settings: Settings) -> None:
 
 def _serve(args: argparse.Namespace) -> int:
     settings = _settings_from_args(args)
+    _warn_non_loopback_host(settings.host)
     if not args.skip_port_check and not _port_available(settings.host, settings.port):
         _print_port_help(settings.host, settings.port)
         return 48
@@ -151,7 +166,7 @@ def _setup(args: argparse.Namespace) -> int:
 
     if not args.skip_roller:
         settings = Settings.from_env()
-        cmd = [sys.executable, "-m", "rollingpebble.runtime_installer", "--data-dir", str(settings.data_dir), "--profile", args.profile]
+        cmd = [sys.executable, "-m", "rollingpebble.runtime.installer", "--data-dir", str(settings.data_dir), "--profile", args.profile]
         if args.skip_doctor:
             cmd.append("--skip-doctor")
         code = _run(cmd, dry_run=args.dry_run)

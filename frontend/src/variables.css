@@ -3,20 +3,20 @@
     --black: #0b0d0f;
 
     /* rollingpebble / Logic-style palette */
-    --roller-bg: #0e1113;
-    --roller-surface: #171a1d;
-    --roller-surface-2: #202429;
-    --roller-surface-3: #2b3036;
-    --roller-border: #343a42;
-    --roller-text: #eef2f3;
-    --roller-muted: #aab2b9;
-    --roller-accent: #23d18b;
-    --roller-accent-2: #5ec5ff;
-    --roller-warn: #ffbe55;
-    --roller-warn-rgb: 255, 190, 85;
-    --roller-danger: #ff6f6f;
-    --roller-danger-rgb: 255, 111, 111;
-    --roller-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    --studio-bg: #0e1113;
+    --studio-surface: #171a1d;
+    --studio-surface-2: #202429;
+    --studio-surface-3: #2b3036;
+    --studio-border: #343a42;
+    --studio-text: #eef2f3;
+    --studio-muted: #aab2b9;
+    --studio-accent: #23d18b;
+    --studio-accent-2: #5ec5ff;
+    --studio-warn: #ffbe55;
+    --studio-warn-rgb: 255, 190, 85;
+    --studio-danger: #ff6f6f;
+    --studio-danger-rgb: 255, 111, 111;
+    --studio-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
     --app-header-height: 56px;
     --app-footer-height: 42px;
 
@@ -29,7 +29,7 @@
     --overlay-subtle: rgba(255, 255, 255, 0.03);
     --overlay-light: rgba(255, 255, 255, 0.05);
     --overlay-border: rgba(255, 255, 255, 0.08);
-    --card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), var(--roller-surface);
+    --ui-panel-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.012)), var(--studio-surface);
     --editor-bg-overlay: linear-gradient(180deg, rgba(0, 0, 0, 0.50), rgba(0, 0, 0, 0.72));
 
     /* radius */
@@ -37,6 +37,17 @@
     --radius-md: 10px;
     --radius-lg: 14px;
     --radius-pill: 999px;
+
+    --studio-surface-raised: var(--studio-surface-2);
+    --studio-surface-control: rgba(255, 255, 255, 0.026);
+    --studio-border-soft: rgba(255, 255, 255, 0.07);
+    --studio-text-muted: var(--studio-muted);
+    --studio-accent-theme: var(--theme-color);
+    --studio-focus: var(--theme-color);
+    --studio-radius-sm: 6px;
+    --studio-radius-md: 8px;
+    --studio-control-height: 32px;
+    --studio-density-gap: 8px;
 
     /* duration */
     --transition-duration: 250ms;
@@ -48,37 +59,37 @@
 }
 
 [data-theme="light"] {
-    --roller-bg: #f2f4f5;
-    --roller-surface: #fafbfc;
-    --roller-surface-2: #eef0f2;
-    --roller-surface-3: #e4e7eb;
-    --roller-border: #d5d9de;
-    --roller-text: #1a1d22;
-    --roller-muted: #69727d;
-    --roller-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+    --studio-bg: #f2f4f5;
+    --studio-surface: #fafbfc;
+    --studio-surface-2: #eef0f2;
+    --studio-surface-3: #e4e7eb;
+    --studio-border: #d5d9de;
+    --studio-text: #1a1d22;
+    --studio-muted: #69727d;
+    --studio-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
 
     --overlay-subtle: rgba(0, 0, 0, 0.03);
     --overlay-light: rgba(0, 0, 0, 0.05);
     --overlay-border: rgba(0, 0, 0, 0.07);
-    --card-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.015), rgba(0, 0, 0, 0.005)), var(--roller-surface);
+    --ui-panel-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.015), rgba(0, 0, 0, 0.005)), var(--studio-surface);
     --editor-bg-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.88));
 }
 
 @media (prefers-color-scheme: light) {
     [data-theme="auto"] {
-        --roller-bg: #f2f4f5;
-        --roller-surface: #fafbfc;
-        --roller-surface-2: #eef0f2;
-        --roller-surface-3: #e4e7eb;
-        --roller-border: #d5d9de;
-        --roller-text: #1a1d22;
-        --roller-muted: #69727d;
-        --roller-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+        --studio-bg: #f2f4f5;
+        --studio-surface: #fafbfc;
+        --studio-surface-2: #eef0f2;
+        --studio-surface-3: #e4e7eb;
+        --studio-border: #d5d9de;
+        --studio-text: #1a1d22;
+        --studio-muted: #69727d;
+        --studio-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
 
         --overlay-subtle: rgba(0, 0, 0, 0.03);
         --overlay-light: rgba(0, 0, 0, 0.05);
         --overlay-border: rgba(0, 0, 0, 0.07);
-        --card-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.015), rgba(0, 0, 0, 0.005)), var(--roller-surface);
+        --ui-panel-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.015), rgba(0, 0, 0, 0.005)), var(--studio-surface);
         --editor-bg-overlay: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(255, 255, 255, 0.88));
     }
 }

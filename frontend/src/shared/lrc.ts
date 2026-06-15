@@ -1,6 +1,3 @@
-import { stringify, type State as LrcState } from "@lrc-maker/lrc-parser";
-import type { MetaModel } from "./api.js";
-
 const METADATA_LINE_RE = /^\s*\[[A-Za-z][A-Za-z0-9_-]{0,31}:[^\]]*\]\s*$/;
 const LEADING_TIMESTAMP_RE = /^(?:\s*\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\])+\s*/;
 const TIMESTAMP_RE = /\[\d{1,3}:\d{2}(?:[.:]\d{1,3})?\]/g;
@@ -34,10 +31,6 @@ export function hasLyricContent(text: string): boolean {
     return lyricContentOnly(text).length > 0;
 }
 
-export function plainFromState(state: LrcState): string {
-    return state.lyric.map((line) => line.text.trim()).filter(Boolean).join("\n").trim();
-}
-
 export function buildImportText(record: {
     plain_lyrics?: string;
     synced_lyrics?: string;
@@ -59,7 +52,12 @@ export function buildImportText(record: {
 export function buildImportTextFromProject(project: {
     plain_lyrics?: string;
     synced_lyrics?: string;
-    metadata?: MetaModel;
+    metadata?: {
+        track?: string;
+        artist?: string;
+        album?: string;
+        duration?: number | null;
+    };
 }): string {
     const meta = project.metadata;
     return buildImportText({
@@ -70,26 +68,4 @@ export function buildImportTextFromProject(project: {
         plain_lyrics: project.plain_lyrics,
         synced_lyrics: project.synced_lyrics,
     });
-}
-
-export function metaFromState(state: LrcState): MetaModel {
-    const len = state.info.get("length") || "";
-    let duration = 0;
-    const match = /^(\d+):(\d+)(?:\.(\d+))?$/.exec(len);
-    if (match) {
-        duration = Number(match[1]) * 60 + Number(match[2]);
-    }
-    return {
-        track: state.info.get("ti") || "",
-        artist: state.info.get("ar") || "",
-        album: state.info.get("al") || "",
-        duration,
-    };
-}
-
-export function syncedFromState(state: LrcState, prefState: any, includeMetadata = true): string {
-    if (includeMetadata) {
-        return stringify(state, prefState);
-    }
-    return stringify({ ...state, info: new Map() } as LrcState, prefState);
 }

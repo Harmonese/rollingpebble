@@ -117,8 +117,8 @@ const AES_ECB_DECRYPT = async (keyData: Uint8Array, data: Uint8Array): Promise<U
     padding.fill(16);
     const cipher = new Uint8Array(32);
 
-    for (let curser = 0; curser < bodyLength; curser += 16) {
-        const clip = data.slice(curser, curser + 16);
+    for (let cursor = 0; cursor < bodyLength; cursor += 16) {
+        const clip = data.slice(cursor, cursor + 16);
 
         const encryptedPadding = await crypto.subtle.encrypt(
             {
@@ -133,7 +133,7 @@ const AES_ECB_DECRYPT = async (keyData: Uint8Array, data: Uint8Array): Promise<U
         cipher.set(new Uint8Array(encryptedPadding).slice(0, 16), 16);
 
         const result = await crypto.subtle.decrypt({ name: "AES-CBC", iv: new ArrayBuffer(16) }, cryptoKey, toArrayBuffer(cipher));
-        decrypted.set(new Uint8Array(result), curser);
+        decrypted.set(new Uint8Array(result), cursor);
     }
 
     return decrypted;

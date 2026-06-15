@@ -3,7 +3,7 @@ import { createElement } from "react";
 // before https://github.com/facebook/react/issues/26374 fixed
 // eslint-disable-next-line react/no-deprecated
 import { render } from "react-dom";
-import { App } from "./components/app.js";
+import { App } from "./app/App.js";
 
 if (!("scrollBehavior" in document.documentElement.style)) {
     import("./polyfill/smooth-scroll.js");

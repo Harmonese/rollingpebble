@@ -1,8 +1,11 @@
 import React, { useContext, useMemo, useState } from "react";
-import { api, backendMessageText, type NeteaseSong } from "../../shared/api.js";
-import { appContext, ChangBits } from "../../components/app.context.js";
+import { neteaseResolve, neteaseSearch } from "../../shared/api/lyricsSources.js";
+import { backendMessageText } from "../../shared/api/request.js";
+import type { NeteaseSong } from "../../shared/api/types.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { formatDuration } from "../../shared/format.js";
-import type { MessageType } from "../../hooks/useMessage.js";
+import { ButtonGroup, FormGrid, MutedText, SectionTitle } from "../../ui/index.js";
+import type { MessageType } from "../../shared/messageTypes.js";
 
 export interface NeteaseSearchMeta {
     track?: string;
@@ -24,7 +27,7 @@ interface NeteaseSearchProps {
 
 export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta, onMessage, renderResultActions }) => {
     const [busy, setBusy] = useState(false);
-    const { lang } = useContext(appContext, ChangBits.lang);
+    const { lang } = useContext(appContext, AppContextBits.lang);
     const t = lang.toast;
     const u = lang.ui;
     const [link, setLink] = useState("");
@@ -48,7 +51,7 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
         setSearched(true);
         onMessage(t.netease.matching, "info");
         try {
-            const response = await api.neteaseResolve(value);
+            const response = await neteaseResolve(value);
             setResults([response.song]);
             onMessage(t.netease.oneResult, "success");
         } catch (error) {
@@ -68,7 +71,7 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
         setSearched(true);
         onMessage(t.netease.searching, "info");
         try {
-            const response = await api.neteaseSearch({
+            const response = await neteaseSearch({
                 query: q,
                 track: meta.track,
                 artist: meta.artist,
@@ -86,8 +89,8 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
 
     return (
         <>
-            <div className="roller-section-title">{u.songLink}</div>
-            <div className="roller-form">
+            <SectionTitle>{u.songLink}</SectionTitle>
+            <FormGrid>
                 <input
                     placeholder="https://music.163.com/#/song?id=..."
                     value={link}
@@ -96,15 +99,15 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
                         if (ev.key === "Enter") void matchLink();
                     }}
                 />
-            </div>
-            <div className="roller-actions">
+            </FormGrid>
+            <ButtonGroup>
                 <button type="button" disabled={busy || !link.trim()} onClick={matchLink}>
                     {u.matchLink}
                 </button>
-            </div>
+            </ButtonGroup>
 
-            <div className="roller-section-title">{u.search}</div>
-            <div className="roller-form">
+            <SectionTitle>{u.search}</SectionTitle>
+            <FormGrid>
                 <input
                     placeholder={placeholderQuery || u.songTitleAndArtist}
                     value={query}
@@ -113,22 +116,22 @@ export const NeteaseSearch: React.FC<NeteaseSearchProps> = ({ defaultQuery, meta
                         if (ev.key === "Enter") void search();
                     }}
                 />
-            </div>
-            <div className="roller-actions">
+            </FormGrid>
+            <ButtonGroup>
                 <button type="button" disabled={busy || !(query.trim() || placeholderQuery)} onClick={search}>
                     {u.search}
                 </button>
-            </div>
+            </ButtonGroup>
 
-            <div className="roller-results">
-                {searched && results.length === 0 && !busy && <p className="roller-muted">{u.noResultsFound}</p>}
+            <div className="studio-results">
+                {searched && results.length === 0 && !busy && <MutedText>{u.noResultsFound}</MutedText>}
                 {results.map((song) => (
-                    <article key={song.id} className="roller-result">
+                    <article key={song.id} className="studio-result">
                         <b>{song.label || song.id}</b>
                         <small>{u.id}: {song.id} · {u.durationLabel}: {formatDuration(song.duration)}</small>
-                        <div className="roller-actions compact">
+                        <ButtonGroup compact>
                             {renderResultActions({ song, busy })}
-                        </div>
+                        </ButtonGroup>
                     </article>
                 ))}
             </div>

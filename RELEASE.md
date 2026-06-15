@@ -47,7 +47,7 @@ Expected files in `dist/`:
 
 ## PyPI Publishing
 
-Publishing a GitHub Release runs `.github/workflows/publish-to-pypi.yml`.
+Publishing a GitHub Release runs `.github/workflows/python-publish.yml`.
 
 The workflow:
 

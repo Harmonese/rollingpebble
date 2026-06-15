@@ -61,6 +61,14 @@ class StorageLayout:
         }
 
 
+@dataclass(slots=True)
+class StorageLayoutRef:
+    current: StorageLayout
+
+    def update(self, layout: StorageLayout) -> None:
+        self.current = layout
+
+
 def ensure_data_dirs(data_dir: Path) -> dict[str, Path]:
     return StorageLayout.from_data_dir(data_dir).ensure().as_legacy_dict()
 

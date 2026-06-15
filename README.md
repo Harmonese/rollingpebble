@@ -95,7 +95,7 @@ export LRC_ROLLER_RUNTIME_PYTHON=/path/to/python3.12
 The current supported py-roller range is:
 
 ```text
-py-roller>=0.6.2,<0.8
+py-roller>=0.8.1,<0.9
 ```
 
 ## Storage and Privacy

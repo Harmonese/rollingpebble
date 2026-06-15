@@ -1,41 +1,10 @@
 import { useReducer } from "react";
+import { defaultPreferences, themeColor, type PreferenceAction, type PreferenceState } from "../shared/preferences.js";
 
-export const themeColor = {
-    logic: "#23d18b",
-    orange: "#ff691f",
-    yellow: "#fab81e",
-    blue: "#91d2fa",
-    navy: "#1b95e0",
-    red: "#e81c4f",
-    pink: "#f58ea8",
-    purple: "#c877fe",
-};
+export { themeColor, ThemeMode } from "../shared/preferences.js";
+export type { PreferenceAction as Action, PreferenceState as State } from "../shared/preferences.js";
 
-export const enum ThemeMode {
-    auto,
-    light,
-    dark,
-}
-
-const initState = {
-    lang: "en-US",
-    spaceStart: 1,
-    spaceEnd: 0,
-    fixed: 3 as Fixed,
-    builtInAudio: false,
-    showWaveform: true,
-    screenButton: false,
-    themeColor: themeColor.logic,
-    themeMode: ThemeMode.dark,
-};
-
-export type State = Readonly<typeof initState>;
-
-export type Action = {
-    [key in keyof State]: { type: key; payload: State[key] | ((state: State) => State[key]) };
-}[keyof State];
-
-const reducer = (state: State, action: Action): State => {
+const reducer = (state: PreferenceState, action: PreferenceAction): PreferenceState => {
     const payload = action.payload;
     return {
         ...state,
@@ -46,8 +15,18 @@ const reducer = (state: State, action: Action): State => {
 const langCodeList = i18n.langCodeList;
 const isHexColor = (value: unknown): value is string => typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
 
-const init = (lazyInit: () => string): State => {
-    const state: Mutable<State> = initState;
+function readStoredState(raw: string): Partial<PreferenceState> {
+    if (!raw) return {};
+    try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? parsed as Partial<PreferenceState> : {};
+    } catch {
+        return {};
+    }
+}
+
+const init = (lazyInit: () => string): PreferenceState => {
+    const state: Mutable<PreferenceState> = { ...defaultPreferences };
 
     const languages = navigator.languages || [navigator.language || "en-US"];
 
@@ -63,24 +42,20 @@ const init = (lazyInit: () => string): State => {
         })
         .find((langCode) => langCodeList.includes(langCode)) || "en-US";
 
-    try {
-        const storedState = JSON.parse(lazyInit()) as State;
-        const validKeys = Object.keys(initState) as (keyof State)[];
-        for (const key of validKeys) {
-            if (key in storedState) {
-                (state[key] as unknown) = storedState[key];
-            }
+    const storedState = readStoredState(lazyInit());
+    const validKeys = Object.keys(defaultPreferences) as (keyof PreferenceState)[];
+    for (const key of validKeys) {
+        if (key in storedState) {
+            (state[key] as unknown) = storedState[key];
         }
-        if (state.themeColor === themeColor.pink) {
-            state.themeColor = themeColor.logic;
-        }
-        if (!isHexColor(state.themeColor)) {
-            state.themeColor = themeColor.logic;
-        }
-    } catch {
-        // It's OK if parsing failed
+    }
+    if (state.themeColor === themeColor.pink) {
+        state.themeColor = themeColor.logic;
+    }
+    if (!isHexColor(state.themeColor)) {
+        state.themeColor = themeColor.logic;
     }
     return state;
 };
 
-export const usePref = (lazyInit: () => string): [State, React.Dispatch<Action>] => useReducer(reducer, lazyInit, init);
+export const usePref = (lazyInit: () => string): [PreferenceState, React.Dispatch<PreferenceAction>] => useReducer(reducer, lazyInit, init);

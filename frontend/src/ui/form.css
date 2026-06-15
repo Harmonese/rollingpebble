@@ -1,0 +1,259 @@
+.studio-file {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-weight: 650;
+}
+
+.studio-file input,
+.ui-form-grid input,
+.ui-form-grid select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--studio-border);
+    background: var(--studio-surface-2);
+    color: var(--studio-text);
+    padding: 8px 10px;
+}
+
+.ui-form-grid select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 36px;
+    background-image:
+        linear-gradient(45deg, transparent 50%, var(--studio-muted) 50%),
+        linear-gradient(135deg, var(--studio-muted) 50%, transparent 50%);
+    background-position:
+        calc(100% - 16px) 50%,
+        calc(100% - 11px) 50%;
+    background-repeat: no-repeat;
+    background-size: 5px 5px;
+}
+
+.ui-form-grid select:disabled {
+    opacity: 0.58;
+}
+
+.studio-file input[type="file"] {
+    background: var(--studio-surface-2);
+    color: var(--studio-text);
+}
+
+.ui-form-grid {
+    display: grid;
+    gap: 9px;
+}
+
+.ui-form-grid.two-col {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.ui-form-grid label,
+.ui-form-grid .settings-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: var(--studio-muted);
+    font-size: 0.82rem;
+    line-height: 1.2;
+}
+
+.ui-form-grid .two-col-span {
+    grid-column: 1 / -1;
+}
+
+.studio-checkbox {
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 8px !important;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.055);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--studio-text) !important;
+    font-weight: 650;
+}
+
+.studio-checkbox input {
+    width: auto;
+}
+
+.ui-kv {
+    display: grid;
+    grid-template-columns: minmax(78px, max-content) minmax(0, 1fr);
+    gap: 6px 10px;
+    margin-top: 10px;
+    color: var(--studio-muted);
+    font-size: 0.84rem;
+    line-height: 1.35;
+}
+
+.ui-kv b {
+    color: var(--studio-text);
+    font-weight: 700;
+}
+
+.ui-kv span {
+    overflow-wrap: anywhere;
+}
+
+.ui-kv.compact {
+    margin: 10px 0;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.055);
+    font-size: 0.78rem;
+}
+
+.field-with-browse {
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.browse-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.browse-row input {
+    min-width: 0;
+}
+
+.browse-row button {
+    white-space: nowrap;
+    padding-inline: 0.75rem;
+}
+
+.browse-row button {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid rgba(var(--theme-rgb), 0.38);
+    border-radius: var(--radius-pill);
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--theme-color);
+    font: 650 0.84rem/1 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+        transform var(--transition-duration) ease,
+        background var(--transition-duration) ease,
+        border-color var(--transition-duration) ease,
+        color var(--transition-duration) ease;
+}
+
+.browse-row button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: rgba(var(--theme-rgb), 0.16);
+    border-color: rgba(var(--theme-rgb), 0.68);
+}
+
+.browse-row button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.studio-hidden-file {
+    display: none;
+}
+
+.studio-import-button {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(var(--theme-rgb), 0.32);
+    background: linear-gradient(180deg, rgba(var(--theme-rgb), 0.12), rgba(255, 255, 255, 0.025));
+    color: var(--studio-text);
+    text-align: left;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 26px rgba(0, 0, 0, 0.18);
+    transition:
+        transform 160ms ease,
+        border-color 160ms ease,
+        background 160ms ease,
+        box-shadow 160ms ease;
+}
+
+.studio-import-button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    border-color: rgba(var(--theme-rgb), 0.75);
+    background: linear-gradient(180deg, rgba(var(--theme-rgb), 0.20), rgba(255, 255, 255, 0.045));
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.10), 0 14px 30px rgba(0, 0, 0, 0.26);
+}
+
+.studio-import-button:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.studio-import-button:disabled {
+    cursor: progress;
+    opacity: 0.62;
+}
+
+.studio-import-icon {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-md);
+    background: rgba(var(--theme-rgb), 0.18);
+    color: var(--theme-color);
+    font-size: 1.45rem;
+    line-height: 1;
+    font-weight: 600;
+}
+
+.studio-import-button b,
+.studio-import-button small {
+    display: block;
+}
+
+.studio-import-button small {
+    margin-top: 3px;
+    color: var(--studio-muted);
+    font-size: 0.78rem;
+    line-height: 1.35;
+}
+
+.local-file-import {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.compact-import {
+    padding: 10px;
+}
+
+.local-lyrics-preview {
+    width: 100%;
+    min-height: 180px;
+    resize: vertical;
+    box-sizing: border-box;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--studio-border);
+    background: var(--studio-surface-2);
+    color: var(--studio-text);
+    padding: 10px;
+    font: 0.82rem/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    outline: none;
+}
+
+.local-lyrics-preview:focus {
+    border-color: rgba(var(--theme-rgb), 0.72);
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.10);
+}
+
+.local-lyrics-preview::placeholder {
+    color: rgba(190, 199, 207, 0.58);
+}

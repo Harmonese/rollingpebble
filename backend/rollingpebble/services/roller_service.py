@@ -1,25 +1,31 @@
 from __future__ import annotations
 
-import os
-import sys
+import json
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 
 from rollingpebble.adapters.pyroller_adapter import (
+    PyRollerProtocolClient,
     artifacts_for,
     build_pyroller_batch_command,
-    build_pyroller_command,
+    build_pyroller_batch_request,
+    build_pyroller_request,
     build_pyroller_env,
     command_text,
     default_artifacts_dir,
+    ensure_private_work_dir,
     normalize_stages,
     normalized_stage_text,
+    write_protocol_request,
 )
+from rollingpebble import job_kinds
 from rollingpebble.jobs import JobManager
 from rollingpebble.models import BatchRollRequest, JobModel, RollPreviewResponse, RollRequest, RuntimeSettingsModel
 from rollingpebble.messages import message_from_text
+from rollingpebble.runtime.reports import final_report_or_plain_json, report_artifact_paths
 from rollingpebble.services.project_service import ProjectService
-from rollingpebble.services.runtime_manager import RuntimeManager
+from rollingpebble.runtime.manager import RuntimeManager
 from rollingpebble.storage.files import PLAIN_NAME, PYROLLER_NAME, resolve_audio_path, write_text
 
 _ALLOWED_TRANSCRIBERS: dict[str, set[str]] = {
@@ -51,6 +57,10 @@ _SPLITTER_FIELDS = (
     "splitter_demucs_overlap",
     "splitter_demucs_segment",
 )
+
+
+def json_manifest_preview(payload: object) -> str:
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 def _positive_int(value: object | None) -> int | None:
@@ -234,29 +244,25 @@ class RollerService:
         )
 
     def _runtime_install_running(self) -> bool:
-        return any(
-            job.kind == "auto-roller-runtime-install" and job.status in {"queued", "running"}
-            for job in self.jobs.list()
-        )
+        return job_kinds.has_running_job(self.jobs, job_kinds.RUNTIME_INSTALL)
 
     def _has_running_job(self, kind: str) -> bool:
-        return any(job.kind == kind and job.status in {"queued", "running"} for job in self.jobs.list())
+        return job_kinds.has_running_job(self.jobs, kind)
+
+    def _engine_job_running(self) -> bool:
+        return job_kinds.has_running_job(
+            self.jobs,
+            job_kinds.AUTO_TIMING,
+            job_kinds.BATCH_AUTO_TIMING,
+        )
 
     def preview(self, project_id: str, request: RollRequest) -> RollPreviewResponse:
         timing_plain = self.project_service.plain_lyrics_for_timing(project_id)
         request = self._effective_request(request)
         audio_path, lyrics_path, output_path, intermediate_dir, artifacts_dir = self._paths_for_project(project_id, str(request.stages))
         command_prefix, default_model_store, _runtime_env = self._runtime_command_options()
-        command = build_pyroller_command(
-            audio_path=audio_path,
-            lyrics_path=lyrics_path,
-            output_path=output_path,
-            intermediate_dir=intermediate_dir,
-            artifacts_dir=artifacts_dir,
-            request=request,
-            command_prefix=command_prefix,
-            default_model_store=default_model_store,
-        )
+        preview_request_path = Path("<rollingpebble-job-work-dir>") / "request.json"
+        command = PyRollerProtocolClient(command_prefix=command_prefix).run_command(preview_request_path)
         warnings: list[str] = []
         if "p" in set(normalize_stages(request.stages)) and not timing_plain.strip():
             warnings.append("No lyric lines to time. Import or paste lyrics first.")
@@ -273,6 +279,8 @@ class RollerService:
     def roll(self, project_id: str, request: RollRequest) -> JobModel:
         if self._runtime_install_running():
             raise RuntimeError("The isolated Auto Timing runtime is being created or repaired. Wait for it to finish before starting Auto Timing.")
+        if self._engine_job_running():
+            raise RuntimeError("An Auto Timing or Batch job is already running.")
         request = self._effective_request(request)
         project = self.project_service.get(project_id)
         stages = set(normalize_stages(request.stages))
@@ -295,38 +303,53 @@ class RollerService:
         if artifact_warnings:
             raise ValueError(" ".join(artifact_warnings))
         command_prefix, default_model_store, runtime_env = self._runtime_command_options()
-        command = build_pyroller_command(
-            audio_path=audio_path,
-            lyrics_path=lyrics_path,
-            output_path=output_path,
-            intermediate_dir=intermediate_dir,
-            artifacts_dir=artifacts_dir,
-            request=request,
-            command_prefix=command_prefix,
-            default_model_store=default_model_store,
-        )
-
-        def on_success() -> dict:
-            if not output_path.exists():
-                raise FileNotFoundError(f"Auto timing did not create {output_path}")
-            synced = output_path.read_text(encoding="utf-8")
+        def on_success(job_model: JobModel) -> dict:
+            report = final_report_or_plain_json(job_model, report_type="run_result")
+            artifact_paths = report_artifact_paths(report)
+            report_output = artifact_paths.get("roller") if isinstance(artifact_paths.get("roller"), str) else None
+            if report_output:
+                output = Path(report_output)
+            else:
+                output = output_path
+            if not output.exists():
+                raise FileNotFoundError(f"Auto timing did not create {output}")
+            synced = output.read_text(encoding="utf-8")
             updated = self.project_service.write_pyroller_result(project_id, synced)
             return {
                 "project_id": project_id,
                 "synced_lyrics": updated.synced_lyrics,
                 "plain_lyrics": updated.plain_lyrics,
                 "raw_synced_lyrics": synced,
-                "output_path": str(output_path),
+                "output_path": str(output),
                 "artifacts_dir": str(artifacts_dir),
+                "artifact_paths": artifact_paths,
+                "report": report,
             }
 
+        def prepare(_job_id: str, job_work_dir: Path) -> tuple[list[str], Path | None, dict[str, str] | None, Callable[[], None]]:
+            request_dir = ensure_private_work_dir(job_work_dir / "pyroller")
+            payload = build_pyroller_request(
+                audio_path=audio_path,
+                lyrics_path=lyrics_path,
+                output_path=output_path,
+                intermediate_dir=intermediate_dir,
+                artifacts_dir=artifacts_dir,
+                request=request,
+                default_model_store=default_model_store,
+            )
+            request_path, _request_text = write_protocol_request(payload, request_dir)
+            command = PyRollerProtocolClient(command_prefix=command_prefix).run_command(request_path)
+            base_env = runtime_env or {}
+            env = build_pyroller_env(request, base_env=base_env) or base_env
+            return command, root, env, lambda: shutil.rmtree(job_work_dir, ignore_errors=True)
+
         return self.jobs.create_subprocess_job(
-            kind="auto-timing",
+            kind=job_kinds.AUTO_TIMING,
             project_id=project_id,
-            command=command,
+            command=[],
             cwd=root,
             on_success=on_success,
-            env=build_pyroller_env(request, base_env=runtime_env) or runtime_env,
+            prepare=prepare,
         )
 
     # -- batch ----------------------------------------------------------------
@@ -335,20 +358,25 @@ class RollerService:
         effective = self._effective_request(request)
         tasks = self._build_batch_tasks(request.project_ids, effective)
         default_model_store = self.runtime_manager.default_model_store() if self.runtime_manager is not None else None
-        _, manifest_text = build_pyroller_batch_command(
+        manifest_text = json_manifest_preview(tasks)
+        payload = build_pyroller_batch_request(
             effective,
             tasks,
+            manifest_path=Path("<rollingpebble-job-work-dir>") / "manifest.json",
+            intermediate_dir=Path("<rollingpebble-job-work-dir>") / "intermediate",
             default_model_store=str(default_model_store) if default_model_store else None,
         )
+        request_text = json_manifest_preview(payload)
         return {
             "project_count": len(tasks),
             "projects": [t.get("id", "") for t in tasks],
-            "manifest": manifest_text,
+            "manifest": request_text,
+            "tasks_manifest": manifest_text,
             "warnings": [],
         }
 
     def run_batch(self, request: BatchRollRequest) -> JobModel:
-        if self._has_running_job("auto-timing") or self._has_running_job("batch-auto-timing"):
+        if self._has_running_job(job_kinds.AUTO_TIMING) or self._has_running_job(job_kinds.BATCH_AUTO_TIMING):
             raise RuntimeError("An Auto Timing or Batch job is already running.")
         if self.runtime_manager is None:
             raise RuntimeError("Isolated Auto Timing runtime is not configured.")
@@ -360,38 +388,64 @@ class RollerService:
         effective = self._effective_request(request)
         tasks = self._build_batch_tasks(request.project_ids, effective)
 
+        needs_audio = bool({"s", "f", "t"} & set(normalize_stages(effective.stages)))
         for task in tasks:
-            audio_path = Path(task["audio"])
+            if not needs_audio:
+                continue
+            audio = task.get("audio")
+            if not audio:
+                raise FileNotFoundError(f"Project has no audio file: {task.get('id', '')}")
+            audio_path = Path(audio)
             if not audio_path.exists():
                 raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-        command, manifest_text = build_pyroller_batch_command(
-            effective,
-            tasks,
-            default_model_store=str(self.runtime_manager.default_model_store()),
-        )
         runtime_env = self.runtime_manager.runtime_env(runtime.venv_path)
-        # Prepend py-roller to PATH via the runtime's bin directory
-        bin_dir = runtime.venv_path / ("Scripts" if sys.platform == "win32" else "bin")  # noqa: F821
-        env = build_pyroller_env(effective, base_env=runtime_env) or runtime_env
-        env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"  # noqa: F821
+        manifest_preview = json_manifest_preview({"tasks": tasks})
 
         _project_ids = request.project_ids[:]
 
         def on_success(job_model: JobModel) -> dict:
-            return {"project_ids": _project_ids, "manifest": manifest_text, "result": "ok"}
+            report = final_report_or_plain_json(job_model, report_type="batch_result")
+            task_results = report.get("results") if isinstance(report, dict) and isinstance(report.get("results"), list) else []
+            return {
+                "project_ids": _project_ids,
+                "manifest": manifest_preview,
+                "result": "ok",
+                "report": report,
+                "task_results": task_results,
+            }
 
         def on_failure(job_model: JobModel) -> dict:
-            return {"project_ids": _project_ids, "manifest": manifest_text, "result": "failed", "error": job_model.error}
+            report = final_report_or_plain_json(job_model, report_type="batch_result")
+            task_results = report.get("results") if isinstance(report, dict) and isinstance(report.get("results"), list) else []
+            return {
+                "project_ids": _project_ids,
+                "manifest": manifest_preview,
+                "result": "failed",
+                "error": job_model.error,
+                "report": report,
+                "task_results": task_results,
+            }
+
+        def prepare(_job_id: str, job_work_dir: Path) -> tuple[list[str], Path | None, dict[str, str] | None, Callable[[], None]]:
+            request_dir = ensure_private_work_dir(job_work_dir / "pyroller")
+            command, _request_text, _manifest_text = build_pyroller_batch_command(
+                effective,
+                tasks,
+                request_dir=request_dir,
+                default_model_store=str(self.runtime_manager.default_model_store()),
+            )
+            env = build_pyroller_env(effective, base_env=runtime_env) or runtime_env
+            return command, runtime.runtime_root, env, lambda: shutil.rmtree(job_work_dir, ignore_errors=True)
 
         return self.jobs.create_subprocess_job(
-            kind="batch-auto-timing",
+            kind=job_kinds.BATCH_AUTO_TIMING,
             project_id=None,
-            command=command,
+            command=[],
             cwd=runtime.runtime_root,
             on_success=on_success,
             on_failure=on_failure,
-            env=env,
+            prepare=prepare,
         )
 
     def _build_batch_tasks(self, project_ids: list[str], request: RollRequest) -> list[dict[str, str]]:
@@ -406,17 +460,9 @@ class RollerService:
             folder = self.project_service.project_folder(pid)
 
             if needs_audio:
-                audio = folder / (project.audio_name or "")
-                if audio.exists():
+                audio = resolve_audio_path(self.projects_root, project)
+                if audio is not None:
                     task["audio"] = str(audio)
-                # fallback: find any audio file
-                if "audio" not in task:
-                    for candidate in folder.iterdir():
-                        if candidate.is_file() and candidate.suffix.lower() in (
-                            ".mp3", ".flac", ".wav", ".m4a", ".aac", ".ogg", ".opus",
-                        ):
-                            task["audio"] = str(candidate)
-                            break
 
             if needs_lyrics:
                 plain = folder / PLAIN_NAME

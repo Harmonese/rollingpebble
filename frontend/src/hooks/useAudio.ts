@@ -1,9 +1,9 @@
 import { useContext, useMemo } from "react";
-import { AudioContext } from "../components/app.context.js";
-import { guard } from "./useLrc.js";
+import { audioElementContext } from "../shared/audioElementContext.js";
+import { guard } from "../domain/lyrics/useLyricsEngine.js";
 
 export function useAudio() {
-    const ref = useContext(AudioContext)!;
+    const ref = useContext(audioElementContext)!;
     return useMemo(() => ({
         get current() {
             return ref.current;

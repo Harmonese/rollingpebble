@@ -1,17 +1,18 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { appContext, ChangBits } from "../../components/app.context.js";
-import { PanelMessage } from "../../components/PanelMessage.js";
-import { SegmentedTabs } from "../../components/SegmentedTabs.js";
-import { toastPubSub } from "../../components/toast.js";
+import { useContext, useMemo, useRef, useState } from "react";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { ButtonGroup, FormGrid, Message, MutedText, Panel, Tabs } from "../../ui/index.js";
+
+import { toastPubSub } from "../../ui/Toast.js";
+import { useProjectMetadataSeed } from "../shared/useProjectMetadataSeed.js";
 import { useMessage } from "../../hooks/useMessage.js";
-import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
 import type { Language } from "../../languages/index.js";
-import { api, backendMessageText, type LyricsRecord, type MetaModel, type ProjectModel } from "../../shared/api.js";
+import { lrclibGet, lrclibGetById, lrclibSearch, neteaseLyrics } from "../../shared/api/lyricsSources.js";
+import { applyLyrics } from "../../shared/api/projects.js";
+import { backendMessageText } from "../../shared/api/request.js";
+import type { LyricsRecord, MetaModel, ProjectModel } from "../../shared/api/types.js";
 import { buildImportText } from "../../shared/lrc.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
-
-const emptyMeta: MetaModel = { track: "", artist: "", album: "", duration: 0 };
 
 type LibraryKind = "lrclib" | "local" | "netease";
 
@@ -35,64 +36,19 @@ export const LrclibPanel: React.FC<{
     onImportText: (text: string) => void;
 }> = ({ project, editorMeta, onProject, onImportText }) => {
     const [library, setLibrary] = useState<LibraryKind>("lrclib");
-    const [meta, setMeta] = useState<MetaModel>(project?.metadata || editorMeta || emptyMeta);
     const [query, setQuery] = useState("");
+    const { meta, updateMeta } = useProjectMetadataSeed({ project, fallbackMeta: editorMeta, updateQuery: setQuery });
     const [lrclibId, setLrclibId] = useState("");
     const [results, setResults] = useState<LyricsRecord[]>([]);
     const [searched, setSearched] = useState(false);
     const [message, setMessage, , messageFading, messageType, messageKey] = useMessage();
-    const { lang } = useContext(appContext, ChangBits.lang);
+    const { lang } = useContext(appContext, AppContextBits.lang);
     const t = lang.toast;
     const u = lang.ui;
     const [busy, setBusy] = useState(false);
-    const [autoFillFromProject, setAutoFillFromProject] = useState(true);
     const [localFileName, setLocalFileName] = useState("");
     const [localText, setLocalText] = useState("");
     const localInputRef = useRef<HTMLInputElement | null>(null);
-    const lastAutoFilledProjectId = useRef<string | null>(null);
-
-    const refreshSettings = async () => {
-        try {
-            const settings = await api.settings();
-            setAutoFillFromProject(settings.auto_fill_lyrics_library_from_project_metadata);
-        } catch {
-            setAutoFillFromProject(true);
-        }
-    };
-
-    useSettingsUpdated(refreshSettings, true);
-
-    useEffect(() => {
-        if (!autoFillFromProject) return;
-        const source = project?.metadata || editorMeta || emptyMeta;
-        setMeta({
-            track: source.track || "",
-            artist: source.artist || "",
-            album: source.album || "",
-            duration: Number(source.duration) || 0,
-        });
-        const currentProjectId = project?.project_id || null;
-        if (currentProjectId !== lastAutoFilledProjectId.current) {
-            lastAutoFilledProjectId.current = currentProjectId;
-            const defaultQuery = [source.artist, source.track].filter(Boolean).join(" ");
-            setQuery(defaultQuery);
-        }
-    }, [
-        autoFillFromProject,
-        project?.project_id,
-        project?.metadata.track,
-        project?.metadata.artist,
-        project?.metadata.album,
-        project?.metadata.duration,
-        editorMeta.track,
-        editorMeta.artist,
-        editorMeta.album,
-        editorMeta.duration,
-    ]);
-
-    const updateMeta = (key: keyof MetaModel, value: string) => {
-        setMeta((old) => ({ ...old, [key]: key === "duration" ? Number(value) || 0 : value }));
-    };
 
     const normalizedId = useMemo(() => Number.parseInt(lrclibId.trim(), 10), [lrclibId]);
 
@@ -101,7 +57,7 @@ export const LrclibPanel: React.FC<{
         setSearched(true);
         setMessage(t.lrclib.searching, "info");
         try {
-            const response = await api.lrclibSearch({
+            const response = await lrclibSearch({
                 query,
                 track: meta.track,
                 artist: meta.artist,
@@ -126,7 +82,7 @@ export const LrclibPanel: React.FC<{
         setSearched(true);
         setMessage(t.lrclib.exactLookup, "info");
         try {
-            const response = await api.lrclibGet(meta);
+            const response = await lrclibGet(meta);
             setResults(response.record ? [response.record] : []);
             setMessage("");
             toastPubSub.pub({ type: "success", text: t.lrclib.results.replace("{n}", response.record ? "1" : "0") });
@@ -143,7 +99,7 @@ export const LrclibPanel: React.FC<{
         setSearched(true);
         setMessage(t.lrclib.fetching.replace("{id}", String(normalizedId)), "info");
         try {
-            const record = await api.lrclibGetById(normalizedId);
+            const record = await lrclibGetById(normalizedId);
             setResults(record ? [record] : []);
             setMessage("");
             toastPubSub.pub({ type: "success", text: t.lrclib.results.replace("{n}", record ? "1" : "0") });
@@ -177,7 +133,7 @@ export const LrclibPanel: React.FC<{
             });
             onImportText(text);
             if (project) {
-                const updated = await api.applyLyrics(project.project_id, payload);
+                const updated = await applyLyrics(project.project_id, payload);
                 onProject(updated, false);
             }
             toastPubSub.pub({ type: "success", text: t.lrclib.imported });
@@ -210,7 +166,7 @@ export const LrclibPanel: React.FC<{
             const text = raw;
             onImportText(text);
             if (project) {
-                const updated = await api.applyLyrics(project.project_id, {
+                const updated = await applyLyrics(project.project_id, {
                     metadata: meta,
                     plain_lyrics: synced ? "" : text,
                     synced_lyrics: synced ? text : "",
@@ -241,7 +197,7 @@ export const LrclibPanel: React.FC<{
 
     const renderLrclib = () => (
         <>
-            <div className="roller-form">
+            <FormGrid>
                 <input
                     placeholder={u.titleTrack}
                     value={meta.track}
@@ -281,8 +237,8 @@ export const LrclibPanel: React.FC<{
                         if (ev.key === "Enter" && !busy && Number.isFinite(normalizedId)) doGetById();
                     }}
                 />
-            </div>
-            <div className="roller-actions">
+            </FormGrid>
+            <ButtonGroup>
                 <button type="button" disabled={busy || (!query && !meta.track)} onClick={doSearch}>{u.search}</button>
                 <button type="button" disabled={busy || !meta.track || !meta.artist} onClick={doGet}>
                     {u.exactLookup}
@@ -290,11 +246,11 @@ export const LrclibPanel: React.FC<{
                 <button type="button" disabled={busy || !Number.isFinite(normalizedId)} onClick={doGetById}>
                     {u.fetchById}
                 </button>
-            </div>
-            <div className="roller-results">
-                {searched && results.length === 0 && !busy && <p className="roller-muted">{u.noResultsFound}</p>}
+            </ButtonGroup>
+            <div className="studio-results">
+                {searched && results.length === 0 && !busy && <MutedText>{u.noResultsFound}</MutedText>}
                 {results.map((record, index) => (
-                    <article key={`${record.id || index}-${record.label}`} className="roller-result">
+                    <article key={`${record.id || index}-${record.label}`} className="studio-result">
                         <b>{record.label || `${record.artist_name} - ${record.track_name}`}</b>
                         <small>
                             {u.id}: {record.id || u.unknownId} · {u.plain}: {record.has_plain ? u.yes : u.no} ·{" "}
@@ -305,7 +261,7 @@ export const LrclibPanel: React.FC<{
                             <summary>{u.preview}</summary>
                             <pre className="lyric-preview">{previewText(record, u)}</pre>
                         </details>
-                        <div className="roller-actions compact">
+                        <ButtonGroup compact>
                             <button
                                 type="button"
                                 disabled={!record.has_plain}
@@ -322,7 +278,7 @@ export const LrclibPanel: React.FC<{
                             >
                                 {u.importSynced}
                             </button>
-                        </div>
+                        </ButtonGroup>
                     </article>
                 ))}
             </div>
@@ -333,32 +289,32 @@ export const LrclibPanel: React.FC<{
         <div className="local-file-import">
             <input
                 ref={localInputRef}
-                className="roller-hidden-file"
+                className="studio-hidden-file"
                 type="file"
                 accept=".lrc,.txt,text/plain,text/*"
                 onChange={onLocalFile}
             />
             <button
-                className="roller-import-button compact-import"
+                className="studio-import-button compact-import"
                 type="button"
                 onClick={() => localInputRef.current?.click()}
             >
-                <span className="roller-import-icon">+</span>
+                <span className="studio-import-icon">+</span>
                 <span>
                     <b>{u.importLyrics}</b>
                     <small>{u.importLyricsDesc}</small>
                 </span>
             </button>
-            {localFileName && <p className="roller-muted">{u.selectedFile.replace("{name}", localFileName)}</p>}
+            {localFileName && <MutedText>{u.selectedFile.replace("{name}", localFileName)}</MutedText>}
             <textarea
                 className="local-lyrics-preview"
                 placeholder={u.localLyricsInput}
                 value={localText}
                 onChange={(ev) => setLocalText(ev.target.value)}
             />
-            <div className="roller-actions">
+            <ButtonGroup>
                 <button type="button" disabled={!localText.trim()} onClick={importLocalText}>{u.import}</button>
-            </div>
+            </ButtonGroup>
         </div>
     );
 
@@ -370,7 +326,7 @@ export const LrclibPanel: React.FC<{
                 try {
                     setBusy(true);
                     setMessage(t.netease.fetchingLyrics, "info");
-                    const result = await api.neteaseLyrics(song.id);
+                    const result = await neteaseLyrics(song.id);
                     const lrc = result.lyric || result.tlyric;
                     if (lrc) {
                         onImportText(lrc);
@@ -394,10 +350,9 @@ export const LrclibPanel: React.FC<{
     );
 
     return (
-        <section className="roller-card lyrics-import-card">
-            <h2>{u.importLyrics}</h2>
+        <Panel title={u.importLyrics} className="lyrics-import-card">
 
-            <SegmentedTabs
+            <Tabs
                 ariaLabel="Lyric libraries"
                 items={[{ value: "lrclib", label: u.lrclib }, { value: "netease", label: u.netease }, {
                     value: "local",
@@ -407,7 +362,7 @@ export const LrclibPanel: React.FC<{
                 onChange={setLibrary}
             />
 
-            <PanelMessage message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
+            <Message message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
             {library === "lrclib" && renderLrclib()}
             {library === "netease" && (
                 <NeteaseSearch
@@ -422,6 +377,6 @@ export const LrclibPanel: React.FC<{
                 />
             )}
             {library === "local" && renderLocalFiles()}
-        </section>
+        </Panel>
     );
 };

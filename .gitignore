@@ -16,7 +16,9 @@ frontend/.vite/
 # Local data
 .lrc-roller-data/
 .DS_Store
-tests/
+.claude/
+.codex/
+CLAUDE.md
 
 # Generated release/package artifacts
 backend/rollingpebble/frontend_dist/

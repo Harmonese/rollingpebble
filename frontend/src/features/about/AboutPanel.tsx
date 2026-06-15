@@ -1,16 +1,16 @@
 import { useContext } from "react";
 import type React from "react";
-import { appContext, ChangBits } from "../../components/app.context.js";
-import { ModalShell } from "../../components/ModalShell.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { Modal } from "../../ui/Modal.js";
 
 export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
     const version = import.meta.env.app?.version || "dev";
-    const { lang } = useContext(appContext, ChangBits.lang);
+    const { lang } = useContext(appContext, AppContextBits.lang);
     const a = lang.about;
     const u = lang.ui;
 
     return (
-        <ModalShell open={open} onClose={onClose} ariaLabel={`About ${lang.app?.name || "Rolling Pebble"}`} closeLabel={u.close} exitMs={200}>
+        <Modal open={open} onClose={onClose} ariaLabel={`About ${lang.app?.name || "Rolling Pebble"}`} closeLabel={u.close} exitMs={200}>
                 <div className="about-header">
                     <div>
                         <p className="about-kicker">{a.kicker}</p>
@@ -71,6 +71,6 @@ export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ o
                     <h3>{a.rightsNote}</h3>
                     <p>{a.rightsNoteText}</p>
                 </section>
-        </ModalShell>
+        </Modal>
     );
 };

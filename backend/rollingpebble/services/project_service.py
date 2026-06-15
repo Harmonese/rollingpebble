@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import UploadFile
 
 from rollingpebble.models import ApplyLyricsRequest, MetaModel, ProjectModel, RuntimeSettingsModel, SaveEditorRequest
+from rollingpebble.paths import StorageLayoutRef
 from rollingpebble.lyrics_utils import merge_lrc_metadata_header
 from rollingpebble.storage.files import (
     PLAIN_NAME,
@@ -29,8 +30,22 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 class ProjectService:
-    def __init__(self, projects_root: Path) -> None:
-        self.projects_root = projects_root
+    def __init__(self, projects_root: Path | None = None, *, layout_ref: StorageLayoutRef | None = None) -> None:
+        if projects_root is None and layout_ref is None:
+            raise ValueError("ProjectService requires projects_root or layout_ref")
+        self._projects_root = projects_root
+        self.layout_ref = layout_ref
+
+    @property
+    def projects_root(self) -> Path:
+        if self.layout_ref is not None:
+            return self.layout_ref.current.projects_root
+        assert self._projects_root is not None
+        return self._projects_root
+
+    @projects_root.setter
+    def projects_root(self, value: Path) -> None:
+        self._projects_root = value
 
     async def create_from_audio(
         self, upload: UploadFile, *, settings: RuntimeSettingsModel | None = None,

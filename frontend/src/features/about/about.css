@@ -1,0 +1,224 @@
+.about-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 520;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    box-sizing: border-box;
+}
+
+.about-overlay[data-state="closed"] {
+    pointer-events: none;
+}
+
+.about-overlay[data-state="open"] .about-backdrop {
+    animation: modal-backdrop-in 180ms ease-out both;
+}
+
+.about-overlay[data-state="closed"] .about-backdrop {
+    animation: modal-backdrop-out 160ms ease-in both;
+}
+
+.about-overlay[data-state="open"] .about-modal {
+    animation: about-modal-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.about-overlay[data-state="closed"] .about-modal {
+    animation: about-modal-out 160ms ease-in both;
+}
+
+.about-backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.58);
+}
+
+.about-modal {
+    position: relative;
+    z-index: 1;
+    width: min(720px, 100%);
+    max-height: min(760px, calc(100dvh - 36px));
+    overflow: auto;
+    scrollbar-gutter: stable;
+    box-sizing: border-box;
+    padding: 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(var(--theme-rgb), 0.30);
+    background: linear-gradient(180deg, var(--studio-surface) 0%, var(--studio-bg) 100%);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+}
+
+@keyframes modal-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes modal-backdrop-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes about-modal-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.975);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes about-modal-out {
+    from {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(8px) scale(0.985);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .about-overlay[data-state] .about-backdrop,
+    .about-overlay[data-state] .about-modal {
+        animation-duration: 1ms;
+    }
+}
+
+.about-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.about-header h2 {
+    margin: 0;
+    color: var(--studio-text);
+    font-size: 1.35rem;
+    letter-spacing: -0.03em;
+}
+
+.about-kicker {
+    margin: 0 0 4px;
+    color: var(--theme-color);
+    font-size: 0.74rem;
+    font-weight: 760;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.about-tagline {
+    max-width: 42rem;
+    margin: 6px 0 0;
+    color: var(--studio-muted);
+    line-height: 1.45;
+}
+
+.about-version {
+    display: inline-flex;
+    margin-top: 14px;
+    padding: 5px 10px;
+    border-radius: var(--radius-pill);
+    color: var(--theme-color);
+    background: rgba(var(--theme-rgb), 0.12);
+    border: 1px solid rgba(var(--theme-rgb), 0.28);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.about-section {
+    margin-top: 16px;
+}
+
+.about-section h3 {
+    margin: 0 0 8px;
+    color: var(--studio-text);
+    font-size: 0.95rem;
+}
+
+.about-section p,
+.about-section li,
+.about-hotkeys dd,
+.about-hotkeys dt {
+    color: var(--studio-muted);
+    font-size: 0.86rem;
+    line-height: 1.5;
+}
+
+.about-section p,
+.about-section ul,
+.about-hotkeys {
+    margin: 0;
+}
+
+.about-section ul {
+    padding-left: 1.1rem;
+}
+
+.about-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.about-links-row + .about-links-row {
+    margin-top: 8px;
+}
+
+.about-links a,
+.about-header button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    border: 1px solid rgba(var(--theme-rgb), 0.34);
+    background: rgba(var(--theme-rgb), 0.08);
+    color: var(--theme-color);
+    font-weight: 650;
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.about-links a:hover,
+.about-header button:hover {
+    transform: translateY(-1px);
+    background: rgba(var(--theme-rgb), 0.16);
+    border-color: rgba(var(--theme-rgb), 0.58);
+}
+
+.about-hotkeys {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px 12px;
+}
+
+.about-hotkeys dt {
+    color: var(--studio-text);
+    font-weight: 740;
+}
+
+@media (max-width: 680px) {
+    .about-header {
+        flex-direction: column;
+    }
+
+    .about-header button {
+        align-self: flex-end;
+    }
+
+    .about-hotkeys {
+        grid-template-columns: 1fr;
+        gap: 2px;
+    }
+
+    .about-hotkeys dd {
+        margin: 0 0 8px;
+    }
+}

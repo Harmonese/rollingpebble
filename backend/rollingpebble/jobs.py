@@ -1,364 +1,23 @@
 from __future__ import annotations
 
-import inspect
-import json
-import os
-import re
-import signal
-import subprocess
 import threading
 import uuid
-from datetime import datetime, timezone
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Iterable, Any
 
-from rollingpebble.messages import message_from_text, msg
-from rollingpebble.models import JobModel, JobProgressModel, JobStatus
+from rollingpebble.jobs_runner import request_process_stop, run_subprocess_job, utc_now_iso
+from rollingpebble.jobs_store import JobStore, ManagedJob
+from rollingpebble.messages import msg
+from rollingpebble.models import JobModel, JobStatus
 
-_PYROLLER_EVENT_PREFIX = "PYROLLER_EVENT "
-_MAX_RETAINED_JOBS = 100
-_CANCEL_GRACE_SECONDS = 8
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
-_PROGRESS_LINE_RE = re.compile(
-    r"pyroller\.progress\s*\|\s*"
-    r"(?P<stage>[^\[]*?)(?:\s+\[(?P<completed>\d+)/(?:\s*)?(?P<total>\d+)\s+(?P<unit>[^\]]+)\])?"
-    r"(?:\s+-\s+(?P<message>.*))?$"
-)
-_TQDM_PERCENT_RE = re.compile(
-    r"(?P<label>.*?)(?:\s*:)?\s*"
-    r"(?P<percent>\d{1,3}(?:\.\d+)?)%\|.*?\|\s*"
-    r"(?P<completed>[^\s/]+)/(?P<total>[^\s\[]+)"
-    r"(?:\s+\[(?P<bracket>[^\]]+)\])?"
-)
-def _clean_progress_line(line: str) -> str:
-    return _ANSI_RE.sub("", line).replace("\r", "").strip()
-
-
-def _normalize_stage_name(stage: str) -> str:
-    normalized = (stage or "").strip().replace("-", "_")
-    aliases = {
-        "transcriber_preflight": "preflight",
-        "model_download": "model_download",
-        "model-download": "model_download",
-    }
-    return aliases.get(normalized, normalized)
-
-
-def _mark_stage_done(model: JobModel, stage: str) -> None:
-    clean = _normalize_stage_name(stage)
-    if clean and clean not in model.completed_stages:
-        model.completed_stages.append(clean)
-
-
-def _is_model_download_tqdm(previous: JobProgressModel | None) -> bool:
-    return previous is not None and _normalize_stage_name(previous.stage) == "model_download"
-
-
-def _is_demucs_tqdm(previous: JobProgressModel | None) -> bool:
-    return previous is not None and _normalize_stage_name(previous.stage) == "splitter"
-
-
-def _event_percent(value: object) -> float | None:
-    if not isinstance(value, (int, float)):
-        return None
-    if value > 1.0:
-        value = value / 100.0
-    return max(0.0, min(1.0, float(value)))
-
-
-def _int_or_zero(value: object) -> int:
-    if isinstance(value, bool):
-        return 0
-    if isinstance(value, (int, float)):
-        return max(0, int(value))
-    return 0
-
-
-def _optional_int(value: object) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return max(0, int(value))
-    return None
-
-
-def _optional_float(value: object) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    return None
-
-
-def _parse_pyroller_event_line(line: str) -> JobProgressModel | None:
-    clean = _clean_progress_line(line)
-    if not clean.startswith(_PYROLLER_EVENT_PREFIX):
-        return None
-    try:
-        event = json.loads(clean[len(_PYROLLER_EVENT_PREFIX) :])
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(event, dict):
-        return None
-    event_type = str(event.get("type") or "")
-    stage_value = event.get("stage")
-    if not stage_value and event_type.startswith("download_"):
-        stage_value = "model_download"
-    if not stage_value and event_type.startswith("install_"):
-        stage_value = "install"
-    stage = _normalize_stage_name(str(stage_value or ""))
-    completed = _int_or_zero(event.get("completed"))
-    total = _int_or_zero(event.get("total"))
-    percent = _event_percent(event.get("progress"))
-    if percent is None:
-        percent = _event_percent(event.get("percent"))
-    bytes_downloaded = _optional_int(event.get("bytes_downloaded"))
-    bytes_total = _optional_int(event.get("bytes_total"))
-    if percent is None and bytes_downloaded is not None and bytes_total:
-        percent = max(0.0, min(1.0, bytes_downloaded / bytes_total))
-    if event_type == "download_completed":
-        percent = 1.0 if bytes_total else percent
-    if percent is not None and total == 0:
-        completed = int(round(percent * 100))
-        total = 100
-    return JobProgressModel(
-        stage=stage,
-        event_type=event_type,
-        completed=completed,
-        total=total,
-        unit=str(event.get("unit") or ("%" if total == 100 else "")),
-        message=str(event.get("message") or event.get("line") or event.get("step") or ""),
-        percent=percent,
-        progress=percent,
-        raw=clean,
-        done=bool(event.get("done")) or event_type.endswith("completed"),
-        failed=bool(event.get("failed")) or event_type.endswith("failed"),
-        bytes_downloaded=bytes_downloaded,
-        bytes_total=bytes_total,
-        bytes_per_second=_optional_float(event.get("bytes_per_second")),
-        repo_id=str(event.get("repo_id")) if event.get("repo_id") is not None else None,
-        cache_dir=str(event.get("cache_dir")) if event.get("cache_dir") is not None else None,
-        detail=event,
-    )
-
-
-def _parse_download_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
-    """Extract model/download progress from Hugging Face / external tqdm bars.
-
-    Classification is driven by the previous stage context (set by JSONL events),
-    not by matching English tokens in the output line.
-    """
-    clean = _clean_progress_line(line)
-    if not clean:
-        return None
-
-    match = _TQDM_PERCENT_RE.search(clean)
-    if not match or not _is_model_download_tqdm(previous):
-        return None
-
-    percent_value = max(0.0, min(100.0, float(match.group("percent"))))
-    label = (match.group("label") or "").strip(" :-") or "Model download"
-    completed_text = match.group("completed")
-    total_text = match.group("total")
-    bracket = (match.group("bracket") or "").strip()
-    message_parts = [label]
-    if completed_text and total_text:
-        message_parts.append(f"{completed_text}/{total_text}")
-    if bracket:
-        message_parts.append(bracket)
-    return JobProgressModel(
-        stage="model_download",
-        completed=int(round(percent_value)),
-        total=100,
-        unit="%",
-        message=" · ".join(message_parts),
-        percent=percent_value / 100.0,
-        progress=percent_value / 100.0,
-        raw=clean,
-    )
-
-
-def _parse_demucs_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
-    """Extract Demucs native tqdm progress as splitter progress.
-
-    Demucs writes progress bars such as ``50%|...| 175.5/351.0 [..seconds/s]``.
-    Earlier rollingpebble versions parsed every tqdm line as model download, which
-    made Vocal separation jump back to the model-download card.
-    """
-    clean = _clean_progress_line(line)
-    if not clean:
-        return None
-    match = _TQDM_PERCENT_RE.search(clean)
-    if not match or not _is_demucs_tqdm(previous):
-        return None
-    percent_value = max(0.0, min(100.0, float(match.group("percent"))))
-    completed_text = match.group("completed")
-    total_text = match.group("total")
-    bracket = (match.group("bracket") or "").strip()
-    message_parts = ["Separating vocals"]
-    if completed_text and total_text:
-        message_parts.append(f"{completed_text}/{total_text} sec")
-    if bracket:
-        message_parts.append(bracket)
-    return JobProgressModel(
-        stage="splitter",
-        completed=int(round(percent_value)),
-        total=100,
-        unit="%",
-        message=" · ".join(message_parts),
-        percent=percent_value / 100.0,
-        progress=percent_value / 100.0,
-        raw=clean,
-    )
-
-
-def _parse_pyroller_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
-    """Extract py-roller's logging progress format into a UI-friendly snapshot.
-
-    py-roller writes progress through the `pyroller.progress` logger when stdout
-    is piped, for example:
-
-        pyroller.progress | transcriber-preflight [2/3 phase] - resolving model
-        pyroller.progress | aligner [120/410 step] - dp row 120/406
-
-    State detection (done/failed/stage transitions) is handled by JSONL events
-    (``_parse_pyroller_event_line``). This parser provides numeric fallback.
-    """
-    match = _PROGRESS_LINE_RE.search(_clean_progress_line(line))
-    if not match:
-        return None
-
-    stage = _normalize_stage_name((match.group("stage") or "").strip())
-    message = (match.group("message") or "").strip()
-    completed_text = match.group("completed")
-    total_text = match.group("total")
-    unit = (match.group("unit") or "").strip()
-
-    completed = int(completed_text) if completed_text else 0
-    total = int(total_text) if total_text else 0
-    percent: float | None = None
-    if total > 0:
-        completed = max(0, min(completed, total))
-        percent = completed / total
-    elif previous is not None and previous.stage == stage:
-        completed = previous.completed
-        total = previous.total
-        unit = previous.unit
-        percent = previous.percent
-
-    return JobProgressModel(
-        stage=stage,
-        completed=completed,
-        total=total,
-        unit=unit,
-        message=message,
-        percent=percent,
-        progress=percent,
-        raw=line,
-    )
-
-
-def _parse_progress_line(line: str, previous: JobProgressModel | None = None) -> JobProgressModel | None:
-    return (
-        _parse_pyroller_event_line(line)
-        or _parse_pyroller_progress_line(line, previous)
-        or _parse_demucs_progress_line(line, previous)
-        or _parse_download_progress_line(line, previous)
-    )
-
-
-def _iter_process_output(stream) -> Iterable[tuple[str, str]]:
-    """Yield subprocess output records split on newline and carriage return.
-
-    tqdm progress bars update the current terminal line using "\\r" instead of
-    "\\n". Reading with `for line in stream` would hide download progress until
-    the process exits. A small char reader keeps normal logs intact while also
-    surfacing download bars in real time.
-    """
-    buffer: list[str] = []
-    while True:
-        char = stream.read(1)
-        if char == "":
-            break
-        if char in {"\n", "\r"}:
-            text = "".join(buffer).strip()
-            buffer.clear()
-            if text:
-                yield text, char
-            continue
-        buffer.append(char)
-        if len(buffer) >= 8000:
-            text = "".join(buffer).strip()
-            buffer.clear()
-            if text:
-                yield text, "\n"
-    text = "".join(buffer).strip()
-    if text:
-        yield text, "\n"
-
-
-@dataclass(slots=True)
-class ManagedJob:
-    model: JobModel
-    thread: threading.Thread | None = None
-    process: subprocess.Popen[str] | None = None
-    lock: threading.Lock = field(default_factory=threading.Lock)
+PreparedSubprocessJob = tuple[list[str], Path | None, dict[str, str] | None, Callable[[], None] | None]
+SubprocessJobPreparer = Callable[[str, Path], PreparedSubprocessJob]
 
 
 class JobManager:
-    def __init__(self) -> None:
-        self._jobs: dict[str, ManagedJob] = {}
-        self._lock = threading.Lock()
-
-    def _prune_finished_jobs_locked(self) -> None:
-        overflow = len(self._jobs) - _MAX_RETAINED_JOBS
-        if overflow <= 0:
-            return
-        removable: list[tuple[str, str]] = []
-        for job_id, managed in self._jobs.items():
-            status = managed.model.status
-            if status not in {JobStatus.queued, JobStatus.running}:
-                removable.append((managed.model.updated_at or managed.model.started_at or "", job_id))
-        removable.sort()
-        for _, job_id in removable[:overflow]:
-            self._jobs.pop(job_id, None)
-
-    def _request_process_stop(self, managed: ManagedJob, process: subprocess.Popen[str]) -> None:
-        def stopper() -> None:
-            try:
-                if process.poll() is not None:
-                    return
-                if os.name != "nt":
-                    os.killpg(process.pid, signal.SIGTERM)
-                else:
-                    process.terminate()
-                try:
-                    process.wait(timeout=_CANCEL_GRACE_SECONDS)
-                    return
-                except subprocess.TimeoutExpired:
-                    pass
-                with managed.lock:
-                    managed.model.logs.append("Process did not exit after cancellation; forcing termination.")
-                    managed.model.updated_at = _utc_now_iso()
-                if os.name != "nt":
-                    os.killpg(process.pid, signal.SIGKILL)
-                else:
-                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            except ProcessLookupError:
-                return
-            except Exception as exc:
-                with managed.lock:
-                    managed.model.logs.append(f"Failed to terminate canceled process: {exc}")
-                    managed.model.updated_at = _utc_now_iso()
-
-        threading.Thread(target=stopper, name=f"cancel-{managed.model.job_id}", daemon=True).start()
+    def __init__(self, *, work_root: Path | None = None) -> None:
+        self._store = JobStore()
+        self.work_root = work_root
 
     def create_subprocess_job(
         self,
@@ -370,9 +29,15 @@ class JobManager:
         on_success: Callable[..., dict] | None = None,
         on_failure: Callable[..., dict] | None = None,
         env: dict[str, str] | None = None,
+        prepare: SubprocessJobPreparer | None = None,
     ) -> JobModel:
         job_id = f"job_{uuid.uuid4().hex[:12]}"
-        now = _utc_now_iso()
+        now = utc_now_iso()
+        job_work_dir = self._job_work_dir(job_id) if prepare is not None else None
+        cleanup: Callable[[], None] | None = None
+        if prepare is not None:
+            assert job_work_dir is not None
+            command, cwd, env, cleanup = prepare(job_id, job_work_dir)
         managed = ManagedJob(
             model=JobModel(
                 job_id=job_id,
@@ -384,181 +49,55 @@ class JobManager:
                 updated_at=now,
             )
         )
-        with self._lock:
-            self._jobs[job_id] = managed
-            self._prune_finished_jobs_locked()
+        self._store.add(managed)
 
-        def run_callback(callback: Callable[..., dict] | None, snapshot: JobModel) -> dict[str, Any]:
-            if callback is None:
-                return {}
-            try:
-                params = inspect.signature(callback).parameters
-                return callback(snapshot) if params else callback()
-            except (TypeError, ValueError):
-                return callback()
-
-        def runner() -> None:
-            with managed.lock:
-                if managed.model.status == JobStatus.canceled:
-                    return
-                managed.model.status = JobStatus.running
-                managed.model.updated_at = _utc_now_iso()
-            try:
-                process = subprocess.Popen(
-                    command,
-                    cwd=str(cwd) if cwd else None,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    bufsize=1,
-                    start_new_session=(os.name != "nt"),
-                    env=env,
-                )
-                managed.process = process
-                with managed.lock:
-                    managed.model.pid = process.pid
-                    managed.model.updated_at = _utc_now_iso()
-                assert process.stdout is not None
-                last_download_percent: int | None = None
-                for output_line, separator in _iter_process_output(process.stdout):
-                    clean_line = _clean_progress_line(output_line)
-                    progress = _parse_progress_line(clean_line, managed.model.progress)
-                    is_structured_event = clean_line.startswith(_PYROLLER_EVENT_PREFIX)
-                    event_detail = progress.detail if progress is not None and is_structured_event else None
-                    should_append_log = separator == "\n" and not is_structured_event
-                    if event_detail and event_detail.get("type") == "install_subprocess_output" and event_detail.get("line"):
-                        should_append_log = True
-                        clean_line = str(event_detail.get("line"))
-                    if separator == "\r" and progress is not None and _normalize_stage_name(progress.stage) == "model_download":
-                        # tqdm refreshes many times per second. Keep the compact
-                        # progress bar live, but only add meaningful download
-                        # milestones to the raw task log.
-                        if progress.percent is None:
-                            should_append_log = False
-                        else:
-                            percent_int = int(round(progress.percent * 100))
-                            should_append_log = (
-                                last_download_percent is None
-                                or percent_int >= 100
-                                or percent_int - last_download_percent >= 5
-                            )
-                            if should_append_log:
-                                last_download_percent = percent_int
-                    with managed.lock:
-                        now = _utc_now_iso()
-                        managed.model.updated_at = now
-                        managed.model.last_output_at = now
-                        if should_append_log:
-                            managed.model.logs.append(clean_line)
-                        if event_detail and event_detail.get("type") != "install_subprocess_output":
-                            managed.model.events.append(event_detail)
-                            if len(managed.model.events) > 500:
-                                managed.model.events = managed.model.events[-500:]
-                        if progress is not None:
-                            managed.model.progress = progress
-                            if progress.done:
-                                _mark_stage_done(managed.model, progress.stage)
-                        if len(managed.model.logs) > 1200:
-                            managed.model.logs = managed.model.logs[-1200:]
-                return_code = process.wait()
-                with managed.lock:
-                    if managed.model.status == JobStatus.canceled:
-                        return
-                if return_code != 0:
-                    with managed.lock:
-                        failure_model = managed.model.model_copy(deep=True)
-                    result = run_callback(on_failure, failure_model)
-                    with managed.lock:
-                        managed.model.status = JobStatus.failed
-                        managed.model.return_code = return_code
-                        managed.model.updated_at = _utc_now_iso()
-                        managed.model.error = f"Command exited with code {return_code}"
-                        managed.model.error_message = message_from_text(managed.model.error)
-                        managed.model.result = result or None
-                        if managed.model.progress is not None:
-                            managed.model.progress.failed = True
-                    return
-                result: dict[str, Any] = {}
-                if on_success is not None:
-                    with managed.lock:
-                        success_model = managed.model.model_copy(deep=True)
-                    result = run_callback(on_success, success_model)
-                with managed.lock:
-                    managed.model.status = JobStatus.succeeded
-                    managed.model.return_code = return_code
-                    managed.model.updated_at = _utc_now_iso()
-                    managed.model.result = result
-                    complete_message = "Task complete"
-                    if managed.model.kind == "auto-roller-runtime-install":
-                        runtime_id = result.get("runtime_id") if isinstance(result, dict) else None
-                        complete_message = f"Runtime ready: {runtime_id}" if runtime_id else "Runtime ready"
-                    elif managed.model.kind == "auto-roller-doctor":
-                        complete_message = ""
-                    elif managed.model.kind == "auto-timing":
-                        complete_message = "Automatic timing complete"
-                    managed.model.progress = JobProgressModel(
-                        stage="complete",
-                        completed=1,
-                        total=1,
-                        unit="task",
-                        message=complete_message,
-                        message_message=message_from_text(complete_message) if complete_message else None,
-                        percent=1.0,
-                        progress=1.0,
-                        raw="",
-                        done=True,
-                    )
-            except Exception as exc:  # pragma: no cover - subprocess/env dependent
-                result: dict[str, Any] = {}
-                with managed.lock:
-                    failure_model = managed.model.model_copy(deep=True)
-                try:
-                    result = run_callback(on_failure, failure_model)
-                except Exception:
-                    result = {}
-                with managed.lock:
-                    if managed.model.status != JobStatus.canceled:
-                        now = _utc_now_iso()
-                        managed.model.status = JobStatus.failed
-                        managed.model.updated_at = now
-                        managed.model.last_output_at = managed.model.last_output_at or now
-                        managed.model.error = str(exc)
-                        managed.model.error_message = message_from_text(str(exc))
-                        managed.model.result = result or None
-                        managed.model.logs.append(f"Failed to start or monitor command: {exc}")
-
-        thread = threading.Thread(target=runner, name=job_id, daemon=True)
+        thread = threading.Thread(
+            target=run_subprocess_job,
+            kwargs={
+                "managed": managed,
+                "command": command,
+                "cwd": cwd,
+                "on_success": on_success,
+                "on_failure": on_failure,
+                "env": env,
+                "cleanup": cleanup,
+            },
+            name=job_id,
+            daemon=True,
+        )
         managed.thread = thread
         thread.start()
         return managed.model.model_copy(deep=True)
 
+    def _job_work_dir(self, job_id: str) -> Path:
+        root = self.work_root or Path.cwd() / ".rollingpebble-work"
+        path = root / "jobs" / job_id
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def get(self, job_id: str) -> JobModel:
-        with self._lock:
-            managed = self._jobs.get(job_id)
+        managed = self._store.get(job_id)
         if managed is None:
             raise KeyError(job_id)
         with managed.lock:
             return managed.model.model_copy(deep=True)
 
     def list(self) -> list[JobModel]:
-        with self._lock:
-            jobs = list(self._jobs.values())
         output: list[JobModel] = []
-        for managed in jobs:
+        for managed in self._store.list_managed():
             with managed.lock:
                 output.append(managed.model.model_copy(deep=True))
         return output
 
     def cancel(self, job_id: str) -> JobModel:
-        with self._lock:
-            managed = self._jobs.get(job_id)
+        managed = self._store.get(job_id)
         if managed is None:
             raise KeyError(job_id)
         with managed.lock:
             if managed.model.status not in {JobStatus.queued, JobStatus.running}:
                 return managed.model.model_copy(deep=True)
             managed.model.status = JobStatus.canceled
-            now = _utc_now_iso()
+            now = utc_now_iso()
             managed.model.updated_at = now
             managed.model.last_output_at = now
             managed.model.logs.append("Cancellation requested by rollingpebble.")
@@ -568,6 +107,6 @@ class JobManager:
             managed.model.error_message = msg("job.cancel_requested", "Cancellation requested")
             process = managed.process
         if process is not None and process.poll() is None:
-            self._request_process_stop(managed, process)
+            request_process_stop(managed, process)
         with managed.lock:
             return managed.model.model_copy(deep=True)

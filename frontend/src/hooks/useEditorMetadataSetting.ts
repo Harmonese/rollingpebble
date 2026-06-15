@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../shared/api.js";
+import { settings } from "../shared/api/settings.js";
 import { useSettingsUpdated } from "./useSettingsUpdated.js";
 
 export function useEditorMetadataSetting(): boolean {
@@ -7,8 +7,8 @@ export function useEditorMetadataSetting(): boolean {
 
     useSettingsUpdated(async () => {
         try {
-            const settings = await api.settings();
-            setIncludeMetadataTags(settings.editor_write_metadata_tags);
+            const runtimeSettings = await settings();
+            setIncludeMetadataTags(runtimeSettings.editor_write_metadata_tags);
         } catch {
             setIncludeMetadataTags(true);
         }

@@ -21,7 +21,7 @@ export function useTextFileDrop(onText: (text: string) => void): void {
             if (!isFileDrag(ev)) return;
             ev.preventDefault();
             dragCounter++;
-            document.body.classList.add("roller-drag-over");
+            document.body.classList.add("studio-drag-over");
         };
         const onDragLeave = (ev: DragEvent) => {
             if (!isFileDrag(ev)) return;
@@ -29,14 +29,14 @@ export function useTextFileDrop(onText: (text: string) => void): void {
             dragCounter--;
             if (dragCounter <= 0) {
                 dragCounter = 0;
-                document.body.classList.remove("roller-drag-over");
+                document.body.classList.remove("studio-drag-over");
             }
         };
         const onDrop = (ev: DragEvent) => {
             if (!isFileDrag(ev)) return;
             ev.preventDefault();
             dragCounter = 0;
-            document.body.classList.remove("roller-drag-over");
+            document.body.classList.remove("studio-drag-over");
             const file = ev.dataTransfer?.files[0];
             if (!file || !isTextFile(file)) return;
             const fileReader = new FileReader();
@@ -53,7 +53,7 @@ export function useTextFileDrop(onText: (text: string) => void): void {
             root.removeEventListener("dragenter", onDragEnter);
             root.removeEventListener("dragleave", onDragLeave);
             root.removeEventListener("drop", onDrop);
-            document.body.classList.remove("roller-drag-over");
+            document.body.classList.remove("studio-drag-over");
         };
     }, [onText]);
 }

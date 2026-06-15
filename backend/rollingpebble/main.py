@@ -1,100 +1,75 @@
 from __future__ import annotations
 
-from pathlib import Path
-import mimetypes
-import platform
-import subprocess
-
-from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from rollingpebble.adapters import pylrclib_adapter, pyroller_adapter
+from rollingpebble.api import include_api_routes
+from rollingpebble.api.context import AppServices
 from rollingpebble.config import Settings, resolve_frontend_dist
 from rollingpebble.jobs import JobManager
-from rollingpebble.models import (
-    ApplyLyricsRequest,
-    HealthDependency,
-    HealthResponse,
-    JobModel,
-    LrcCleanseRequest,
-    LrcCleanseResponse,
-    LrclibGetRequest,
-    LrclibGetResponse,
-    LrclibIdRequest,
-    LrclibSearchRequest,
-    LrclibSearchResponse,
-    NeteaseLyricResponse,
-    NeteaseResolveRequest,
-    NeteaseResolveResponse,
-    NeteaseSongSearchRequest,
-    NeteaseSearchResponse,
-    LyricsRecordModel,
-    LocalPathRequest,
-    LocalPathResponse,
-    ProjectModel,
-    BatchRollRequest,
-    RollRequest,
-    SaveEditorRequest,
-    UploadPlanRequest,
-    UploadPlanResponse,
-    UploadRunRequest,
-    UploadRunResponse,
-    RollPreviewResponse,
-    AutoRollerRuntimeResponse,
-    RuntimeInstallRequest,
-    RuntimeUpgradeRequest,
-    ModelCacheRequest,
-    RuntimeSettingsModel,
-    RuntimeSettingsUpdateRequest,
-    StorageCleanupPlanResponse,
-    StorageCleanupPreviewRequest,
-    StorageCleanupRunRequest,
-    StorageCleanupRunResponse,
-    StorageMigrateRootRequest,
-    StorageMigrateRootResponse,
-    StorageOpenModelRequest,
-    StorageOpenOtherRequest,
-    StorageOpenRuntimeRequest,
-    StorageUsageResponse,
-)
-from rollingpebble.paths import ensure_storage_layout
-from rollingpebble.storage.files import resolve_audio_path
-from rollingpebble.version import app_version
-from rollingpebble.messages import message_from_exception, message_from_text
+from rollingpebble.paths import StorageLayoutRef, ensure_storage_layout
 from rollingpebble.services.lrclib_service import LrclibService
 from rollingpebble.services.netease_service import NeteaseService
 from rollingpebble.services.project_service import ProjectService
 from rollingpebble.services.roller_service import RollerService
-from rollingpebble.services.upload_service import UploadService
-from rollingpebble.services.runtime_manager import RuntimeManager
-from rollingpebble.services.runtime_service import RuntimeService
+from rollingpebble.runtime.manager import RuntimeManager
+from rollingpebble.runtime.service import RuntimeService
 from rollingpebble.services.storage_service import StorageService
-from rollingpebble.services.local_dialog import select_local_path
+from rollingpebble.services.upload_service import UploadService
 from rollingpebble.storage.app_settings import SettingsStore
+from rollingpebble.version import app_version
+
+
+def _mount_frontend(app: FastAPI, settings: Settings) -> None:
+    frontend_dist = resolve_frontend_dist(settings)
+    if not frontend_dist or not frontend_dist.exists():
+        return
+
+    assets = frontend_dist / "assets"
+    if assets.exists():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+    favicons = frontend_dist / "favicons"
+    if favicons.exists():
+        app.mount("/favicons", StaticFiles(directory=favicons), name="favicons")
+    worker = frontend_dist / "worker"
+    if worker.exists():
+        app.mount("/worker", StaticFiles(directory=worker), name="worker")
+
+    @app.get("/{full_path:path}")
+    def spa(full_path: str) -> FileResponse:
+        candidate = frontend_dist / full_path
+        if full_path and candidate.exists() and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(frontend_dist / "index.html")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     initial_runtime_settings = SettingsStore(settings.data_dir).read()
     layout = ensure_storage_layout(settings.data_dir, initial_runtime_settings)
+    layout_ref = StorageLayoutRef(layout)
 
     app = FastAPI(title="rollingpebble", version=app_version())
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://127.0.0.1:5173", "http://localhost:5173", f"http://{settings.host}:{settings.port}"],
+        allow_origins=[
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
+            f"http://{settings.host}:{settings.port}",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
 
-    jobs = JobManager()
-    projects = ProjectService(layout.projects_root)
+    jobs = JobManager(work_root=layout.work_root)
+    projects = ProjectService(layout_ref=layout_ref)
     lrclib = LrclibService()
     netease = NeteaseService()
     runtime_manager = RuntimeManager(layout)
-    runtime = RuntimeService(layout=layout, jobs=jobs, manager=runtime_manager)
+    runtime = RuntimeService(layout=layout_ref.current, jobs=jobs, manager=runtime_manager)
     roller = RollerService(
         projects_root=layout.projects_root,
         project_service=projects,
@@ -103,452 +78,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         runtime_manager=runtime_manager,
     )
     upload = UploadService(projects)
-    storage = StorageService(layout=layout, jobs=jobs, runtime_manager=runtime_manager)
+    storage = StorageService(layout=layout_ref.current, jobs=jobs, runtime_manager=runtime_manager)
 
-    def apply_storage_layout(next_layout) -> None:
-        projects.projects_root = next_layout.projects_root
-        roller.projects_root = next_layout.projects_root
-        runtime.update_layout(next_layout)
-        storage.update_layout(next_layout)
+    def apply_storage_layout() -> None:
+        layout_ref.update(storage.layout)
+        roller.projects_root = layout_ref.current.projects_root
+        runtime.update_layout(layout_ref.current)
+        storage.update_layout(layout_ref.current)
 
-    def error_detail(exc: Exception, *, default_code: str = "system.error") -> dict:
-        return message_from_exception(exc, default_code=default_code).model_dump()
-
-    def text_detail(text: str, *, default_code: str = "system.error") -> dict:
-        return message_from_text(text, default_code=default_code).model_dump()
-
-    def raise_http_error(status_code: int, exc: Exception, *, default_code: str = "system.error") -> None:
-        raise HTTPException(status_code=status_code, detail=error_detail(exc, default_code=default_code)) from exc
-
-    def open_folder(folder: Path) -> dict[str, str]:
-        try:
-            system = platform.system().lower()
-            if system == "darwin":
-                subprocess.Popen(["open", str(folder)])
-            elif system == "windows":
-                subprocess.Popen(["explorer", str(folder)])
-            else:
-                subprocess.Popen(["xdg-open", str(folder)])
-            return {"status": "ok", "path": str(folder)}
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=text_detail(f"Could not open folder: {exc}", default_code="system.open_folder_failed")) from exc
-
-    @app.get("/api/health", response_model=HealthResponse)
-    def health() -> HealthResponse:
-        pyok, pyver, pydetail = pylrclib_adapter.dependency_status()
-        runtime_info = runtime.get_auto_roller_runtime()
-        return HealthResponse(
-            ok=True,
-            port=settings.port,
-            data_dir=str(settings.data_dir),
-            pylrclib=HealthDependency(available=pyok, version=pyver, detail=pydetail),
-            pyroller=HealthDependency(available=runtime_info.available, version=runtime_info.version, detail=runtime_info.detail or runtime_info.runtime_status),
-        )
-
-    @app.post("/api/projects", response_model=ProjectModel)
-    async def create_project(audio: UploadFile = File(...)) -> ProjectModel:
-        try:
-            settings = runtime.get_settings()
-            return await projects.create_from_audio(audio, settings=settings)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.get("/api/projects", response_model=list[ProjectModel])
-    def list_projects() -> list[ProjectModel]:
-        return projects.list_projects()
-
-    @app.get("/api/projects/{project_id}", response_model=ProjectModel)
-    def get_project(project_id: str) -> ProjectModel:
-        try:
-            return projects.get(project_id, touch=True)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-
-
-    @app.get("/api/projects/{project_id}/audio")
-    def get_project_audio(project_id: str) -> FileResponse:
-        try:
-            project = projects.get(project_id)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        audio_path = resolve_audio_path(projects.projects_root, project)
-        if not audio_path:
-            raise HTTPException(status_code=404, detail=text_detail("Project has no audio file"))
-        if not audio_path.exists():
-            raise HTTPException(status_code=404, detail=text_detail("Project audio file is missing"))
-        media_type = mimetypes.guess_type(audio_path.name)[0] or "application/octet-stream"
-        return FileResponse(audio_path, filename=project.audio_name or audio_path.name, media_type=media_type)
-
-
-    @app.post("/api/projects/{project_id}/open-folder")
-    def open_project_folder(project_id: str) -> dict[str, str]:
-        try:
-            folder = projects.project_folder(project_id)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        return open_folder(folder)
-
-    @app.post("/api/projects/{project_id}/lyrics", response_model=ProjectModel)
-    def apply_lyrics(project_id: str, request: ApplyLyricsRequest) -> ProjectModel:
-        try:
-            return projects.apply_lyrics(project_id, request)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-
-    @app.post("/api/projects/{project_id}/editor", response_model=ProjectModel)
-    def save_editor(project_id: str, request: SaveEditorRequest) -> ProjectModel:
-        try:
-            return projects.save_editor(project_id, request)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-
-    @app.delete("/api/projects/{project_id}")
-    def delete_project(project_id: str) -> dict[str, str]:
-        try:
-            projects.delete_project(project_id)
-            return {"deleted": project_id}
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-
-    @app.post("/api/lrclib/search", response_model=LrclibSearchResponse)
-    def lrclib_search(request: LrclibSearchRequest) -> LrclibSearchResponse:
-        try:
-            return lrclib.search(request)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/lrclib/get", response_model=LrclibGetResponse)
-    def lrclib_get(request: LrclibGetRequest) -> LrclibGetResponse:
-        try:
-            return lrclib.get_cached_then_external(request)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/lrclib/id", response_model=LyricsRecordModel | None)
-    def lrclib_get_by_id(request: LrclibIdRequest) -> LyricsRecordModel | None:
-        try:
-            return lrclib.get_by_id(request)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/netease/search", response_model=NeteaseSearchResponse)
-    def netease_search(request: NeteaseSongSearchRequest) -> NeteaseSearchResponse:
-        try:
-            return netease.search(request)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/netease/resolve", response_model=NeteaseResolveResponse)
-    def netease_resolve(request: NeteaseResolveRequest) -> NeteaseResolveResponse:
-        try:
-            return netease.resolve(request.value)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.get("/api/netease/lyrics/{song_id}", response_model=NeteaseLyricResponse)
-    def netease_lyrics(song_id: int) -> NeteaseLyricResponse:
-        try:
-            return netease.fetch_lyrics(song_id)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.get("/api/netease/audio/{song_id}")
-    def netease_audio(song_id: int, range: str | None = Header(default=None)) -> StreamingResponse:
-        try:
-            upstream = netease.open_audio(song_id, range_header=range)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-        def stream_audio():
-            try:
-                while True:
-                    chunk = upstream.read(1024 * 256)
-                    if not chunk:
-                        break
-                    yield chunk
-            finally:
-                upstream.close()
-
-        headers: dict[str, str] = {}
-        for source, target in (
-            ("Content-Length", "Content-Length"),
-            ("Content-Range", "Content-Range"),
-            ("Accept-Ranges", "Accept-Ranges"),
-        ):
-            value = upstream.headers.get(source)
-            if value:
-                headers[target] = value
-        media_type = upstream.headers.get_content_type() or "audio/mpeg"
-        return StreamingResponse(stream_audio(), status_code=getattr(upstream, "status", 200), media_type=media_type, headers=headers)
-
-    @app.post("/api/projects/{project_id}/roll/preview", response_model=RollPreviewResponse)
-    def roll_preview(project_id: str, request: RollRequest) -> RollPreviewResponse:
-        try:
-            return roller.preview(project_id, request)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/projects/{project_id}/roll", response_model=JobModel)
-    def roll(project_id: str, request: RollRequest) -> JobModel:
-        try:
-            return roller.roll(project_id, request)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/batch/preview")
-    def batch_preview(request: BatchRollRequest) -> dict:
-        try:
-            return roller.preview_batch(request)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/batch/roll", response_model=JobModel)
-    def batch_roll(request: BatchRollRequest) -> JobModel:
-        try:
-            return roller.run_batch(request)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/jobs/{job_id}/cancel", response_model=JobModel)
-    def cancel_job(job_id: str) -> JobModel:
-        try:
-            return jobs.cancel(job_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=text_detail(f"Job not found: {job_id}")) from exc
-
-    @app.post("/api/jobs/{job_id}/open-folder")
-    def open_job_folder(job_id: str) -> dict[str, str]:
-        try:
-            job = jobs.get(job_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=text_detail(f"Job not found: {job_id}")) from exc
-        if not job.project_id:
-            raise HTTPException(status_code=400, detail=text_detail("This job is not attached to a project folder."))
-        try:
-            folder = projects.project_folder(job.project_id)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        return open_folder(folder)
-
-    @app.get("/api/jobs/{job_id}", response_model=JobModel)
-    def get_job(job_id: str) -> JobModel:
-        try:
-            return jobs.get(job_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail=text_detail(f"Job not found: {job_id}")) from exc
-
-
-    @app.get("/api/settings", response_model=RuntimeSettingsModel)
-    def get_settings() -> RuntimeSettingsModel:
-        return runtime.get_settings()
-
-    @app.post("/api/local/select-path", response_model=LocalPathResponse)
-    def select_path(request: LocalPathRequest) -> LocalPathResponse:
-        try:
-            selected = select_local_path(
-                mode=request.mode,
-                title=request.title,
-                initial_path=request.initial_path,
-            )
-            return LocalPathResponse(path=selected, canceled=not bool(selected))
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-
-    @app.post("/api/settings", response_model=RuntimeSettingsModel)
-    def update_settings(request: RuntimeSettingsUpdateRequest) -> RuntimeSettingsModel:
-        return runtime.update_settings(request)
-
-    @app.post("/api/settings/reset-defaults", response_model=RuntimeSettingsModel)
-    def reset_settings_defaults() -> RuntimeSettingsModel:
-        return runtime.reset_settings_defaults()
-
-    @app.post("/api/settings/workspace-bg")
-    async def upload_workspace_bg(bg: UploadFile = File(...)) -> dict[str, str]:
-        try:
-            path = settings.data_dir / "workspace-bg"
-            path.write_bytes(await bg.read())
-            return {"ok": "true"}
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.delete("/api/settings/workspace-bg")
-    def delete_workspace_bg() -> dict[str, str]:
-        path = settings.data_dir / "workspace-bg"
-        if path.exists():
-            path.unlink()
-        return {"ok": "true"}
-
-    @app.get("/api/settings/workspace-bg")
-    def get_workspace_bg():
-        path = settings.data_dir / "workspace-bg"
-        if not path.exists():
-            repo_root = Path(__file__).resolve().parent.parent.parent
-            for candidate in [
-                resolve_frontend_dist(settings),
-                repo_root / "frontend" / "dist",
-                repo_root / "frontend" / "public",
-            ]:
-                if candidate is None:
-                    continue
-                default_path = candidate / "img" / "rollingpebble-workspace-bg.webp"
-                if default_path.exists():
-                    return FileResponse(default_path, media_type="image/webp")
-            raise HTTPException(status_code=404, detail=text_detail("No background available."))
-        media_type, _ = mimetypes.guess_type(path.name)
-        return FileResponse(
-            path,
-            media_type=media_type or "image/png",
-            headers={"Cache-Control": "no-cache"},
-        )
-
-    @app.get("/api/runtime/auto-roller", response_model=AutoRollerRuntimeResponse)
-    def auto_roller_runtime() -> AutoRollerRuntimeResponse:
-        return runtime.get_auto_roller_runtime()
-
-    @app.post("/api/runtime/auto-roller/doctor", response_model=JobModel)
-    def run_auto_roller_doctor() -> JobModel:
-        try:
-            return runtime.run_doctor()
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/runtime/auto-roller/install", response_model=JobModel)
-    def run_auto_roller_install(request: RuntimeInstallRequest) -> JobModel:
-        try:
-            return runtime.run_install(request)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/runtime/auto-roller/upgrade", response_model=JobModel)
-    def run_auto_roller_upgrade(request: RuntimeUpgradeRequest) -> JobModel:
-        try:
-            return runtime.run_upgrade(request)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/runtime/auto-roller/cache-model", response_model=JobModel)
-    def run_auto_roller_cache_model(request: ModelCacheRequest) -> JobModel:
-        try:
-            return runtime.run_cache_model(request)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/projects/{project_id}/upload/plan", response_model=UploadPlanResponse)
-    def upload_plan(project_id: str, request: UploadPlanRequest) -> UploadPlanResponse:
-        try:
-            return upload.plan(project_id, request)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/projects/{project_id}/upload/run", response_model=UploadRunResponse)
-    def upload_run(project_id: str, request: UploadRunRequest) -> UploadRunResponse:
-        try:
-            return upload.run(project_id, request)
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-
-
-    @app.post("/api/storage/projects/open-folder")
-    def open_projects_folder() -> dict[str, str]:
-        folder = storage.layout.projects_root
-        folder.mkdir(parents=True, exist_ok=True)
-        return open_folder(folder)
-
-    @app.post("/api/storage/open-folder")
-    def open_storage_folder() -> dict[str, str]:
-        folder = storage.layout.app_root
-        folder.mkdir(parents=True, exist_ok=True)
-        return open_folder(folder)
-
-    @app.get("/api/storage/usage", response_model=StorageUsageResponse)
-    def storage_usage() -> StorageUsageResponse:
-        return storage.usage()
-
-    @app.post("/api/storage/migrate-root", response_model=StorageMigrateRootResponse)
-    def storage_migrate_root(request: StorageMigrateRootRequest) -> StorageMigrateRootResponse:
-        try:
-            result = storage.migrate_root(request.root_id, request.target_path)
-            apply_storage_layout(storage.layout)
-            return result
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/storage/models/open-folder")
-    def open_model_folder(request: StorageOpenModelRequest) -> dict[str, str]:
-        try:
-            return open_folder(storage.model_item_path(request.model_id))
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/storage/runtimes/open-folder")
-    def open_runtime_folder(request: StorageOpenRuntimeRequest) -> dict[str, str]:
-        try:
-            return open_folder(storage.runtime_item_path(request.runtime_id))
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/storage/other/open-folder")
-    def open_other_folder(request: StorageOpenOtherRequest) -> dict[str, str]:
-        try:
-            return open_folder(storage.other_item_open_path(request.relative_path))
-        except FileNotFoundError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/storage/cleanup/preview", response_model=StorageCleanupPlanResponse)
-    def storage_cleanup_preview(request: StorageCleanupPreviewRequest) -> StorageCleanupPlanResponse:
-        try:
-            return storage.preview(request)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    @app.post("/api/storage/cleanup/run", response_model=StorageCleanupRunResponse)
-    def storage_cleanup_run(request: StorageCleanupRunRequest) -> StorageCleanupRunResponse:
-        try:
-            return storage.run(request)
-        except KeyError as exc:
-            raise_http_error(404, exc)
-        except Exception as exc:
-            raise_http_error(400, exc)
-
-    frontend_dist = resolve_frontend_dist(settings)
-    if frontend_dist and frontend_dist.exists():
-        assets = frontend_dist / "assets"
-        if assets.exists():
-            app.mount("/assets", StaticFiles(directory=assets), name="assets")
-        favicons = frontend_dist / "favicons"
-        if favicons.exists():
-            app.mount("/favicons", StaticFiles(directory=favicons), name="favicons")
-        worker = frontend_dist / "worker"
-        if worker.exists():
-            app.mount("/worker", StaticFiles(directory=worker), name="worker")
-
-        @app.get("/{full_path:path}")
-        def spa(full_path: str) -> FileResponse:
-            candidate = frontend_dist / full_path
-            if full_path and candidate.exists() and candidate.is_file():
-                return FileResponse(candidate)
-            return FileResponse(frontend_dist / "index.html")
-
+    include_api_routes(
+        app,
+        AppServices(
+            settings=settings,
+            jobs=jobs,
+            projects=projects,
+            lrclib=lrclib,
+            netease=netease,
+            runtime=runtime,
+            roller=roller,
+            upload=upload,
+            storage=storage,
+            apply_storage_layout=apply_storage_layout,
+        ),
+    )
+    _mount_frontend(app, settings)
     return app
 
 

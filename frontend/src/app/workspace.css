@@ -1,0 +1,11 @@
+.workspace-shell {
+    --workspace-rail-width: clamp(280px, 24vw, 380px);
+}
+
+.workspace-rail {
+    min-width: 0;
+}
+
+.lyrics-workspace {
+    min-width: 0;
+}

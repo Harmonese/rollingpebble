@@ -1,0 +1,7 @@
+from __future__ import annotations
+
+from rollingpebble.runtime.recipe import DEFAULT_RUNTIME_RECIPE
+
+PYROLLER_RUNTIME_SPEC = DEFAULT_RUNTIME_RECIPE.pyroller_spec
+PYROLLER_RUNTIME_SUPPORT_SPECS = DEFAULT_RUNTIME_RECIPE.support_specs
+PYROLLER_EVENT_PREFIX = DEFAULT_RUNTIME_RECIPE.event_prefix
