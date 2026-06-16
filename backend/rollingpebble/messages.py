@@ -12,8 +12,8 @@ class AppError(Exception):
         self.message = MessageModel(code=code, params=params or {}, fallback=fallback or code)
 
 
-def msg(code: str, fallback: str = "", **params: Any) -> MessageModel:
-    return MessageModel(code=code, params=params, fallback=fallback or code)
+def msg(message_code: str, fallback: str = "", **params: Any) -> MessageModel:
+    return MessageModel(code=message_code, params=params, fallback=fallback or message_code)
 
 
 _EXACT_CODES: dict[str, str] = {
@@ -114,6 +114,9 @@ def message_from_text(text: str, *, default_code: str = "system.error") -> Messa
     command_match = re.match(r"^Command exited with code (?P<code>\d+)$", text)
     if command_match:
         return msg("job.command_exited", text, code=command_match.group("code"))
+    runtime_ready_match = re.match(r"^Runtime ready: (?P<runtime_id>.+)$", text)
+    if runtime_ready_match:
+        return msg("runtime.ready_with_id", text, id=runtime_ready_match.group("runtime_id"))
     cleanup_match = re.match(r"^Cleanup plan not found or expired: (?P<plan_id>.+)$", text)
     if cleanup_match:
         return msg("storage.cleanup.plan_missing", text, plan_id=cleanup_match.group("plan_id"))

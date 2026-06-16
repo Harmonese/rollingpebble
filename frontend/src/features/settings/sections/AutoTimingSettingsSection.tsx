@@ -153,6 +153,8 @@ export const AutoTimingSettingsSection: React.FC<{
                         upgradedTo: t.runtime.upgradedTo,
                         upgraded: t.runtime.upgraded,
                         cacheModelDone: t.runtime.cacheModelDone,
+                        doctorHealthy: t.runtime.doctorHealthy,
+                        doctorHealthyWithChecks: t.runtime.doctorHealthyWithChecks,
                     }}
                     backendMessages={lang.backendMessages}
                 />

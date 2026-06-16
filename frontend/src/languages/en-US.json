@@ -294,6 +294,8 @@
       "installAudio": "Install audio requirements",
       "validate": "Validate runtime profile",
       "doctor": "Runtime Check",
+      "doctorHealthy": "Runtime is healthy.",
+      "doctorHealthyWithChecks": "Runtime is healthy. {count} checks passed.",
       "taskFailed": "Runtime task failed.",
       "noOutput": "No output recently. pip may still be downloading, resolving, or installing packages. The process is still running.",
       "taskComplete": "Task complete.",
@@ -614,7 +616,18 @@
     "unsupportedAudioFile": "Unsupported audio file.",
     "audioDecodeWorkerFailed": "Audio decode worker failed.",
     "segmentsUnit": "{n} segments",
-    "jobSummary": "Job {status}"
+    "jobSummary": "Job {status}",
+    "progressUnits": {
+      "phase": "phases",
+      "step": "steps",
+      "task": "tasks",
+      "percent": "%"
+    },
+    "modelSource": "Model source",
+    "localCacheOnly": "Using local cache only",
+    "modelDownloadChecking": "Checking/downloading model cache",
+    "modelCacheReady": "Model cache ready: {repo}",
+    "modelCacheDownloading": "Downloading model cache: {repo}"
   },
   "about": {
     "kicker": "About",
@@ -787,6 +800,7 @@
     "storage.migration.unknown_root": "Unknown storage root: {root_id}.",
     "job.task_complete": "Task complete.",
     "runtime.ready": "Runtime ready.",
+    "runtime.ready_with_id": "Runtime ready: {id}.",
     "auto_timing.complete": "Automatic timing complete.",
     "auto_timing.missing_artifact_full_pipeline": "Missing {name}. Run a full pipeline first.",
     "auto_timing.output_missing": "Auto Timing did not create {path}.",

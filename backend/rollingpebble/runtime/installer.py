@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -35,6 +36,16 @@ def _runtime_id(profile: str, python_tag: str) -> str:
 
 def _venv_python(venv: Path) -> Path:
     return runtime_python_path(venv)
+
+
+def _remove_incomplete_venv(venv: Path) -> None:
+    if not venv.exists() and not venv.is_symlink():
+        return
+    print(f"Removing incomplete virtual environment: {venv}", flush=True)
+    if venv.is_symlink() or venv.is_file():
+        venv.unlink()
+        return
+    shutil.rmtree(venv)
 
 
 def _run(command: list[str], *, env: dict[str, str] | None = None) -> None:
@@ -139,6 +150,7 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
     env: dict[str, str] | None = None
     try:
         if not python.exists():
+            _remove_incomplete_venv(venv)
             _run([runtime_python.executable, "-m", "venv", str(venv)])
         else:
             print(f"Reusing existing virtual environment: {venv}", flush=True)

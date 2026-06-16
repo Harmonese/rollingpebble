@@ -7,6 +7,7 @@ import {
     progressMessage,
     progressStageLabel,
     stageStatus,
+    unitLabel,
 } from "./rollerProgress.js";
 
 export const JobProgress: React.FC<{
@@ -25,7 +26,7 @@ export const JobProgress: React.FC<{
         queued: u.statusQueued,
         running: u.statusRunning,
         preflight: u.modelPreflight,
-        modelDownload: u.modelDownload,
+        model_download: u.modelDownload,
         splitter: u.splitter,
         filter: u.filtering,
         transcriber: u.transcription,
@@ -60,10 +61,21 @@ export const JobProgress: React.FC<{
                         waiting: u.progressWaiting,
                         working: u.progressWorking,
                         segmentsUnit: u.segmentsUnit,
+                        complete: u.complete,
+                        stageLabels,
+                        modelSource: u.modelSource,
+                        localCacheOnly: u.localCacheOnly,
+                        modelDownloadChecking: u.modelDownloadChecking,
+                        modelCacheReady: u.modelCacheReady,
+                        modelCacheDownloading: u.modelCacheDownloading,
                         backendMessages: lang.backendMessages,
                     })}
                 </span>
-                {progress && progress.total > 0 && <em>{progress.completed}/{progress.total} {progress.unit}</em>}
+                {progress && progress.total > 0 && (
+                    <em>
+                        {progress.completed}/{progress.total} {unitLabel(progress.unit, u.progressUnits)}
+                    </em>
+                )}
             </div>
             {progress?.cache_dir && <MutedText className="progress-cache">Cache: {progress.cache_dir}</MutedText>}
             <ol className="studio-stage-list">

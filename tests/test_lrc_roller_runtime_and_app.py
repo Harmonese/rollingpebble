@@ -95,8 +95,40 @@ def test_runtime_install_module_installs_socks_support_package(tmp_path: Path, m
 
     installer.install_runtime(tmp_path, "auto", skip_doctor=True)
 
-    assert any("py-roller>=0.8.1,<0.9" in command for command in commands)
+    assert any("py-roller>=0.8.2,<0.9" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
+
+
+def test_runtime_install_recreates_incomplete_managed_venv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from rollingpebble.runtime import installer
+
+    runtime_python = installer.select_runtime_python()
+    venv = tmp_path / "envs" / installer._runtime_id("auto", runtime_python.tag) / ".venv"
+    broken_marker = venv / "bin" / "python3.12"
+    broken_marker.parent.mkdir(parents=True)
+    broken_marker.symlink_to(tmp_path / "missing-python3.12")
+
+    commands: list[list[str]] = []
+
+    def fake_run(command: list[str], *, env: dict[str, str] | None = None) -> None:
+        commands.append(command)
+        if command[:3] == [runtime_python.executable, "-m", "venv"]:
+            python = installer._venv_python(venv)
+            python.parent.mkdir(parents=True, exist_ok=True)
+            python.write_text("", encoding="utf-8")
+
+    def fake_run_json(command: list[str], *, env: dict[str, str] | None = None) -> dict:
+        commands.append(command)
+        return {"ok": True}
+
+    monkeypatch.setattr(installer, "_run", fake_run)
+    monkeypatch.setattr(installer, "_run_json", fake_run_json)
+    monkeypatch.setattr(installer, "_pyroller_version", lambda python, env: "0.8.2")
+
+    installer.install_runtime(tmp_path, "auto", skip_doctor=True)
+
+    assert not broken_marker.exists()
+    assert any(command[:3] == [runtime_python.executable, "-m", "venv"] for command in commands)
 
 
 def test_runtime_dependency_recipe_keeps_pyroller_and_support_specs_together() -> None:
@@ -104,7 +136,7 @@ def test_runtime_dependency_recipe_keeps_pyroller_and_support_specs_together() -
 
     commands = DEFAULT_RUNTIME_RECIPE.dependency_install_commands(Path("/runtime/.venv/bin/python"))
 
-    assert any("py-roller>=0.8.1,<0.9" in command for command in commands)
+    assert any("py-roller>=0.8.2,<0.9" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
 
 
@@ -145,7 +177,7 @@ def test_runtime_dependency_upgrade_runner_uses_recipe(tmp_path: Path, monkeypat
 
     dependencies.upgrade_dependencies(tmp_path, venv)
 
-    assert any("py-roller>=0.8.1,<0.9" in command for command in commands)
+    assert any("py-roller>=0.8.2,<0.9" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
 
 
@@ -439,6 +471,26 @@ def test_api_errors_include_i18n_message_descriptor(tmp_path: Path) -> None:
     job_detail = job_response.json()["detail"]
     assert job_detail["code"] == "job.not_found"
     assert job_detail["params"]["job_id"] == "missing-job"
+
+
+def test_command_exit_message_descriptor_keeps_exit_code_param() -> None:
+    from rollingpebble.messages import message_from_text
+
+    message = message_from_text("Command exited with code 1")
+
+    assert message.code == "job.command_exited"
+    assert message.params == {"code": "1"}
+    assert message.fallback == "Command exited with code 1"
+
+
+def test_runtime_ready_message_descriptor_keeps_runtime_id_param() -> None:
+    from rollingpebble.messages import message_from_text
+
+    message = message_from_text("Runtime ready: pyroller-py312-auto")
+
+    assert message.code == "runtime.ready_with_id"
+    assert message.params == {"id": "pyroller-py312-auto"}
+    assert message.fallback == "Runtime ready: pyroller-py312-auto"
 
 
 def test_settings_reset_defaults_preserves_runtime_history(tmp_path: Path) -> None:

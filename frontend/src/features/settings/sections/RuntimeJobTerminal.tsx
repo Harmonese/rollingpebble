@@ -11,6 +11,11 @@ type RuntimeStep = {
     message: string;
 };
 
+const RUNTIME_INSTALL_KINDS = new Set(["auto-roller-runtime-install"]);
+const RUNTIME_UPGRADE_KINDS = new Set(["auto-roller-runtime-upgrade"]);
+const RUNTIME_CACHE_MODEL_KINDS = new Set(["auto-roller-runtime-cache-model"]);
+const RUNTIME_DOCTOR_KINDS = new Set(["auto-roller-doctor"]);
+
 function titleFromKey(key: string): string {
     return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
@@ -71,7 +76,7 @@ function buildRuntimeSteps(job: JobModel | null): RuntimeStep[] {
 }
 
 function doctorCheckSteps(job: JobModel | null): RuntimeStep[] {
-    if (!job || job.kind !== "auto-studio-doctor") return [];
+    if (!job || !RUNTIME_DOCTOR_KINDS.has(job.kind)) return [];
     const report = job.result?.doctor_report;
     if (!report || typeof report !== "object" || !Array.isArray((report as { checks?: unknown }).checks)) return [];
     return (report as { checks: unknown[] }).checks.filter((item): item is Record<string, unknown> =>
@@ -110,32 +115,50 @@ function runtimeJobErrorText(error: string | null | undefined, tr: Record<string
 }
 
 function runtimeJobTitle(job: JobModel, labels: Record<string, string>): string {
-    if (job.kind === "auto-studio-runtime-install") return labels.install || "Create / Repair Runtime";
-    if (job.kind === "auto-studio-runtime-upgrade") return labels.upgrade || "Upgrade py-roller";
-    if (job.kind === "auto-studio-runtime-cache-model") return labels.cacheModel || "Pre-download Model";
-    if (job.kind === "auto-studio-doctor") return labels.doctor || "Runtime Check";
+    if (RUNTIME_INSTALL_KINDS.has(job.kind)) return labels.install || "Create / Repair Runtime";
+    if (RUNTIME_UPGRADE_KINDS.has(job.kind)) return labels.upgrade || "Upgrade py-roller";
+    if (RUNTIME_CACHE_MODEL_KINDS.has(job.kind)) return labels.cacheModel || "Pre-download Model";
+    if (RUNTIME_DOCTOR_KINDS.has(job.kind)) return labels.doctor || "Runtime Check";
     return job.kind;
+}
+
+function doctorSummary(job: JobModel, msg: { doctorHealthy: string; doctorHealthyWithChecks: string }): string {
+    const report = job.result?.doctor_report;
+    if (!report || typeof report !== "object") return msg.doctorHealthy;
+    const checks = (report as { checks?: unknown }).checks;
+    if (!Array.isArray(checks)) return msg.doctorHealthy;
+    return msg.doctorHealthyWithChecks.replace("{count}", String(checks.length));
 }
 
 function runtimeCompletionMessage(
     job: JobModel,
-    msg: { taskComplete: string; runtimeReady: string; upgradedTo: string; upgraded: string; cacheModelDone: string },
+    msg: {
+        taskComplete: string;
+        runtimeReady: string;
+        upgradedTo: string;
+        upgraded: string;
+        cacheModelDone: string;
+        doctorHealthy: string;
+        doctorHealthyWithChecks: string;
+    },
+    backendMessages: Record<string, string | undefined>,
 ): string {
     const result = job.result || {};
-    if (job.kind === "auto-studio-runtime-install" && typeof result.runtime_id === "string") {
+    if (RUNTIME_INSTALL_KINDS.has(job.kind) && typeof result.runtime_id === "string") {
         return msg.runtimeReady.replace("{id}", result.runtime_id);
     }
-    if (job.kind === "auto-studio-runtime-upgrade") {
+    if (RUNTIME_UPGRADE_KINDS.has(job.kind)) {
         if (typeof result.new_version === "string" && result.new_version) {
             return msg.upgradedTo.replace("{version}", result.new_version);
         }
         return msg.upgraded;
     }
-    if (job.kind === "auto-studio-runtime-cache-model") {
+    if (RUNTIME_CACHE_MODEL_KINDS.has(job.kind)) {
         return msg.cacheModelDone;
     }
-    if (job.kind === "auto-studio-doctor") return "";
-    return job.progress?.message || msg.taskComplete;
+    if (RUNTIME_DOCTOR_KINDS.has(job.kind)) return doctorSummary(job, msg);
+    if (job.progress?.message_message) return backendMessageText(job.progress.message_message, backendMessages);
+    return msg.taskComplete;
 }
 
 export const RuntimeJobTerminal: React.FC<{
@@ -150,6 +173,8 @@ export const RuntimeJobTerminal: React.FC<{
         upgradedTo: string;
         upgraded: string;
         cacheModelDone: string;
+        doctorHealthy: string;
+        doctorHealthyWithChecks: string;
     };
     backendMessages: Record<string, string | undefined>;
 }> = ({ job, elapsed, lastOutput, tr, jobLabels, jobMsg, backendMessages }) => {
@@ -157,6 +182,7 @@ export const RuntimeJobTerminal: React.FC<{
     const steps = buildRuntimeSteps(job);
     const checks = doctorCheckSteps(job);
     const rawLog = job.logs.join("\n") || job.command.join(" ");
+    const successMessage = job.status === "succeeded" ? runtimeCompletionMessage(job, jobMsg, backendMessages) : "";
     return (
         <div className="settings-job-terminal">
             <div className="settings-job-header">
@@ -178,8 +204,8 @@ export const RuntimeJobTerminal: React.FC<{
                 <b>{tr.exitCode}</b>
                 <span>{job.return_code ?? tr.na}</span>
             </KeyValueList>
-            {job.status === "succeeded" && runtimeCompletionMessage(job, jobMsg) && (
-                <MessageText type="success">{runtimeCompletionMessage(job, jobMsg)}</MessageText>
+            {successMessage && (
+                <MessageText type="success">{successMessage}</MessageText>
             )}
             {job.status === "failed" && (
                 <MessageText type="error">

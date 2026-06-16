@@ -1,5 +1,7 @@
 import json
 import sys
+import importlib.metadata
+import re
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,7 @@ from rollingpebble.models import BatchRollRequest, JobModel, JobStatus, RollRequ
 from rollingpebble.runtime.reports import final_report_or_plain_json, protocol_status_ok, report_artifact_paths
 
 PYROLLER_SOURCE = Path("/Users/xuzihao/Main/03 Developer Files/py-roller")
+PYROLLER_VERSION_RE = re.compile(r'^version\s*=\s*"([^"]+)"', re.MULTILINE)
 
 
 def _request_payload(command: list[str]) -> dict:
@@ -17,12 +20,27 @@ def _request_payload(command: list[str]) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _local_pyroller_protocol():
+def _local_pyroller_version() -> str:
+    pyproject = PYROLLER_SOURCE / "pyproject.toml"
+    match = PYROLLER_VERSION_RE.search(pyproject.read_text(encoding="utf-8")) if pyproject.exists() else None
+    return match.group(1) if match else "0.0.0"
+
+
+def _local_pyroller_protocol(monkeypatch: pytest.MonkeyPatch):
     if not PYROLLER_SOURCE.exists():
         pytest.skip(f"local py-roller source not found: {PYROLLER_SOURCE}")
     previous_modules = {name: module for name, module in sys.modules.items() if name == "pyroller" or name.startswith("pyroller.")}
     for name in previous_modules:
         sys.modules.pop(name, None)
+
+    original_version = importlib.metadata.version
+
+    def version_with_local_pyroller(name: str) -> str:
+        if name == "py-roller":
+            return _local_pyroller_version()
+        return original_version(name)
+
+    monkeypatch.setattr(importlib.metadata, "version", version_with_local_pyroller)
     sys.path.insert(0, str(PYROLLER_SOURCE))
     try:
         import pyroller.protocol as protocol
@@ -138,7 +156,7 @@ def test_build_batch_command_can_use_isolated_runtime_model_store(tmp_path: Path
     assert Path(command[command.index("--request") + 1]) == request_dir / "request.json"
 
 
-def test_generated_run_request_is_accepted_by_local_pyroller_protocol(tmp_path: Path) -> None:
+def test_generated_run_request_is_accepted_by_local_pyroller_protocol(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     command = build_pyroller_command(
         audio_path=Path("/song/audio.mp3"),
         lyrics_path=Path("/song/plain.txt"),
@@ -149,7 +167,7 @@ def test_generated_run_request_is_accepted_by_local_pyroller_protocol(tmp_path: 
         request_dir=tmp_path / "job",
     )
     payload = _request_payload(command)
-    protocol, previous_modules = _local_pyroller_protocol()
+    protocol, previous_modules = _local_pyroller_protocol(monkeypatch)
     try:
         parsed = protocol.pipeline_request_from_dict(payload)
         report = protocol.protocol_envelope(
@@ -170,7 +188,7 @@ def test_generated_run_request_is_accepted_by_local_pyroller_protocol(tmp_path: 
     assert report_artifact_paths(report)["roller"] == "/song/pyroller_output.lrc"
 
 
-def test_generated_batch_request_is_accepted_by_local_pyroller_protocol(tmp_path: Path) -> None:
+def test_generated_batch_request_is_accepted_by_local_pyroller_protocol(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     request_dir = tmp_path / "job"
     command, request_text, manifest_text = build_pyroller_batch_command(
         BatchRollRequest(stages="p,a,w", language="mul", writer_backend="lrc_ms", project_ids=["one"], continue_on_error=True),
@@ -178,7 +196,7 @@ def test_generated_batch_request_is_accepted_by_local_pyroller_protocol(tmp_path
         request_dir=request_dir,
         default_model_store="/models/transcriber",
     )
-    protocol, previous_modules = _local_pyroller_protocol()
+    protocol, previous_modules = _local_pyroller_protocol(monkeypatch)
     try:
         parsed = protocol.batch_request_from_json(Path(command[command.index("--request") + 1]))
     finally:

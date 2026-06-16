@@ -23,6 +23,8 @@
     "build": "tsc --noEmit -p tsconfig.json && vite build",
     "fix:fmt": "dprint fmt",
     "check:fmt": "dprint check",
+    "check:i18n": "node scripts/check-i18n-coverage.mjs",
+    "check:i18n:zh": "node scripts/check-i18n-coverage.mjs --locales zh-CN,zh-HK,zh-TW",
     "check:lint": "oxlint src -D correctness",
     "check:type": "tsc --noEmit -p tsconfig.json"
   },
