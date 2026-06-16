@@ -95,7 +95,7 @@ def test_runtime_install_module_installs_socks_support_package(tmp_path: Path, m
 
     installer.install_runtime(tmp_path, "auto", skip_doctor=True)
 
-    assert any("py-roller>=0.8.2,<0.9" in command for command in commands)
+    assert any("py-roller>=0.8.3,<0.9" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
 
 
@@ -136,7 +136,7 @@ def test_runtime_dependency_recipe_keeps_pyroller_and_support_specs_together() -
 
     commands = DEFAULT_RUNTIME_RECIPE.dependency_install_commands(Path("/runtime/.venv/bin/python"))
 
-    assert any("py-roller>=0.8.2,<0.9" in command for command in commands)
+    assert any("py-roller>=0.8.3,<0.9" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
 
 
@@ -177,7 +177,7 @@ def test_runtime_dependency_upgrade_runner_uses_recipe(tmp_path: Path, monkeypat
 
     dependencies.upgrade_dependencies(tmp_path, venv)
 
-    assert any("py-roller>=0.8.2,<0.9" in command for command in commands)
+    assert any("py-roller>=0.8.3,<0.9" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
 
 

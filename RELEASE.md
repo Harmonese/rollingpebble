@@ -4,13 +4,13 @@ This project releases through GitHub Releases. Publishing a GitHub Release trigg
 
 ## Version
 
-Current release target: `v0.6.3`
+Current release target: `v0.7.0`
 
 Before tagging:
 
 1. Confirm `pyproject.toml` has the target version.
 2. Update `CHANGELOG.md`.
-3. Run the frontend and backend checks.
+3. Run the frontend, backend, and packaging checks.
 4. Create and push the git tag.
 5. Publish the GitHub Release.
 6. Confirm the PyPI workflow succeeds.
@@ -18,13 +18,15 @@ Before tagging:
 ## Verify
 
 ```bash
+pnpm -C frontend check:i18n:zh
 pnpm -C frontend check:type
 pnpm -C frontend check:lint
 pnpm -C frontend build
-python -m compileall backend/rollingpebble
+.venv/bin/ruff check backend tests
+.venv/bin/python -m pytest -q
 ```
 
-If backend tests are added, run them before tagging.
+`pnpm -C frontend check:i18n` audits every locale. It may report historical untranslated non-Chinese strings; `check:i18n:zh` is the release gate for the current Chinese UI path.
 
 ## Build Artifacts
 
@@ -37,13 +39,13 @@ pnpm -C frontend build
 rm -rf backend/rollingpebble/frontend_dist
 mkdir -p backend/rollingpebble/frontend_dist
 cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
-python -m build
+.venv/bin/python -m build
 ```
 
 Expected files in `dist/`:
 
-- `rollingpebble-0.6.3-py3-none-any.whl`
-- `rollingpebble-0.6.3.tar.gz`
+- `rollingpebble-0.7.0-py3-none-any.whl`
+- `rollingpebble-0.7.0.tar.gz`
 
 ## PyPI Publishing
 
@@ -67,7 +69,7 @@ PyPI must be configured with a trusted publisher for this repository and the `py
 python -m venv /tmp/rollingpebble-release-test
 . /tmp/rollingpebble-release-test/bin/activate
 python -m pip install -U pip
-python -m pip install dist/rollingpebble-0.6.3-py3-none-any.whl
+python -m pip install dist/rollingpebble-0.7.0-py3-none-any.whl
 rollingpebble --help
 rollingpebble doctor
 ```
@@ -83,9 +85,9 @@ Open `http://127.0.0.1:6790`.
 ## Tag
 
 ```bash
-git tag -a v0.6.3 -m "Release v0.6.3"
+git tag -a v0.7.0 -m "Release v0.7.0"
 git push origin main
-git push origin v0.6.3
+git push origin v0.7.0
 ```
 
 ## GitHub Release Notes
@@ -93,20 +95,23 @@ git push origin v0.6.3
 Title:
 
 ```text
-Rolling Pebble v0.6.3
+Rolling Pebble v0.7.0
 ```
 
 Body:
 
 ```markdown
-Desktop packaging and Auto Timing cache reliability release for Rolling Pebble.
+Boundary cleanup and runtime stability release for Rolling Pebble.
 
 Highlights:
 
-- Added MIT license and Tauri desktop packaging prototype.
-- Added macOS `.app`/`.dmg` packaging with bundled Python sidecar backend.
-- Fixed Auto Timing model pre-download to use the same managed model store and download settings as normal py-roller runs.
-- Added README project icon branding and a stable Python 3.10+ badge.
+- Cleaned up frontend boundaries across app, domain, features, ui, shared, and API modules.
+- Cleaned up backend runtime, service, storage, adapter, and API boundaries and removed obsolete runtime shims.
+- Hardened the py-roller protocol v1 integration with request/report contract tests.
+- Raised the isolated Auto Timing runtime requirement to py-roller>=0.8.3,<0.9.
+- Fixed isolated runtime repair for incomplete managed virtual environments.
+- Improved localized runtime and Auto Timing progress messages, including runtime check success details.
+- Added a Chinese i18n release gate for catching untranslated runtime/progress strings.
 
 Install from PyPI:
 
@@ -125,4 +130,5 @@ Notes:
 
 - Auto Timing creates an isolated py-roller runtime under the Rolling Pebble data directory.
 - Large model downloads are managed separately from runtime environments.
+- The packaged WebUI is included in the Python wheel and source distribution.
 ```

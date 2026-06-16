@@ -4,6 +4,30 @@ All notable changes to this project will be documented in this file.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses Semantic Versioning.
 
+## [0.7.0] - 2026-06-16
+
+### Added
+
+- Added py-roller protocol v1 contract coverage so Rolling Pebble generated run and batch requests are validated against the local py-roller parser.
+- Added backend OpenAPI contract coverage for the frontend shared API routes used by settings, projects, Auto Timing, jobs, runtime, storage, and upload flows.
+- Added a frontend i18n coverage checker with a Chinese-path release gate for catching untranslated Auto Timing/runtime progress labels.
+
+### Changed
+
+- Raised the isolated Auto Timing runtime requirement to `py-roller>=0.8.3,<0.9`.
+- Reworked frontend boundaries around `app/`, `domain/`, `features/`, `ui/`, and `shared/`, removing legacy naming and old component-bucket imports.
+- Reworked backend boundaries around `api/`, `services/`, `runtime/`, `storage/`, and `adapters/`, removing obsolete runtime compatibility shims.
+- Hardened the Rolling Pebble to py-roller integration so the backend emits protocol v1 JSON requests instead of falling back to older CLI flag shapes.
+- Improved runtime job terminal handling for install, upgrade, doctor, and model-cache jobs with localized structured messages.
+
+### Fixed
+
+- Fixed isolated runtime creation after an incomplete or broken managed virtual environment by rebuilding the managed `.venv` before installing dependencies.
+- Fixed runtime check success rendering so successful doctor reports show runtime health details instead of only a generic success label.
+- Fixed untranslated runtime completion messages such as `Runtime ready: ...`, `Task complete`, command exits, and Auto Timing progress stage labels.
+- Fixed the Settings runtime warning layout so the warning icon stays inside the message box.
+- Fixed packaging metadata so source distributions include the built frontend from `backend/rollingpebble/frontend_dist` instead of the old package path.
+
 ## [0.6.3] - 2026-05-21
 
 ### Added
