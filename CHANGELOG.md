@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and this project uses Semantic Versioning.
 
+## [Unreleased]
+
+## [0.7.1] - 2026-10-08
+
+### Added
+
+- Bundled standalone Python 3.12.15 in the macOS Apple Silicon desktop app. Settings can create or repair the isolated runtime without system Python or Homebrew.
+- Added a dedicated standalone-Python sidecar build environment and an audit of arm64 deployment targets and non-system absolute library dependencies.
+
+### Changed
+
+- Updated the isolated Auto Timing runtime requirement to `py-roller>=0.9.0,<0.10`.
+- Updated single and batch protocol requests for py-roller 0.9, including stage-specific configuration and top-level lyrics encoding.
+- Rebuilt the frontend and backend sidecar for every desktop release; keep py-roller, audio dependencies, and model caches outside the app bundle.
+- Copy the bundled interpreter into the user data directory before creating the runtime, keeping environments independent of the app installation path.
+- Declared macOS 11 as the arm64 binary deployment target; older macOS dependency compatibility still requires separate validation.
+
+### Fixed
+
+- Fixed frozen-app installer dispatch and bundled resource discovery.
+- Constrained PyAV to `>=11,<19` during installation, repair, and upgrades to avoid the removed `metadata_errors` argument used by faster-whisper.
+- Preserved nested install/doctor JSON reports and long protocol output lines instead of losing diagnostic and quality reports.
+- Stop the desktop backend process group on normal app shutdown.
+
+### Distribution Notes
+
+- The macOS DMG is ad-hoc signed, not Developer ID signed or Apple-notarized. Gatekeeper may prevent first launch on another Mac.
+- Environment installation and model downloads require network access. Configure an HTTP/SOCKS proxy in Settings when the model host is unreachable.
+- Model pre-download caches the selected transcriber model. Full processing can additionally download Demucs on its first run.
+
 ## [0.7.0] - 2026-06-16
 
 ### Added

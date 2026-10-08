@@ -12,6 +12,15 @@ class RuntimeDependencyRecipe:
     support_specs: tuple[str, ...]
     bootstrap_specs: tuple[str, ...]
     event_prefix: str
+    constraints: tuple[str, ...] = ()
+
+    def constrained_env(self, env: dict[str, str], runtime_root: Path) -> dict[str, str]:
+        if not self.constraints:
+            return env
+        runtime_root.mkdir(parents=True, exist_ok=True)
+        path = runtime_root / "rollingpebble-constraints.txt"
+        path.write_text("\n".join(self.constraints) + "\n", encoding="utf-8")
+        return {**env, "PIP_CONSTRAINT": str(path.resolve())}
 
     def source_from_env(self, env: Mapping[str, str] | None = None) -> str | None:
         source = (env or os.environ).get("LRC_ROLLER_PYROLLER_SOURCE", "").strip()
@@ -54,8 +63,10 @@ class RuntimeDependencyRecipe:
 
 
 DEFAULT_RUNTIME_RECIPE = RuntimeDependencyRecipe(
-    pyroller_spec="py-roller>=0.8.3,<0.9",
-    support_specs=("PySocks>=1.7.1",),
+    pyroller_spec="py-roller>=0.9.0,<0.10",
+    support_specs=("PySocks>=1.7.1", "av>=11,<19"),
     bootstrap_specs=("pip", "setuptools", "wheel"),
     event_prefix="PYROLLER_EVENT ",
+    # faster-whisper 1.2.1 uses metadata_errors, removed by PyAV 19.
+    constraints=("av>=11,<19",),
 )

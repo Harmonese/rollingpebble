@@ -16,6 +16,7 @@ def _run(command: list[str], *, env: dict[str, str]) -> None:
 def upgrade_dependencies(data_dir: Path, venv: Path) -> None:
     python = runtime_python_path(venv)
     env = build_runtime_env(venv, data_dir, include_dev=True)
+    env = DEFAULT_RUNTIME_RECIPE.constrained_env(env, venv.parent)
     source = DEFAULT_RUNTIME_RECIPE.source_from_env()
     print(
         f"Installing/upgrading py-roller runtime package: {DEFAULT_RUNTIME_RECIPE.source_label(source)}",

@@ -31,7 +31,23 @@ It gives you a browser-based interface backed by a local Python server. Your pro
 
 ## Install
 
-Rolling Pebble requires Python 3.10 or newer. Auto Timing additionally needs a Python 3.12 executable available on your system because the isolated `py-roller` runtime is built on Python 3.12.
+### macOS Desktop (Apple Silicon)
+
+Download the v0.7.1 arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**.
+
+1. Open the app and go to **Settings -> Auto Timing**.
+2. Leave the runtime profile on **Auto**, then click **Create / Repair Runtime** and wait for success.
+3. Choose the transcriber model in the advanced settings and click **Pre-download Model**.
+
+The app includes Python 3.12.15, but not py-roller, audio dependencies, or model caches. These are installed into your user data directory. Installation and downloads require network access; configure a model-download HTTP/SOCKS proxy in Settings when needed. Full processing may download a separate Demucs model on its first run.
+
+**Distribution limitation:** the DMG is ad-hoc signed and is not Apple-notarized. macOS Gatekeeper may block first launch. Do not disable system-wide security protections. This build targets Apple Silicon, not Intel Macs; the declared binary minimum is macOS 11, but dependency compatibility on older macOS releases has not been exhaustively validated.
+
+### Command Line
+
+The macOS arm64 desktop build includes standalone Python 3.12. It does not include `py-roller`, its audio dependencies, or model caches. Desktop users configure these from Settings; no separate Python or Homebrew installation is required. See [DESKTOP.md](DESKTOP.md) for packaging and release-validation requirements.
+
+For the command-line installation below, Rolling Pebble requires Python 3.10 or newer. Auto Timing additionally needs a Python 3.12 executable available on your system because the isolated `py-roller` runtime is built on Python 3.12.
 
 Recommended install:
 
@@ -83,10 +99,12 @@ To set it up:
 
 1. Open **Settings -> Auto Timing -> Runtime**.
 2. Choose a runtime profile.
-3. Click **Create Runtime**.
-4. Run **Runtime Check** after creation completes.
+3. Click **Create / Repair Runtime**.
+4. Installation runs a runtime check automatically; **Check** can run it again later.
 
-If Python 3.12 is not detected automatically, set:
+Then download the selected model from Settings before running Auto Timing. Environment installation and model downloads require network access. Runtime repairs keep model caches separate from the environment.
+
+For command-line installations, if Python 3.12 is not detected automatically, set:
 
 ```bash
 export LRC_ROLLER_RUNTIME_PYTHON=/path/to/python3.12
@@ -95,7 +113,7 @@ export LRC_ROLLER_RUNTIME_PYTHON=/path/to/python3.12
 The current supported py-roller range is:
 
 ```text
-py-roller>=0.8.3,<0.9
+py-roller>=0.9.0,<0.10
 ```
 
 ## Storage and Privacy

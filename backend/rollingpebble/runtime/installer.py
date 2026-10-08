@@ -15,7 +15,7 @@ from rollingpebble.runtime.constants import (
 )
 from rollingpebble.runtime.recipe import DEFAULT_RUNTIME_RECIPE
 from rollingpebble.runtime.python import select_runtime_python
-from rollingpebble.runtime.reports import protocol_status_ok
+from rollingpebble.runtime.reports import json_from_log_lines, protocol_status_ok
 
 
 class JsonCommandError(RuntimeError):
@@ -53,16 +53,6 @@ def _run(command: list[str], *, env: dict[str, str] | None = None) -> None:
     subprocess.run(command, check=True, env=env)
 
 
-def _parse_json_block(lines: list[str]) -> dict[str, Any] | None:
-    if not lines:
-        return None
-    try:
-        parsed = json.loads("\n".join(lines))
-    except json.JSONDecodeError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
 def _run_json(command: list[str], *, env: dict[str, str] | None = None) -> dict[str, Any] | None:
     """Run a command, relay its output, and return its final JSON report if any."""
     print(f"$ {' '.join(command)}", flush=True)
@@ -76,21 +66,15 @@ def _run_json(command: list[str], *, env: dict[str, str] | None = None) -> dict[
     )
     assert process.stdout is not None
     json_lines: list[str] = []
-    capturing_json = False
     for raw_line in process.stdout:
         line = raw_line.rstrip("\n")
         print(line, flush=True)
         stripped = line.strip()
         if stripped.startswith(PYROLLER_EVENT_PREFIX):
             continue
-        if stripped.startswith("{"):
-            capturing_json = True
-            json_lines = [line]
-            continue
-        if capturing_json:
-            json_lines.append(line)
+        json_lines.append(line)
     return_code = process.wait()
-    report = _parse_json_block(json_lines)
+    report = json_from_log_lines(json_lines)
     if return_code != 0:
         raise JsonCommandError(command, return_code, report)
     return report
@@ -116,7 +100,7 @@ def _write_runtime_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> None:
-    runtime_python = select_runtime_python()
+    runtime_python = select_runtime_python(data_dir)
     runtime_id = _runtime_id(profile, runtime_python.tag)
     runtime_root = data_dir / "envs" / runtime_id
     venv = runtime_root / ".venv"
@@ -156,6 +140,7 @@ def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> 
             print(f"Reusing existing virtual environment: {venv}", flush=True)
 
         env = build_runtime_env(venv, data_dir, include_dev=True)
+        env = DEFAULT_RUNTIME_RECIPE.constrained_env(env, runtime_root)
         _run(DEFAULT_RUNTIME_RECIPE.bootstrap_command(python), env=env)
 
         source = DEFAULT_RUNTIME_RECIPE.source_from_env()

@@ -188,57 +188,63 @@ def _set_if_present(target: dict[str, object], key: str, value: object | None) -
 
 
 def _backend_config(request: RollRequest, *, default_model_store: Path | str | None = None) -> dict[str, object]:
-    splitter: dict[str, object] = {"two_stems": "vocals"}
-    _set_if_present(splitter, "backend", request.splitter_backend)
-    _set_if_present(splitter, "model", request.splitter_demucs_model)
-    _set_if_present(splitter, "device", request.splitter_demucs_device)
-    _set_if_present(splitter, "jobs", request.splitter_demucs_jobs)
-    _set_if_present(splitter, "overlap", request.splitter_demucs_overlap)
-    _set_if_present(splitter, "segment", request.splitter_demucs_segment)
+    stages = set(normalize_stages(request.stages))
+    config: dict[str, object] = {}
 
-    filter_config: dict[str, object] = {}
-    if _string_value(request.filter_chain):
-        filter_config["chain"] = [item.strip() for item in str(request.filter_chain).split(",") if item.strip()]
+    if "s" in stages:
+        splitter: dict[str, object] = {"two_stems": "vocals"}
+        _set_if_present(splitter, "backend", request.splitter_backend)
+        _set_if_present(splitter, "model", request.splitter_demucs_model)
+        _set_if_present(splitter, "device", request.splitter_demucs_device)
+        _set_if_present(splitter, "jobs", request.splitter_demucs_jobs)
+        _set_if_present(splitter, "overlap", request.splitter_demucs_overlap)
+        _set_if_present(splitter, "segment", request.splitter_demucs_segment)
+        config["splitter"] = splitter
 
-    transcriber: dict[str, object] = {}
-    _set_if_present(transcriber, "backend", request.transcriber_backend)
-    _set_if_present(transcriber, "device", request.transcriber_device)
-    _set_if_present(transcriber, "model_name", request.transcriber_model_name)
-    model_path = request.transcriber_model_path or (str(default_model_store) if default_model_store else None)
-    if _string_value(model_path):
-        transcriber["model_path"] = str(Path(str(model_path)).expanduser())
-    _set_if_present(transcriber, "local_files_only", request.transcriber_local_files_only)
-    _set_if_present(transcriber, "compute_type", request.transcriber_compute_type)
-    _set_if_present(transcriber, "batch_size", request.transcriber_batch_size)
-    _set_if_present(transcriber, "vad_filter", request.transcriber_vad_filter)
-    _set_if_present(transcriber, "hf_xet", request.transcriber_hf_xet)
-    _set_if_present(transcriber, "hf_proxy", request.transcriber_hf_proxy)
-    _set_if_present(transcriber, "hf_etag_timeout", request.transcriber_hf_etag_timeout)
-    _set_if_present(transcriber, "hf_download_timeout", request.transcriber_hf_download_timeout)
-    _set_if_present(transcriber, "hf_max_workers", request.transcriber_hf_max_workers)
+    if "f" in stages:
+        filter_config: dict[str, object] = {}
+        if _string_value(request.filter_chain):
+            filter_config["chain"] = [item.strip() for item in str(request.filter_chain).split(",") if item.strip()]
+        config["filter"] = filter_config
 
-    parser: dict[str, object] = {}
-    _set_if_present(parser, "lyrics_encoding", request.parser_lyrics_encoding)
+    if "t" in stages:
+        transcriber: dict[str, object] = {}
+        _set_if_present(transcriber, "backend", request.transcriber_backend)
+        _set_if_present(transcriber, "device", request.transcriber_device)
+        _set_if_present(transcriber, "model_name", request.transcriber_model_name)
+        model_path = request.transcriber_model_path or (str(default_model_store) if default_model_store else None)
+        if _string_value(model_path):
+            transcriber["model_path"] = str(Path(str(model_path)).expanduser())
+        _set_if_present(transcriber, "local_files_only", request.transcriber_local_files_only)
+        _set_if_present(transcriber, "compute_type", request.transcriber_compute_type)
+        _set_if_present(transcriber, "batch_size", request.transcriber_batch_size)
+        _set_if_present(transcriber, "vad_filter", request.transcriber_vad_filter)
+        _set_if_present(transcriber, "hf_xet", request.transcriber_hf_xet)
+        _set_if_present(transcriber, "hf_proxy", request.transcriber_hf_proxy)
+        _set_if_present(transcriber, "hf_etag_timeout", request.transcriber_hf_etag_timeout)
+        _set_if_present(transcriber, "hf_download_timeout", request.transcriber_hf_download_timeout)
+        _set_if_present(transcriber, "hf_max_workers", request.transcriber_hf_max_workers)
+        config["transcriber"] = transcriber
 
-    aligner: dict[str, object] = {}
-    _set_if_present(aligner, "backend", request.aligner_backend)
-    _set_if_present(aligner, "min_gap", request.aligner_min_gap)
-    _set_if_present(aligner, "repetition", request.aligner_repetition)
+    if "p" in stages:
+        config["parser"] = {}
 
-    writer: dict[str, object] = {}
-    _set_if_present(writer, "backend", request.writer_backend)
-    _set_if_present(writer, "spacing", request.writer_spacing)
-    _set_if_present(writer, "by_tag", request.writer_by_tag)
-    _set_if_present(writer, "tag_type", request.writer_ass_karaoke_tag_type)
+    if "a" in stages:
+        aligner: dict[str, object] = {}
+        _set_if_present(aligner, "backend", request.aligner_backend)
+        _set_if_present(aligner, "min_gap", request.aligner_min_gap)
+        _set_if_present(aligner, "repetition", request.aligner_repetition)
+        config["aligner"] = aligner
 
-    return {
-        "splitter": splitter,
-        "filter": filter_config,
-        "parser": parser,
-        "transcriber": transcriber,
-        "aligner": aligner,
-        "writer": writer,
-    }
+    if "w" in stages:
+        writer: dict[str, object] = {}
+        _set_if_present(writer, "backend", request.writer_backend)
+        _set_if_present(writer, "spacing", request.writer_spacing)
+        _set_if_present(writer, "by_tag", request.writer_by_tag)
+        _set_if_present(writer, "tag_type", request.writer_ass_karaoke_tag_type)
+        config["writer"] = writer
+
+    return config
 
 
 def _artifact_paths(artifacts_dir: Path | None, output_path: Path) -> dict[str, Path]:
@@ -280,6 +286,7 @@ def build_pyroller_request(
     }
     body = payload["request"]
     assert isinstance(body, dict)
+    _set_if_present(body, "parser_lyrics_encoding", request.parser_lyrics_encoding)
 
     if stage_set.intersection({"s", "f", "t"}):
         body["audio"] = str(audio_path)
@@ -315,7 +322,7 @@ def build_pyroller_batch_request(
     default_model_store: str | None = None,
 ) -> dict[str, object]:
     stages = normalize_stages(request.stages)
-    return {
+    payload: dict[str, object] = {
         "protocol_version": 1,
         "request": {
             "stages": stages,
@@ -332,6 +339,10 @@ def build_pyroller_batch_request(
             "jobs": int(getattr(request, "jobs", 1) or 1),
         },
     }
+    body = payload["request"]
+    assert isinstance(body, dict)
+    _set_if_present(body, "parser_lyrics_encoding", request.parser_lyrics_encoding)
+    return payload
 
 
 def ensure_private_work_dir(path: Path) -> Path:

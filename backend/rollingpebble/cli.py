@@ -293,8 +293,17 @@ def _dev(args: argparse.Namespace) -> int:
 
 
 def main() -> None:
-    parser = build_parser()
     raw_args = sys.argv[1:]
+    if raw_args and raw_args[0] == "__runtime-installer":
+        from rollingpebble.runtime.installer import main as installer_main
+
+        raise SystemExit(installer_main(raw_args[1:]))
+    if raw_args and raw_args[0] == "__runtime-dependencies":
+        from rollingpebble.runtime.dependencies import main as dependencies_main
+
+        raise SystemExit(dependencies_main(raw_args[1:]))
+
+    parser = build_parser()
     if not raw_args:
         raw_args = ["serve"]
     args = parser.parse_args(raw_args)

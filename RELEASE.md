@@ -1,38 +1,62 @@
 # Release Checklist
 
-This project releases through GitHub Releases. Publishing a GitHub Release triggers the PyPI publishing workflow.
+Current release target: `v0.7.1`.
 
-## Version
+Publishing a GitHub Release triggers `.github/workflows/python-publish.yml` and
+publishes Python distributions to PyPI through trusted publishing. Pushing the
+commit/tag alone does not publish a GitHub Release or upload the DMG.
 
-Current release target: `v0.7.0`
+## Version and Checks
 
-Before tagging:
-
-1. Confirm `pyproject.toml` has the target version.
-2. Update `CHANGELOG.md`.
-3. Run the frontend, backend, and packaging checks.
-4. Create and push the git tag.
-5. Publish the GitHub Release.
-6. Confirm the PyPI workflow succeeds.
-
-## Verify
+Keep `pyproject.toml`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and
+`src-tauri/tauri.conf.json` in sync. Update `CHANGELOG.md` and the user setup notes.
 
 ```bash
 pnpm -C frontend check:i18n:zh
 pnpm -C frontend check:type
 pnpm -C frontend check:lint
-pnpm -C frontend build
-.venv/bin/ruff check backend tests
+.venv/bin/python -m ruff check backend tests desktop
 .venv/bin/python -m pytest -q
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-`pnpm -C frontend check:i18n` audits every locale. It may report historical untranslated non-Chinese strings; `check:i18n:zh` is the release gate for the current Chinese UI path.
+The Chinese i18n check is the release gate; the all-locale audit may report
+historical untranslated non-Chinese strings.
 
-## Build Artifacts
+## macOS DMG
 
-The GitHub Actions workflow builds release artifacts automatically. It must build the frontend first and copy it into the Python package data directory before running `python -m build`.
+Build on Apple Silicon with the tools described in [DESKTOP.md](DESKTOP.md):
 
-For a local release build or smoke test, use:
+```bash
+pnpm desktop:build
+codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Rolling Pebble.app"
+hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.7.1_aarch64.dmg"
+shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.7.1_aarch64.dmg"
+```
+
+The build hook rebuilds the sidecar with standalone Python, includes app version
+metadata, and audits embedded binaries. Never substitute a sidecar built with
+the developer's system/Homebrew Python.
+
+Mount the DMG read-only and confirm it contains the app and Applications link.
+Check the bundled version and signature, then smoke-test startup and a real
+alignment with an isolated data directory and a PATH without Homebrew. Confirm
+long run reports retain quality and artifact fields. First-run acceptance also
+requires Settings runtime creation/repair and model download from empty
+runtime/model directories. Check normal shutdown reaps the backend.
+
+**Signing limitation:** this configuration uses ad-hoc signing, not Developer ID
+signing or Apple notarization. Signature integrity is not proof of Gatekeeper
+acceptance. Publish this limitation prominently; do not describe this artifact
+as notarized or as requiring no first-launch approval. This is an arm64 build,
+not a universal/Intel build. macOS 11 is the declared binary minimum, not proof
+of dependency compatibility on every older OS version.
+
+## Python Distributions
+
+The GitHub workflow builds the frontend, copies it into Python package data,
+then builds the wheel and sdist. To verify locally:
 
 ```bash
 pnpm -C frontend build
@@ -42,93 +66,27 @@ cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
 .venv/bin/python -m build
 ```
 
-Expected files in `dist/`:
+Expected files:
 
-- `rollingpebble-0.7.0-py3-none-any.whl`
-- `rollingpebble-0.7.0.tar.gz`
+- `dist/rollingpebble-0.7.1-py3-none-any.whl`
+- `dist/rollingpebble-0.7.1.tar.gz`
 
-## PyPI Publishing
+Verify these include the WebUI and current metadata, but not standalone Python,
+virtual environments, or models. CLI/PyPI users still need Python 3.12 for Auto
+Timing. The workflow checks that the release tag matches the package version.
 
-Publishing a GitHub Release runs `.github/workflows/python-publish.yml`.
+## Push and Publish
 
-The workflow:
-
-1. Checks that the release tag matches `pyproject.toml`.
-2. Installs frontend dependencies with pnpm.
-3. Builds the frontend.
-4. Copies `frontend/dist` to `backend/rollingpebble/frontend_dist`.
-5. Builds wheel and sdist.
-6. Uploads the distributions as a GitHub Actions artifact.
-7. Publishes the distributions to PyPI using trusted publishing.
-
-PyPI must be configured with a trusted publisher for this repository and the `pypi` GitHub environment.
-
-## Smoke Test Wheel
+After checks and artifact verification:
 
 ```bash
-python -m venv /tmp/rollingpebble-release-test
-. /tmp/rollingpebble-release-test/bin/activate
-python -m pip install -U pip
-python -m pip install dist/rollingpebble-0.7.0-py3-none-any.whl
-rollingpebble --help
-rollingpebble doctor
+git tag -a v0.7.1 -m "Release v0.7.1"
+git push --atomic origin main v0.7.1
 ```
 
-For a UI smoke test:
-
-```bash
-rollingpebble serve --port 6790
-```
-
-Open `http://127.0.0.1:6790`.
-
-## Tag
-
-```bash
-git tag -a v0.7.0 -m "Release v0.7.0"
-git push origin main
-git push origin v0.7.0
-```
-
-## GitHub Release Notes
-
-Title:
-
-```text
-Rolling Pebble v0.7.0
-```
-
-Body:
-
-```markdown
-Boundary cleanup and runtime stability release for Rolling Pebble.
-
-Highlights:
-
-- Cleaned up frontend boundaries across app, domain, features, ui, shared, and API modules.
-- Cleaned up backend runtime, service, storage, adapter, and API boundaries and removed obsolete runtime shims.
-- Hardened the py-roller protocol v1 integration with request/report contract tests.
-- Raised the isolated Auto Timing runtime requirement to py-roller>=0.8.3,<0.9.
-- Fixed isolated runtime repair for incomplete managed virtual environments.
-- Improved localized runtime and Auto Timing progress messages, including runtime check success details.
-- Added a Chinese i18n release gate for catching untranslated runtime/progress strings.
-
-Install from PyPI:
-
-```bash
-python -m pip install rollingpebble
-rollingpebble
-```
-
-Then open:
-
-```text
-http://127.0.0.1:6789
-```
-
-Notes:
-
-- Auto Timing creates an isolated py-roller runtime under the Rolling Pebble data directory.
-- Large model downloads are managed separately from runtime environments.
-- The packaged WebUI is included in the Python wheel and source distribution.
-```
+Manually publish the GitHub Release for `v0.7.1`, attach
+`Rolling Pebble_0.7.1_aarch64.dmg` and its SHA-256 checksum, and use the v0.7.1
+changelog as release notes. Mention that only Python is bundled: dependencies
+and models are downloaded through Settings, a proxy may be needed, and Full
+processing may download Demucs separately on first use. Then verify the PyPI
+publishing workflow completes. Do not publish a Release merely to test CI.

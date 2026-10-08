@@ -10,6 +10,9 @@ use std::{
 
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
 struct BackendState(Mutex<Option<Child>>);
 
 fn main() {
@@ -81,8 +84,28 @@ fn start_backend(port: u16) -> Result<Child, Box<dyn std::error::Error>> {
     if frontend_dist.join("index.html").exists() {
         command.env("LRC_ROLLER_FRONTEND_DIST", frontend_dist);
     }
+    if let Some(resources) = app_resources_dir() {
+        command.env("ROLLINGPEBBLE_APP_RESOURCES", resources);
+    }
+
+    #[cfg(unix)]
+    command.process_group(0);
 
     Ok(command.spawn()?)
+}
+
+fn app_resources_dir() -> Option<PathBuf> {
+    let exe = env::current_exe().ok()?;
+    let exe_dir = exe.parent()?;
+    if exe_dir.file_name().and_then(|name| name.to_str()) == Some("MacOS") {
+        return Some(exe_dir.parent()?.join("Resources"));
+    }
+    if exe_dir.file_name().and_then(|name| name.to_str()) == Some("bin")
+        && exe_dir.parent()?.file_name().and_then(|name| name.to_str()) == Some("Resources")
+    {
+        return Some(exe_dir.parent()?.to_path_buf());
+    }
+    None
 }
 
 fn backend_command() -> Command {
@@ -175,6 +198,12 @@ fn stop_backend(state: &BackendState) {
     let Some(mut child) = backend.take() else {
         return;
     };
+
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGTERM);
+    }
+
     let _ = child.kill();
     let _ = child.wait();
 }

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rollingpebble"
-version = "0.7.0"
+version = "0.7.1"
 description = "Local WebUI frontend for py-roller and pylrclib."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -39,6 +39,9 @@ rollingpebble = ["frontend_dist/**/*"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
 
 [tool.pytest.ini_options]
 pythonpath = ["backend"]

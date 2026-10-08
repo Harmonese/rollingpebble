@@ -134,11 +134,7 @@ def iter_process_output(stream) -> Iterable[tuple[str, str]]:
                 yield text, char
             continue
         buffer.append(char)
-        if len(buffer) >= 8000:
-            text = "".join(buffer).strip()
-            buffer.clear()
-            if text:
-                yield text, "\n"
+        # Protocol reports can exceed 8 KB; synthetic newlines corrupt JSON.
     text = "".join(buffer).strip()
     if text:
         yield text, "\n"

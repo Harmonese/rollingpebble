@@ -11,7 +11,7 @@ from rollingpebble.jobs_progress import parse_progress_line
 from rollingpebble.models import BatchRollRequest, JobModel, JobStatus, RollRequest
 from rollingpebble.runtime.reports import final_report_or_plain_json, protocol_status_ok, report_artifact_paths
 
-PYROLLER_SOURCE = Path("/Users/xuzihao/Main/03 Developer Files/py-roller")
+PYROLLER_SOURCE = Path(__file__).resolve().parents[2] / "py-roller"
 PYROLLER_VERSION_RE = re.compile(r'^version\s*=\s*"([^"]+)"', re.MULTILINE)
 
 
@@ -66,6 +66,7 @@ def test_build_command_emits_protocol_request_with_artifact_outputs(tmp_path: Pa
         transcriber_backend="faster_whisper",
         transcriber_hf_etag_timeout=120,
         transcriber_hf_download_timeout=300,
+        parser_lyrics_encoding="auto",
         writer_backend="lrc_ms",
     )
 
@@ -88,6 +89,8 @@ def test_build_command_emits_protocol_request_with_artifact_outputs(tmp_path: Pa
     assert payload["protocol_version"] == 1
     assert backend["hf_etag_timeout"] == 120
     assert backend["hf_download_timeout"] == 300
+    assert body["parser_lyrics_encoding"] == request.parser_lyrics_encoding
+    assert "lyrics_encoding" not in body["backend_config"]["parser"]
     assert body["output_timed_units"] == "/song/artifacts/timed_units.json"
     assert body["output_parsed_lyrics"] == "/song/artifacts/parsed_lyrics.json"
     assert body["output_alignment_result"] == "/song/artifacts/alignment_result.json"
@@ -109,6 +112,23 @@ def test_rewrite_command_uses_alignment_artifact_without_audio_or_lyrics(tmp_pat
     assert "audio" not in body
     assert "lyrics" not in body
     assert body["alignment_result"] == "/song/artifacts/alignment_result.json"
+
+
+def test_build_command_omits_inactive_stage_configs(tmp_path: Path) -> None:
+    command = build_pyroller_command(
+        audio_path=Path("/song/audio.mp3"),
+        lyrics_path=Path("/song/plain.txt"),
+        output_path=Path("/song/pyroller_output.lrc"),
+        intermediate_dir=Path("/song/intermediate"),
+        artifacts_dir=Path("/song/artifacts"),
+        request=RollRequest(stages="t,p,a,w", language="en", writer_backend="lrc_ms"),
+        request_dir=tmp_path / "job",
+    )
+    config = _request_payload(command)["request"]["backend_config"]
+
+    assert set(config) == {"transcriber", "parser", "aligner", "writer"}
+    assert "splitter" not in config
+    assert "filter" not in config
 
 
 def test_stage_validation_rejects_non_continuous_pipeline() -> None:
@@ -137,7 +157,13 @@ def test_build_command_can_use_isolated_runtime_python_and_model_store(tmp_path:
 def test_build_batch_command_can_use_isolated_runtime_model_store(tmp_path: Path) -> None:
     request_dir = tmp_path / "job"
     command, request_text, manifest_text = build_pyroller_batch_command(
-        BatchRollRequest(stages="t,p,a,w", language="zh", writer_backend="lrc_ms", project_ids=["one"]),
+        BatchRollRequest(
+            stages="t,p,a,w",
+            language="zh",
+            parser_lyrics_encoding="auto",
+            writer_backend="lrc_ms",
+            project_ids=["one"],
+        ),
         [{"id": "one", "audio": "/song/audio.mp3", "lyrics": "/song/plain.txt", "output_roller": "/song/out.lrc"}],
         request_dir=request_dir,
         default_model_store="/models/transcriber",
@@ -148,6 +174,8 @@ def test_build_batch_command_can_use_isolated_runtime_model_store(tmp_path: Path
 
     assert command[:2] == ["py-roller", "batch"]
     assert body["backend_config"]["transcriber"]["model_path"] == "/models/transcriber"
+    assert body["parser_lyrics_encoding"] == "auto"
+    assert "lyrics_encoding" not in body["backend_config"]["parser"]
     assert "audio" not in body
     assert "lyrics" not in body
     assert "output_roller" not in body
@@ -170,6 +198,9 @@ def test_generated_run_request_is_accepted_by_local_pyroller_protocol(tmp_path: 
     protocol, previous_modules = _local_pyroller_protocol(monkeypatch)
     try:
         parsed = protocol.pipeline_request_from_dict(payload)
+        from pyroller.config_contracts import validate_configs
+
+        validate_configs(parsed)
         report = protocol.protocol_envelope(
             "run_result",
             artifact_paths={"roller": str(parsed.output_roller_path)},
@@ -186,6 +217,42 @@ def test_generated_run_request_is_accepted_by_local_pyroller_protocol(tmp_path: 
     assert report["type"] == "run_result"
     assert report["status"] == "ok"
     assert report_artifact_paths(report)["roller"] == "/song/pyroller_output.lrc"
+
+
+def test_full_pipeline_request_matches_pyroller_090_config_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    command = build_pyroller_command(
+        audio_path=Path("/song/audio.mp3"),
+        lyrics_path=Path("/song/plain.txt"),
+        output_path=Path("/song/pyroller_output.lrc"),
+        intermediate_dir=Path("/song/intermediate"),
+        artifacts_dir=Path("/song/artifacts"),
+        request=RollRequest(
+            stages="s,f,t,p,a,w",
+            language="zh",
+            transcriber_backend="faster_whisper",
+            transcriber_model_name="large-v2",
+            transcriber_model_path="/models/transcriber",
+            transcriber_vad_filter=False,
+            writer_backend="lrc_ms",
+            writer_spacing="keep",
+        ),
+        request_dir=tmp_path / "job",
+    )
+    protocol, previous_modules = _local_pyroller_protocol(monkeypatch)
+    try:
+        parsed = protocol.pipeline_request_from_dict(_request_payload(command))
+        from pyroller.config_contracts import validate_configs
+        from pyroller.pipeline.stages import resolve_execution_plan
+        from pyroller.pipeline.validation import validate_pipeline_request
+
+        validate_configs(parsed)
+        validate_pipeline_request(parsed, resolve_execution_plan(parsed))
+    finally:
+        _restore_pyroller_modules(previous_modules)
+
+    assert parsed.stages == ["s", "f", "t", "p", "a", "w"]
 
 
 def test_generated_batch_request_is_accepted_by_local_pyroller_protocol(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

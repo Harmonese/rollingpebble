@@ -15,6 +15,16 @@ from rollingpebble.runtime.python import select_runtime_python, target_runtime_p
 from rollingpebble.runtime.reports import protocol_status_ok
 
 
+def _module_command(module: str) -> list[str]:
+    if getattr(sys, "frozen", False):
+        internal_commands = {
+            "rollingpebble.runtime.installer": "__runtime-installer",
+            "rollingpebble.runtime.dependencies": "__runtime-dependencies",
+        }
+        return [sys.executable, internal_commands[module]]
+    return [sys.executable, "-m", module]
+
+
 @dataclass(slots=True)
 class IsolatedRuntimeInfo:
     runtime_id: str
@@ -199,7 +209,13 @@ class RuntimeManager:
         return [str(info.python_path), "-m", "pyroller.cli.main", "doctor", "--output-format", "json"]
 
     def install_command(self, profile: str, *, skip_doctor: bool = False) -> list[str]:
-        command = [sys.executable, "-m", "rollingpebble.runtime.installer", "--data-dir", str(self.data_dir), "--profile", profile]
+        command = [
+            *_module_command("rollingpebble.runtime.installer"),
+            "--data-dir",
+            str(self.data_dir),
+            "--profile",
+            profile,
+        ]
         if skip_doctor:
             command.append("--skip-doctor")
         return command
@@ -211,9 +227,7 @@ class RuntimeManager:
                 "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before upgrading."
             )
         return [
-            sys.executable,
-            "-m",
-            "rollingpebble.runtime.dependencies",
+            *_module_command("rollingpebble.runtime.dependencies"),
             "upgrade",
             "--data-dir",
             str(self.data_dir),

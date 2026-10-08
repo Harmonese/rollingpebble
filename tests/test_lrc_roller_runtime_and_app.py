@@ -84,9 +84,13 @@ def test_runtime_install_module_installs_socks_support_package(tmp_path: Path, m
 
     def fake_run(command: list[str], *, env: dict[str, str] | None = None) -> None:
         commands.append(command)
+        assert env is not None
+        assert Path(env["PIP_CONSTRAINT"]).read_text().strip() == "av>=11,<19"
 
     def fake_run_json(command: list[str], *, env: dict[str, str] | None = None) -> dict:
         commands.append(command)
+        assert env is not None
+        assert Path(env["PIP_CONSTRAINT"]).read_text().strip() == "av>=11,<19"
         return {"ok": True}
 
     monkeypatch.setattr(installer, "_run", fake_run)
@@ -95,7 +99,7 @@ def test_runtime_install_module_installs_socks_support_package(tmp_path: Path, m
 
     installer.install_runtime(tmp_path, "auto", skip_doctor=True)
 
-    assert any("py-roller>=0.8.3,<0.9" in command for command in commands)
+    assert any("py-roller>=0.9.0,<0.10" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
 
 
@@ -136,7 +140,7 @@ def test_runtime_dependency_recipe_keeps_pyroller_and_support_specs_together() -
 
     commands = DEFAULT_RUNTIME_RECIPE.dependency_install_commands(Path("/runtime/.venv/bin/python"))
 
-    assert any("py-roller>=0.8.3,<0.9" in command for command in commands)
+    assert any("py-roller>=0.9.0,<0.10" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
 
 
@@ -146,6 +150,7 @@ def test_runtime_env_uses_allowlist_and_keeps_managed_paths(tmp_path: Path, monk
     monkeypatch.setenv("SECRET_TOKEN", "do-not-leak")
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "do-not-leak")
     monkeypatch.setenv("LANG", "zh_CN.UTF-8")
+    monkeypatch.setenv("ROLLINGPEBBLE_APP_RESOURCES", "/Applications/Rolling Pebble.app/Contents/Resources")
     monkeypatch.setenv("LRC_ROLLER_PYROLLER_SOURCE", "../py-roller")
 
     venv = tmp_path / "envs" / "runtime" / ".venv"
@@ -155,6 +160,7 @@ def test_runtime_env_uses_allowlist_and_keeps_managed_paths(tmp_path: Path, monk
     assert "SECRET_TOKEN" not in env
     assert "AWS_ACCESS_KEY_ID" not in env
     assert env["LANG"] == "zh_CN.UTF-8"
+    assert env["ROLLINGPEBBLE_APP_RESOURCES"] == "/Applications/Rolling Pebble.app/Contents/Resources"
     assert "LRC_ROLLER_PYROLLER_SOURCE" not in env
     assert dev_env["LRC_ROLLER_PYROLLER_SOURCE"] == "../py-roller"
     assert env["PIP_CACHE_DIR"] == str(tmp_path / "cache" / "pip")
@@ -172,12 +178,13 @@ def test_runtime_dependency_upgrade_runner_uses_recipe(tmp_path: Path, monkeypat
 
     def fake_run(command: list[str], *, env: dict[str, str]) -> None:
         commands.append(command)
+        assert Path(env["PIP_CONSTRAINT"]).read_text().strip() == "av>=11,<19"
 
     monkeypatch.setattr(dependencies, "_run", fake_run)
 
     dependencies.upgrade_dependencies(tmp_path, venv)
 
-    assert any("py-roller>=0.8.3,<0.9" in command for command in commands)
+    assert any("py-roller>=0.9.0,<0.10" in command for command in commands)
     assert any("PySocks>=1.7.1" in command for command in commands)
 
 
@@ -204,6 +211,105 @@ def test_runtime_manager_cache_model_command_defaults_to_managed_model_store(tmp
     assert command[command.index("--transcriber-model-path") + 1] == str(tmp_path / "models" / "transcriber")
     assert command[command.index("--transcriber-hf-xet") + 1] == "off"
     assert command[command.index("--transcriber-hf-download-timeout") + 1] == "300"
+
+
+def test_runtime_manager_uses_internal_commands_when_frozen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+
+    from rollingpebble.runtime.manager import RuntimeManager
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "/Applications/Rolling Pebble.app/Contents/Resources/bin/rollingpebble-backend")
+
+    manager = RuntimeManager(tmp_path)
+    python_path = manager.python_path("auto")
+    python_path.parent.mkdir(parents=True, exist_ok=True)
+    python_path.write_text("", encoding="utf-8")
+    manager.update_metadata("auto", {"pyroller_version": "0.8.0", "last_doctor_status": "passed"})
+
+    assert manager.install_command("auto") == [
+        "/Applications/Rolling Pebble.app/Contents/Resources/bin/rollingpebble-backend",
+        "__runtime-installer",
+        "--data-dir",
+        str(tmp_path),
+        "--profile",
+        "auto",
+    ]
+    assert manager.upgrade_command("auto")[:2] == [
+        "/Applications/Rolling Pebble.app/Contents/Resources/bin/rollingpebble-backend",
+        "__runtime-dependencies",
+    ]
+
+
+def test_select_runtime_python_skips_frozen_executable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+    import sys
+
+    from rollingpebble.runtime import python as runtime_python
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "/Applications/Rolling Pebble.app/Contents/Resources/bin/rollingpebble-backend")
+    monkeypatch.setattr(sys, "version_info", SimpleNamespace(major=3, minor=12))
+    monkeypatch.setattr(runtime_python.shutil, "which", lambda candidate: None)
+    monkeypatch.setattr(runtime_python, "_version_for", lambda executable: None)
+
+    with pytest.raises(RuntimeError, match="requires Python 3.12"):
+        runtime_python.select_runtime_python()
+
+
+@pytest.mark.parametrize("executable_path", ["MacOS/rollingpebble-backend", "Resources/bin/rollingpebble-backend"])
+def test_frozen_app_uses_python_from_contents_resources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, executable_path: str
+) -> None:
+    import sys
+
+    from rollingpebble.runtime import python as runtime_python
+
+    app = tmp_path / "Rolling Pebble.app"
+    backend = app / "Contents" / executable_path
+    bundled = app / "Contents" / "Resources" / "python-runtime" / "bin" / "python3.12"
+    backend.parent.mkdir(parents=True)
+    bundled.parent.mkdir(parents=True)
+    backend.write_text("backend", encoding="utf-8")
+    bundled.write_text("bundled python", encoding="utf-8")
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(backend))
+    monkeypatch.delenv("ROLLINGPEBBLE_BUNDLED_PYTHON", raising=False)
+    monkeypatch.setattr(runtime_python, "_version_for", lambda executable: (3, 12))
+
+    assert runtime_python.bundled_runtime_python() == bundled
+
+
+def test_app_resources_override_selects_bundled_python(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from rollingpebble.runtime import python as runtime_python
+
+    bundled = tmp_path / "Resources" / "python-runtime" / "bin" / "python3.12"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text("bundled python", encoding="utf-8")
+
+    monkeypatch.setenv("ROLLINGPEBBLE_APP_RESOURCES", str(tmp_path / "Resources"))
+    monkeypatch.setattr(runtime_python, "_version_for", lambda executable: (3, 12))
+
+    assert runtime_python.bundled_runtime_python() == bundled
+
+
+def test_bundled_runtime_is_copied_to_user_data_before_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from rollingpebble.runtime import python as runtime_python
+
+    source_root = tmp_path / "bundle" / "python"
+    source_python = source_root / "bin" / "python3.12"
+    source_python.parent.mkdir(parents=True)
+    source_python.write_text("bundled python", encoding="utf-8")
+
+    monkeypatch.setenv("ROLLINGPEBBLE_BUNDLED_PYTHON", str(source_python))
+    monkeypatch.setattr(runtime_python, "_version_for", lambda executable: (3, 12))
+
+    selected = runtime_python.select_runtime_python(tmp_path / "data")
+
+    expected = tmp_path / "data" / "toolchains" / "python3.12" / "bin" / "python3.12"
+    assert selected.executable == str(expected)
+    assert expected.read_text(encoding="utf-8") == "bundled python"
 
 
 def test_runtime_cache_model_uses_managed_model_store_and_download_settings(tmp_path: Path) -> None:
@@ -353,7 +459,7 @@ def test_netease_audio_endpoint_streams_same_origin_audio(tmp_path: Path, monkey
 
 
 def test_api_routes_are_registered_by_domain_modules(tmp_path: Path) -> None:
-    routes = {getattr(route, "path", "") for route in create_app(Settings(data_dir=tmp_path)).routes}
+    routes = set(create_app(Settings(data_dir=tmp_path)).openapi()["paths"])
 
     assert "/api/health" in routes
     assert "/api/projects" in routes

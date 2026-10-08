@@ -28,3 +28,4 @@ skill.zip
 src-tauri/gen/
 src-tauri/target/
 desktop/bin/
+desktop/python-runtime/
