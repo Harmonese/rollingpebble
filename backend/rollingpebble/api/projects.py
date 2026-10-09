@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import mimetypes
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from rollingpebble.api.context import AppServices, async_service_call, open_folder, service_call, text_detail
-from rollingpebble.models import ApplyLyricsRequest, ProjectModel, SaveEditorRequest
+from rollingpebble.models import ApplyLyricsRequest, ProjectModel, SaveEditorRequest, WorkspaceSaveRequest, AudioMetadataRequest, MetaModel
 from rollingpebble.storage.files import resolve_audio_path
 
 
@@ -17,6 +17,19 @@ def create_projects_router(services: AppServices) -> APIRouter:
     async def create_project(audio: UploadFile = File(...)) -> ProjectModel:
         settings = services.runtime.get_settings()
         return await async_service_call(lambda: services.projects.create_from_audio(audio, settings=settings))
+
+    @router.put("/api/projects/drafts/{draft_id}", response_model=ProjectModel)
+    async def save_workspace(
+        draft_id: str, snapshot: str = Form(...), audio: UploadFile | None = File(None),
+    ) -> ProjectModel:
+        parsed = service_call(lambda: WorkspaceSaveRequest.model_validate_json(snapshot))
+        return await async_service_call(lambda: services.projects.save_workspace(
+            draft_id, audio, parsed, settings=services.runtime.get_settings(),
+        ))
+
+    @router.post("/api/audio/metadata", response_model=MetaModel)
+    def audio_metadata(request: AudioMetadataRequest) -> MetaModel:
+        return services.projects.audio_metadata(request.filename, request.metadata, services.runtime.get_settings())
 
     @router.get("/api/projects", response_model=list[ProjectModel])
     def list_projects() -> list[ProjectModel]:

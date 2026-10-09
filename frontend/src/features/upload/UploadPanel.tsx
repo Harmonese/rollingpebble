@@ -2,15 +2,14 @@ import { useContext, useEffect, useState } from "react";
 import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { ButtonGroup, FormGrid, KeyValueList, LogBlock, Message, Panel, Tabs, WarningText } from "../../ui/index.js";
 
-import { toastPubSub } from "../../ui/Toast.js";
 import { useMessage } from "../../hooks/useMessage.js";
 import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
 import type { Language } from "../../languages/index.js";
-import { saveEditor } from "../../shared/api/projects.js";
 import { backendMessageText } from "../../shared/api/request.js";
 import { settings } from "../../shared/api/settings.js";
 import type { MetaModel, ProjectModel, UploadPlan } from "../../shared/api/types.js";
 import { uploadPlan, uploadRun } from "../../shared/api/upload.js";
+import { toastPubSub } from "../../ui/Toast.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
 
@@ -29,8 +28,8 @@ export const UploadPanel: React.FC<{
     plainLyrics: string;
     syncedLyrics: string;
     editorMeta: MetaModel;
-    onProject: (project: ProjectModel, applyToEditor?: boolean) => void;
-}> = ({ project, plainLyrics, syncedLyrics, editorMeta, onProject }) => {
+    onSave: () => Promise<ProjectModel>;
+}> = ({ project, plainLyrics, syncedLyrics, editorMeta, onSave }) => {
     const [destination, setDestination] = useState<UploadDestination>("lrclib");
     const [mode, setMode] = useState("auto");
     const [allowDerivedPlain, setAllowDerivedPlain] = useState(true);
@@ -69,12 +68,7 @@ export const UploadPanel: React.FC<{
         }
         setBusy(true);
         try {
-            const updated = await saveEditor(project.project_id, {
-                plain_lyrics: plainLyrics,
-                synced_lyrics: syncedLyrics,
-                metadata: editorMeta,
-            });
-            onProject(updated, false);
+            await onSave();
             const response = await uploadPlan(project.project_id, payload());
             setPlan(response);
             setMessage(response.can_upload ? u.planReady : u.planWarnings, response.can_upload ? "success" : "warning");
@@ -105,6 +99,7 @@ export const UploadPanel: React.FC<{
 
     const renderLrclibUpload = () => (
         <>
+            {!project && <WarningText>{u.saveBeforePublish}</WarningText>}
             <FormGrid>
                 <label>
                     {u.mode}

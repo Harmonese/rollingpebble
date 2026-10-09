@@ -2,20 +2,23 @@ import { useContext, useRef, useState } from "react";
 import { useMessage } from "../../hooks/useMessage.js";
 import { toastPubSub } from "../../ui/Toast.js";
 
-import { Message, Panel, Tabs } from "../../ui/index.js";
-import { appContext, AppContextBits } from "../../shared/appContext.js";
-import { useProjectMetadataSeed } from "../shared/useProjectMetadataSeed.js";
 import { backendMessageText } from "../../shared/api/request.js";
-import { createProject } from "../../shared/api/projects.js";
 import type { NeteaseSong, ProjectModel } from "../../shared/api/types.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { AUDIO_DECODE_WORKER_ERROR, AUDIO_UNSUPPORTED_ERROR, prepareAudioFile } from "../../shared/audioDecode.js";
-import { loadProjectAudioForPlayback, loadProjectAudioUrlForPlayback } from "../../shared/audioEvents.js";
+import { loadProjectAudioUrlForPlayback } from "../../shared/audioEvents.js";
+import { Message, Panel, Tabs } from "../../ui/index.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
+import { useProjectMetadataSeed } from "../shared/useProjectMetadataSeed.js";
 
 type AudioSourceKind = "local" | "netease";
 
-function audioImportErrorText(error: unknown, u: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string }, backendMessages: Record<string, string | undefined>): string {
+function audioImportErrorText(
+    error: unknown,
+    u: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string },
+    backendMessages: Record<string, string | undefined>,
+): string {
     const message = (error as Error).message;
     if (message === AUDIO_UNSUPPORTED_ERROR) return u.unsupportedAudioFile;
     if (message === AUDIO_DECODE_WORKER_ERROR) return u.audioDecodeWorkerFailed;
@@ -24,8 +27,9 @@ function audioImportErrorText(error: unknown, u: { unsupportedAudioFile: string;
 
 export const ImportAudioPanel: React.FC<{
     project: ProjectModel | null;
-    onProject: (project: ProjectModel, applyToEditor?: boolean) => void;
-}> = ({ project, onProject }) => {
+    onImportAudio: (file: File) => Promise<boolean>;
+    disabled: boolean;
+}> = ({ project, onImportAudio, disabled }) => {
     const inputRef = useRef<HTMLInputElement | null>(null);
     const [source, setSource] = useState<AudioSourceKind>("local");
     const [busy, setBusy] = useState(false);
@@ -42,12 +46,9 @@ export const ImportAudioPanel: React.FC<{
         setMessage(t.import.preparing, "info");
         try {
             const prepared = await prepareAudioFile(file);
-            loadProjectAudioForPlayback(prepared.file);
-            setMessage(prepared.decoded ? t.import.decoded : t.import.creating, "info");
-            const created = await createProject(prepared.file);
-            onProject(created, true);
-            setMessage("");
-            toastPubSub.pub({ type: "success", text: t.project.created.replace("{id}", created.project_id) });
+            if (await onImportAudio(prepared.file)) {
+                setMessage("");
+            } else setMessage("");
         } catch (error) {
             setMessage(audioImportErrorText(error, u, lang.backendMessages), "error");
         } finally {
@@ -57,7 +58,10 @@ export const ImportAudioPanel: React.FC<{
     };
 
     const loadNeteaseAudio = (song: NeteaseSong) => {
-        toastPubSub.pub({ type: "info", text: t.netease.loadingAudio.replace("{label}", song.label || String(song.id)) });
+        toastPubSub.pub({
+            type: "info",
+            text: t.netease.loadingAudio.replace("{label}", song.label || String(song.id)),
+        });
         loadProjectAudioUrlForPlayback(song.playback_url || song.outer_audio_url, song.outer_audio_url || undefined);
     };
 
@@ -69,12 +73,12 @@ export const ImportAudioPanel: React.FC<{
                 type="file"
                 accept="audio/*,.mp3,.flac,.wav,.m4a,.aac,.ogg,.opus,.ncm,.qmcflac,.qmcogg,.qmc0,.qmc1,.qmc2,.qmc3"
                 onChange={onAudioUpload}
-                disabled={busy}
+                disabled={busy || disabled}
             />
             <button
                 className="studio-import-button compact-import"
                 type="button"
-                disabled={busy}
+                disabled={busy || disabled}
                 onClick={() => inputRef.current?.click()}
             >
                 <span className="studio-import-icon">+</span>
@@ -89,7 +93,9 @@ export const ImportAudioPanel: React.FC<{
     const renderNeteaseActions = ({ song }: NeteaseSearchRenderProps) => (
         <>
             <button type="button" onClick={() => loadNeteaseAudio(song)}>{u.loadAudioLink}</button>
-            <button type="button" onClick={() => window.open(song.song_url, "_blank", "noopener,noreferrer")}>{u.openSong}</button>
+            <button type="button" onClick={() => window.open(song.song_url, "_blank", "noopener,noreferrer")}>
+                {u.openSong}
+            </button>
         </>
     );
 

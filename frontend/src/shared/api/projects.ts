@@ -31,3 +31,22 @@ export const saveEditor = (
     payload: { plain_lyrics: string; synced_lyrics: string; metadata: MetaModel },
 ): Promise<ProjectModel> =>
     request<ProjectModel>(`/api/projects/${projectId}/editor`, { method: "POST", body: JSON.stringify(payload) });
+
+export type WorkspaceSnapshot = {
+    plain_lyrics: string;
+    synced_lyrics: string;
+    metadata: MetaModel;
+    source: string;
+    lrclib_id: number | null;
+};
+
+export function saveWorkspace(draftId: string, audio: File | null, snapshot: WorkspaceSnapshot): Promise<ProjectModel> {
+    const form = new FormData();
+    if (audio) form.append("audio", audio);
+    form.append("snapshot", JSON.stringify(snapshot));
+    return request<ProjectModel>(`/api/projects/drafts/${draftId}`, { method: "PUT", body: form });
+}
+
+export function audioMetadata(filename: string, metadata: MetaModel): Promise<MetaModel> {
+    return request<MetaModel>("/api/audio/metadata", { method: "POST", body: JSON.stringify({ filename, metadata }) });
+}

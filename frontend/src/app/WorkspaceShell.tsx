@@ -1,41 +1,47 @@
-import { useCallback, useContext, useState } from "react";
+import { useContext, useState } from "react";
+import { LrcUtilsPanel } from "../features/lrc-utils/LrcUtilsPanel.js";
 import { LrclibPanel } from "../features/lrclib/LrclibPanel.js";
 import { ImportAudioPanel } from "../features/project/ImportAudioPanel.js";
 import { ProjectPanel } from "../features/project/ProjectPanel.js";
 import { RollerPanel } from "../features/roller/RollerPanel.js";
 import { UploadPanel } from "../features/upload/UploadPanel.js";
-import { LrcUtilsPanel } from "../features/lrc-utils/LrcUtilsPanel.js";
-import { useLyricsDocument } from "./lyrics/useLyricsDocument.js";
-import { useProjectWorkspace } from "./projects/useProjectWorkspace.js";
 import { useTextFileDrop } from "../hooks/useTextFileDrop.js";
-import type { ProjectModel } from "../shared/api/types.js";
 import { appContext } from "../shared/appContext.js";
 import { LyricsWorkspace } from "./lyrics/LyricsWorkspace.js";
+import { useProjectWorkspace } from "./projects/useProjectWorkspace.js";
 import "./workspace.css";
 
 export const WorkspaceShell: React.FC = () => {
     const { prefState, lang, trimOptions } = useContext(appContext);
-    const { project, setProject } = useProjectWorkspace();
+    const workspace = useProjectWorkspace({ trimOptions, prefState, lang });
+    const { project, lyrics } = workspace;
     const [utilsOpen, setUtilsOpen] = useState(false);
-    const lyrics = useLyricsDocument({ trimOptions, prefState, project });
-
-    const onProject = useCallback((next: ProjectModel, applyToEditor = false) => {
-        setProject(next);
-        if (applyToEditor) lyrics.importProject(next);
-    }, [setProject, lyrics.importProject]);
-
-    useTextFileDrop(lyrics.importText);
+    useTextFileDrop(workspace.importLyrics);
 
     return (
         <main className="workspace-shell studio-main">
             <aside className="workspace-rail workspace-rail-left studio-side left">
-                <ProjectPanel project={project} onProject={onProject} />
-                <ImportAudioPanel project={project} onProject={onProject} />
+                <ProjectPanel
+                    project={project}
+                    onOpenProject={workspace.openProject}
+                    onSave={workspace.save}
+                    draftAudioName={workspace.file?.name}
+                    draftMetadata={workspace.canSave ? lyrics.editorMeta : undefined}
+                    draftSource={workspace.canSave ? workspace.source : undefined}
+                    dirty={workspace.dirty}
+                    canSave={workspace.canSave}
+                    saving={workspace.saving}
+                    transitioning={workspace.transitioning}
+                />
+                <ImportAudioPanel
+                    project={project}
+                    onImportAudio={workspace.importAudio}
+                    disabled={workspace.saving || workspace.transitioning}
+                />
                 <LrclibPanel
                     project={project}
                     editorMeta={lyrics.editorMeta}
-                    onProject={onProject}
-                    onImportText={lyrics.importText}
+                    onImportText={workspace.importLyrics}
                 />
             </aside>
 
@@ -53,15 +59,19 @@ export const WorkspaceShell: React.FC = () => {
                     plainLyrics={lyrics.plainLyrics}
                     syncedLyrics={lyrics.syncedLyrics}
                     editorMeta={lyrics.editorMeta}
-                    onProject={onProject}
-                    onImportText={lyrics.importText}
+                    draftAudioReady={Boolean(workspace.file)}
+                    saveWorkspace={workspace.save}
+                    workspaceId={workspace.workspaceId}
+                    workspaceSignature={workspace.signature}
+                    onJobResult={workspace.applyJobResult}
+                    workspaceBusy={workspace.saving || workspace.transitioning}
                 />
                 <UploadPanel
                     project={project}
                     plainLyrics={lyrics.plainLyrics}
                     syncedLyrics={lyrics.syncedLyrics}
                     editorMeta={lyrics.editorMeta}
-                    onProject={onProject}
+                    onSave={workspace.save}
                 />
             </aside>
 

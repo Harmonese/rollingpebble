@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { backendMessageText } from "../../../shared/api/request.js";
+import { selectLocalPath } from "../../../shared/api/settings.js";
 import {
     migrateStorageRoot as migrateStorageRootApi,
     openModelFolder as openModelFolderApi,
@@ -10,9 +11,10 @@ import {
     storageCleanupRun,
     storageUsage as storageUsageApi,
 } from "../../../shared/api/storage.js";
-import { selectLocalPath } from "../../../shared/api/settings.js";
 import type { StorageCleanupTarget, StorageRoot, StorageUsage } from "../../../shared/api/types.js";
 import { formatBytes } from "../../../shared/format.js";
+import { notifyProjectsChanged } from "../../../shared/projectEvents.js";
+import { useConfirmDialog } from "../../../ui/ConfirmDialog.js";
 import { toastPubSub } from "../../../ui/Toast.js";
 import { saveSettingsPatch, type SettingsControllerContext } from "./settingsControllerUtils.js";
 
@@ -24,12 +26,14 @@ function isOlderThanDays(value: string | null | undefined, days: number): boolea
     return Date.now() - date.getTime() >= days * 86400 * 1000;
 }
 
-export function useStorageSettingsController(options: SettingsControllerContext & {
-    projectAutoDeleteDays: string;
-    setProjectAutoDeleteDays: (value: string) => void;
-    refreshRuntime: (notify?: boolean) => Promise<void>;
-    tl: (key: string) => string;
-}) {
+export function useStorageSettingsController(
+    options: SettingsControllerContext & {
+        projectAutoDeleteDays: string;
+        setProjectAutoDeleteDays: (value: string) => void;
+        refreshRuntime: (notify?: boolean) => Promise<void>;
+        tl: (key: string) => string;
+    },
+) {
     const { lang, projectAutoDeleteDays, refresh, refreshRuntime, setBusy, setMessage, setProjectAutoDeleteDays, tl } =
         options;
     const t = lang.settings;
@@ -38,6 +42,7 @@ export function useStorageSettingsController(options: SettingsControllerContext 
     const [storageBusy, setStorageBusy] = useState(false);
     const [storageTargetPaths, setStorageTargetPaths] = useState<Record<string, string>>({});
 
+    const confirm = useConfirmDialog();
     const refreshStorage = useCallback(async () => {
         try {
             const usage = await storageUsageApi();
@@ -93,9 +98,9 @@ export function useStorageSettingsController(options: SettingsControllerContext 
             return;
         }
         if (
-            !window.confirm(
-                t.storage.confirmMigrateRoot.replace("{label}", tl(root.label)).replace("{path}", targetPath),
-            )
+            await confirm({
+                message: t.storage.confirmMigrateRoot.replace("{label}", tl(root.label)).replace("{path}", targetPath),
+            }) !== "confirm"
         ) return;
         setStorageBusy(true);
         setMessage(t.storage.migrating, "info");
@@ -191,7 +196,7 @@ export function useStorageSettingsController(options: SettingsControllerContext 
             setMessage(t.messages.noOtherDelete, "warning");
             return;
         }
-        if (options.confirmation && !window.confirm(options.confirmation)) {
+        if (options.confirmation && await confirm({ message: options.confirmation, danger: true }) !== "confirm") {
             return;
         }
         setStorageBusy(true);
@@ -209,7 +214,11 @@ export function useStorageSettingsController(options: SettingsControllerContext 
                 plan_id: plan.plan_id,
                 entry_ids: null,
             });
-            if (result.usage) setStorageUsage(result.usage);
+            if (result.usage) {
+                setStorageUsage(result.usage);
+                const remaining = new Set(result.usage.projects.map((item) => item.project_id));
+                notifyProjectsChanged(projectIds.filter((id) => !remaining.has(id)));
+            }
             const failedText = result.failed.length
                 ? ` ${t.messages.failedEntries.replace("{count}", String(result.failed.length))}`
                 : "";

@@ -1,18 +1,18 @@
 import SSK from "#const/session_key.json" with { type: "json" };
 import { useCallback, useContext, useEffect, useReducer, useRef } from "react";
+import { AudioPlayer } from "../features/audio/AudioPlayer.js";
 import { useAudio } from "../hooks/useAudio.js";
 import { useKeyBindings } from "../hooks/useKeyBindings.js";
+import { appContext, AppContextBits } from "../shared/appContext.js";
 import { AUDIO_DECODE_WORKER_ERROR, AUDIO_UNSUPPORTED_ERROR, prepareAudioFile } from "../shared/audioDecode.js";
+import { audioElementContext } from "../shared/audioElementContext.js";
 import { LOAD_PROJECT_AUDIO_EVENT, type ProjectAudioLoadDetail } from "../shared/audioEvents.js";
-import { removeSessionText, writeSessionText } from "../storage/browserStorage.js";
 import { AudioActionType, audioStatePubSub, currentTimePubSub } from "../shared/audioPlaybackEvents.js";
+import { removeSessionText, writeSessionText } from "../storage/browserStorage.js";
+import { toastPubSub } from "../ui/Toast.js";
 import { InputAction } from "../utils/input-action.js";
 import { isKeyboardElement } from "../utils/is-keyboard-element.js";
 import { getMatchedAction } from "../utils/keybindings.js";
-import { appContext, AppContextBits } from "../shared/appContext.js";
-import { AudioPlayer } from "../features/audio/AudioPlayer.js";
-import { toastPubSub } from "../ui/Toast.js";
-import { audioElementContext } from "../shared/audioElementContext.js";
 
 export const Footer: React.FC = () => {
     const { prefState, lang } = useContext(appContext, AppContextBits.lang | AppContextBits.builtInAudio);
@@ -88,10 +88,17 @@ export const Footer: React.FC = () => {
                 receiveFile(detail.file, setAudioSrc, lang);
                 return;
             }
-            if (detail?.url) {
+            if (detail && "url" in detail && typeof detail.url === "string") {
+                audio.current?.pause();
                 fallbackAudioUrlRef.current = detail.fallbackUrl || "";
-                writeSessionText(SSK.audioSrc, detail.url);
+                if (detail.url) writeSessionText(SSK.audioSrc, detail.url);
+                else removeSessionText(SSK.audioSrc);
                 setAudioSrc(detail.url);
+                if (!detail.url) {
+                    currentTimePubSub.pub(0);
+                    audioStatePubSub.pub({ type: AudioActionType.getDuration, payload: 0 });
+                    audioStatePubSub.pub({ type: AudioActionType.pause, payload: true });
+                }
             }
         };
         window.addEventListener(LOAD_PROJECT_AUDIO_EVENT, onProjectAudio as EventListener);
@@ -121,11 +128,7 @@ export const Footer: React.FC = () => {
             type: AudioActionType.getDuration,
             payload: audio.duration,
         });
-        toastPubSub.pub({
-            type: "success",
-            text: lang.notify.audioLoaded,
-        });
-    }, [lang, audio]);
+    }, [audio]);
 
     const syncCurrentTime = useCallback(() => {
         currentTimePubSub.pub(audio.currentTime);
@@ -213,13 +216,20 @@ export const Footer: React.FC = () => {
 
 type TsetAudioSrc = (src: string) => void;
 
-function audioImportErrorText(error: Error, lang: { ui: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string } }): string {
+function audioImportErrorText(
+    error: Error,
+    lang: { ui: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string } },
+): string {
     if (error.message === AUDIO_UNSUPPORTED_ERROR) return lang.ui.unsupportedAudioFile;
     if (error.message === AUDIO_DECODE_WORKER_ERROR) return lang.ui.audioDecodeWorkerFailed;
     return error.message;
 }
 
-const receiveFile = (file: File, setAudioSrc: TsetAudioSrc, lang: { ui: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string } }): void => {
+const receiveFile = (
+    file: File,
+    setAudioSrc: TsetAudioSrc,
+    lang: { ui: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string } },
+): void => {
     void prepareAudioFile(file)
         .then(({ file: prepared }) => {
             setAudioSrc(URL.createObjectURL(prepared));

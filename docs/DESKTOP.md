@@ -4,6 +4,12 @@ Rolling Pebble can be packaged as a lightweight Tauri desktop app while keeping 
 
 The desktop shell does not replace the backend. It starts a local Rolling Pebble server on a random `127.0.0.1` port, then opens a native WebView window pointed at that server.
 
+## Supported targets
+
+The maintained release preparation currently supports **macOS Apple Silicon only**. Linux, Windows and Intel macOS need platform-specific standalone Python selection, resource discovery, build hooks and native validation. Tauri support alone does not establish support for the bundled Python/audio dependency stack. Build PyInstaller sidecars on each target OS.
+
+Run the commands below from the repository root. [Development](DEVELOPMENT.md) covers the shared setup; [Release checklist](RELEASE.md) covers publication.
+
 ## Architecture
 
 ```text

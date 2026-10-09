@@ -1,12 +1,13 @@
 import { useCallback, useContext, useEffect, useState } from "react";
-import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { useAutoTimingState } from "../../domain/auto-timing/useAutoTimingState.js";
 import { useMessage } from "../../hooks/useMessage.js";
 import { autoRollerRuntime } from "../../shared/api/autoTiming.js";
 import { backendMessageText } from "../../shared/api/request.js";
 import { resetSettingsDefaults } from "../../shared/api/settings.js";
 import type { AutoRollerRuntime } from "../../shared/api/types.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { notifySettingsUpdated } from "../../shared/settingsEvents.js";
+import { useConfirmDialog } from "../../ui/ConfirmDialog.js";
 import { Message } from "../../ui/Message.js";
 import { Modal } from "../../ui/Modal.js";
 import { toastPubSub } from "../../ui/Toast.js";
@@ -141,8 +142,9 @@ export const SettingsPanel: React.FC<{ open: boolean; onClose: () => void }> = (
         }
     }, [open, refresh, refreshStorage]);
 
+    const confirm = useConfirmDialog();
     const resetDefaults = async () => {
-        if (!window.confirm(u.resetConfirm)) return;
+        if (await confirm({ message: u.resetConfirm, danger: true }) !== "confirm") return;
         setBusy(true);
         setMessage(t.messages.resetting, "info");
         try {

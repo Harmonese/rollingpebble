@@ -6,6 +6,32 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+## [0.7.3] - 2026-10-10
+
+### Added
+
+- Added temporary audio workspaces: importing audio no longer creates or copies a persistent project.
+- Added shared React confirmation dialogs for project and storage actions so deletion works consistently in the browser and Tauri desktop app.
+- Added workspace persistence tests and release documentation for project saving, cleanup and desktop validation.
+
+### Changed
+
+- Save Project and single-project Auto Timing now create or update the persistent project, while repeated saves reuse the existing audio.
+- First-time saves publish a complete project directory and reuse a stable draft identity on retry. Import metadata is read locally without uploading audio.
+- Unified the Project panel for saved and unsaved workspaces with `Project Status`, `Saved` and `Unsaved` states.
+- Simplified import and project messaging, removed redundant success notices, and aligned confirmation and action buttons with the existing UI style.
+- Consolidated documentation under `docs/`, updated the README and workflow guides, and retired obsolete upstream-only Docker/Vercel deployment files. Existing shortcuts and license notices are retained.
+
+### Fixed
+
+- Fixed stale Auto Timing results from being applied after switching or editing a workspace.
+- Fixed project-list deletion and undo notifications so active workspace state and recent-project ordering stay synchronized.
+
+### Distribution Notes
+
+- The macOS DMG is an arm64, ad-hoc signed build and is not Apple-notarized. Gatekeeper may prevent first launch on another Mac.
+- The desktop app bundles Python 3.12.15, but py-roller, audio dependencies and model caches are installed separately through Settings.
+
 ## [0.7.1] - 2026-10-08
 
 ### Added

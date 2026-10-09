@@ -95,7 +95,7 @@ The command runs outside the FastAPI request path. Rolling Pebble talks to the e
 ## API summary
 
 - Health: `GET /api/health`
-- Projects: `POST /api/projects`, `GET /api/projects`, `GET /api/projects/{project_id}`, `GET /api/projects/{project_id}/audio`, `POST /api/projects/{project_id}/open-folder`, `POST /api/projects/{project_id}/lyrics`, `POST /api/projects/{project_id}/editor`, `DELETE /api/projects/{project_id}`
+- Projects: `PUT /api/projects/drafts/{draft_id}` (workspace save), `POST /api/audio/metadata` (text-only metadata rules), `POST /api/projects` (legacy audio creation), `GET /api/projects`, `GET /api/projects/{project_id}`, `GET /api/projects/{project_id}/audio`, `POST /api/projects/{project_id}/open-folder`, `POST /api/projects/{project_id}/lyrics`, `POST /api/projects/{project_id}/editor`, `DELETE /api/projects/{project_id}`
 - Lyrics sources: `POST /api/lrclib/search`, `POST /api/lrclib/get`, `POST /api/lrclib/id`, `POST /api/netease/search`, `POST /api/netease/resolve`, `GET /api/netease/lyrics/{song_id}`, `GET /api/netease/audio/{song_id}`
 - Auto Timing: `POST /api/projects/{project_id}/roll/preview`, `POST /api/projects/{project_id}/roll`, `POST /api/batch/preview`, `POST /api/batch/roll`
 - Jobs: `GET /api/jobs/{job_id}`, `POST /api/jobs/{job_id}/cancel`, `POST /api/jobs/{job_id}/open-folder`
@@ -103,6 +103,18 @@ The command runs outside the FastAPI request path. Rolling Pebble talks to the e
 - Runtime: `GET /api/runtime/auto-roller`, `POST /api/runtime/auto-roller/doctor`, `POST /api/runtime/auto-roller/install`, `POST /api/runtime/auto-roller/upgrade`, `POST /api/runtime/auto-roller/cache-model`
 - Upload: `POST /api/projects/{project_id}/upload/plan`, `POST /api/projects/{project_id}/upload/run`
 - Storage: usage, root migration, open-folder, and cleanup preview/run endpoints under `/api/storage`
+
+## Desktop composition
+
+The Tauri shell chooses a loopback port, starts the Python backend and opens its URL in a native WebView. Production packaging supplies a PyInstaller sidecar and a standalone Python used to create isolated runtime environments. See [Desktop packaging](DESKTOP.md) for the supported platform and resource lifecycle.
+
+## Workspace persistence
+
+`app/projects/useProjectWorkspace` owns temporary audio, saved project identity, lyrics, source metadata, dirty state and save coordination. Audio import reads tags in the frontend and applies filename rules through a metadata-only request; it does not upload the audio. Lyrics imports change the editor and source information. Save Project and single-project Auto Timing share the persistence operation.
+
+`PUT /api/projects/drafts/{draft_id}` accepts optional audio and a JSON snapshot in multipart form data. It publishes a complete staged directory and uses a UUID draft identity to avoid duplicates after a lost response. Existing projects update through the lyrics endpoint without re-uploading audio. A first-time save does not re-import returned text into the editor. Task results are applied to the visible editor only when its workspace identity and content still match the task's origin.
+
+`ui/ConfirmDialog` provides asynchronous decisions using the existing Modal, Button and DialogActionRow components. Modal focus and keyboard handling belong to the topmost modal; business actions do not use browser-native confirm dialogs. Project-list and storage deletion notify the workspace and project list through a shared event.
 
 ## Frontend layout
 

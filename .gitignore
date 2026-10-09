@@ -29,3 +29,7 @@ src-tauri/gen/
 src-tauri/target/
 desktop/bin/
 desktop/python-runtime/
+
+# Local UI verification artifacts
+output/
+.playwright-cli/

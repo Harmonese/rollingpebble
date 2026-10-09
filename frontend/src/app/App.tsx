@@ -1,13 +1,14 @@
 import * as React from "react";
 import { AboutPanel } from "../features/about/AboutPanel.js";
 import { SettingsPanel } from "../features/settings/SettingsPanel.js";
+import { audioElementContext } from "../shared/audioElementContext.js";
+import { ConfirmProvider } from "../ui/ConfirmDialog.js";
+import { Toast } from "../ui/Toast.js";
 import { AppProvider } from "./AppContext.js";
-import { WorkspaceShell } from "./WorkspaceShell.js";
 import { Footer } from "./Footer.js";
 import { Header } from "./Header.js";
 import { ThemeEffects } from "./ThemeEffects.js";
-import { Toast } from "../ui/Toast.js";
-import { audioElementContext } from "../shared/audioElementContext.js";
+import { WorkspaceShell } from "./WorkspaceShell.js";
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
     state = { error: null as Error | null };
@@ -40,13 +41,15 @@ export const App: React.FC = () => {
             <ErrorBoundary>
                 <audioElementContext.Provider value={audioElRef}>
                     <AppProvider>
-                        <ThemeEffects />
-                        <Header onAbout={() => setAboutOpen(true)} onSettings={() => setSettingsOpen(true)} />
-                        <WorkspaceShell />
-                        <Footer />
-                        <Toast />
-                        <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
-                        <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+                        <ConfirmProvider>
+                            <ThemeEffects />
+                            <Header onAbout={() => setAboutOpen(true)} onSettings={() => setSettingsOpen(true)} />
+                            <WorkspaceShell />
+                            <Footer />
+                            <Toast />
+                            <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
+                            <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+                        </ConfirmProvider>
                     </AppProvider>
                 </audioElementContext.Provider>
             </ErrorBoundary>

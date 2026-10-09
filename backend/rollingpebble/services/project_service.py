@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import tempfile
+import uuid
 import re
 import shutil
 from datetime import datetime, timezone
@@ -7,7 +10,7 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
-from rollingpebble.models import ApplyLyricsRequest, MetaModel, ProjectModel, RuntimeSettingsModel, SaveEditorRequest
+from rollingpebble.models import ApplyLyricsRequest, MetaModel, ProjectModel, RuntimeSettingsModel, SaveEditorRequest, WorkspaceSaveRequest
 from rollingpebble.paths import StorageLayoutRef
 from rollingpebble.lyrics_utils import merge_lrc_metadata_header
 from rollingpebble.storage.files import (
@@ -35,6 +38,7 @@ class ProjectService:
             raise ValueError("ProjectService requires projects_root or layout_ref")
         self._projects_root = projects_root
         self.layout_ref = layout_ref
+        self._create_lock = asyncio.Lock()
 
     @property
     def projects_root(self) -> Path:
@@ -53,7 +57,22 @@ class ProjectService:
         project_id = new_project_id()
         audio_path = await save_upload_file(self.projects_root, project_id, upload)
         meta = self._read_audio_meta(audio_path).model_copy()
-        filename = upload.filename or audio_path.name
+        meta = self.audio_metadata(upload.filename or audio_path.name, meta, settings)
+
+        project = ProjectModel(
+            project_id=project_id,
+            last_opened_at=_utc_now_iso(),
+            audio_name=upload.filename,
+            audio_ref=audio_ref_for_path(self.projects_root, project_id, audio_path),
+            audio_path=str(audio_path),
+            metadata=meta,
+        )
+        write_project(self.projects_root, project)
+        return project
+
+    @staticmethod
+    def audio_metadata(filename: str, meta: MetaModel, settings: RuntimeSettingsModel | None) -> MetaModel:
+        meta = meta.model_copy()
         stem = Path(filename).stem
 
         if settings and settings.audio_filename_regex_enabled and settings.audio_filename_regex:
@@ -76,16 +95,34 @@ class ProjectService:
             except re.error:
                 pass
 
-        project = ProjectModel(
-            project_id=project_id,
-            last_opened_at=_utc_now_iso(),
-            audio_name=upload.filename,
-            audio_ref=audio_ref_for_path(self.projects_root, project_id, audio_path),
-            audio_path=str(audio_path),
-            metadata=meta,
-        )
-        write_project(self.projects_root, project)
-        return project
+        return meta
+
+    async def save_workspace(
+        self, draft_id: str, upload: UploadFile | None, snapshot: WorkspaceSaveRequest,
+        *, settings: RuntimeSettingsModel | None = None,
+    ) -> ProjectModel:
+        # Stable draft identity makes a retry after a lost response idempotent.
+        project_id = uuid.UUID(draft_id).hex
+        async with self._create_lock:
+            destination = self.projects_root / project_id
+            if destination.exists():
+                return self.apply_lyrics(project_id, ApplyLyricsRequest(**snapshot.model_dump()))
+            self.projects_root.mkdir(parents=True, exist_ok=True)
+            # Publish a complete directory only after every write has succeeded.
+            with tempfile.TemporaryDirectory(prefix=".saving-", dir=self.projects_root) as temporary:
+                staging = ProjectService(Path(temporary))
+                if upload is not None:
+                    project = await staging.create_from_audio(upload, settings=settings)
+                else:
+                    project = ProjectModel(project_id=new_project_id(), last_opened_at=_utc_now_iso())
+                    write_project(staging.projects_root, project)
+                project = staging.apply_lyrics(project.project_id, ApplyLyricsRequest(**snapshot.model_dump()))
+                staged_dir = staging.projects_root / project.project_id
+                project.project_id = project_id
+                project.audio_path = None
+                (staged_dir / "project.json").write_text(project.model_dump_json(indent=2), encoding="utf-8")
+                staged_dir.replace(destination)
+            return self.get(project_id)
 
     def get(self, project_id: str, *, touch: bool = False) -> ProjectModel:
         project = read_project(self.projects_root, project_id)

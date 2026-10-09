@@ -14,6 +14,10 @@ function formatLyricsSource(
 
 export const ProjectSummary: React.FC<{
     project: ProjectModel | null;
+    draftAudioName?: string;
+    draftMetadata?: ProjectModel["metadata"];
+    draftSource?: string;
+    saved: boolean;
     labels: {
         id: string;
         audio: string;
@@ -21,27 +25,34 @@ export const ProjectSummary: React.FC<{
         artist: string;
         duration: string;
         lyricsSource: string;
+        projectStatus: string;
+        saved: string;
+        unsaved: string;
         manual: string;
         sourceLrclib: string;
         sourceLocalFile: string;
         sourceAutoTiming: string;
     };
-}> = ({ project, labels }) => {
-    if (!project) return null;
+}> = ({ project, draftAudioName, draftMetadata, draftSource, saved, labels }) => {
+    if (!project && !draftAudioName && !draftMetadata) return null;
+    const metadata = project?.metadata || draftMetadata || { track: "", artist: "", album: "", duration: 0 };
+    const source = project?.source || draftSource || "manual";
     return (
         <KeyValueList>
             <b>{labels.id}</b>
-            <span>{project.project_id}</span>
+            <span>{project?.project_id || "-"}</span>
             <b>{labels.audio}</b>
-            <span>{project.audio_name || "-"}</span>
+            <span>{project?.audio_name || draftAudioName || "-"}</span>
             <b>{labels.title}</b>
-            <span>{project.metadata.track || "-"}</span>
+            <span>{metadata.track || "-"}</span>
             <b>{labels.artist}</b>
-            <span>{project.metadata.artist || "-"}</span>
+            <span>{metadata.artist || "-"}</span>
             <b>{labels.duration}</b>
-            <span>{project.metadata.duration ? `${project.metadata.duration}s` : "-"}</span>
+            <span>{metadata.duration ? `${metadata.duration}s` : "-"}</span>
             <b>{labels.lyricsSource}</b>
-            <span>{formatLyricsSource(project.source, labels)}</span>
+            <span>{formatLyricsSource(source, labels)}</span>
+            <b>{labels.projectStatus}</b>
+            <span>{saved ? labels.saved : labels.unsaved}</span>
         </KeyValueList>
     );
 };

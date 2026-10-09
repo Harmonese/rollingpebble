@@ -2,12 +2,12 @@ import { useContext } from "react";
 import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { Message, Panel, SectionTitle, Tabs } from "../../ui/index.js";
 
-import { useAutoTimingJob } from "./controllers/useAutoTimingJob.js";
 import { useAutoTimingState } from "../../domain/auto-timing/useAutoTimingState.js";
 import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
-import type { MetaModel, ProjectModel } from "../../shared/api/types.js";
 import { settings } from "../../shared/api/settings.js";
+import type { MetaModel, ProjectModel } from "../../shared/api/types.js";
 import { AutoTimingFields } from "./AutoTimingFields.js";
+import { useAutoTimingJob } from "./controllers/useAutoTimingJob.js";
 import { BatchProjectPicker } from "./parts/BatchProjectPicker.js";
 import { CommandPreview } from "./parts/CommandPreview.js";
 import { InputStatus } from "./parts/InputStatus.js";
@@ -20,9 +20,26 @@ export const RollerPanel: React.FC<{
     plainLyrics: string;
     syncedLyrics: string;
     editorMeta: MetaModel;
-    onProject: (project: ProjectModel, applyToEditor?: boolean) => void;
-    onImportText: (text: string) => void;
-}> = ({ project, plainLyrics, syncedLyrics, editorMeta, onProject, onImportText }) => {
+    draftAudioReady: boolean;
+    saveWorkspace: () => Promise<ProjectModel>;
+    workspaceId: string;
+    workspaceSignature: string;
+    workspaceBusy: boolean;
+    onJobResult: (workspaceId: string, signature: string, project: ProjectModel) => boolean;
+}> = (
+    {
+        project,
+        plainLyrics,
+        syncedLyrics,
+        editorMeta,
+        draftAudioReady,
+        saveWorkspace,
+        workspaceId,
+        workspaceSignature,
+        workspaceBusy,
+        onJobResult,
+    },
+) => {
     const at = useAutoTimingState();
     const { lang, prefState } = useContext(appContext, AppContextBits.lang | AppContextBits.prefState);
     const u = lang.ui;
@@ -48,16 +65,18 @@ export const RollerPanel: React.FC<{
         editorMeta,
         uiLang: prefState.lang,
         lang,
-        onProject,
-        onImportText,
+        draftAudioReady,
+        saveWorkspace,
+        workspaceId,
+        workspaceSignature,
+        onJobResult,
     });
 
-    const startDisabled = jobState.busy || jobState.running || !jobState.inputState.ready;
+    const startDisabled = workspaceBusy || jobState.busy || jobState.running || !jobState.inputState.ready;
     const batchStartDisabled = jobState.busy || jobState.running || jobState.selectedBatchIds.size === 0;
 
     return (
         <Panel title={u.autoTiming}>
-
             <Tabs
                 ariaLabel={u.autoTiming}
                 items={[{ value: "single", label: u.single }, { value: "batch", label: u.batch }]}
@@ -96,7 +115,7 @@ export const RollerPanel: React.FC<{
                 singleStartDisabled={startDisabled}
                 batchStartDisabled={batchStartDisabled}
                 cancelDisabled={!jobState.running || jobState.busy}
-                retrySingleDisabled={jobState.busy || jobState.running || !project}
+                retrySingleDisabled={startDisabled}
                 retryBatchDisabled={batchStartDisabled}
                 onStart={() => void jobState.start()}
                 onStartBatch={() => void jobState.startBatch()}

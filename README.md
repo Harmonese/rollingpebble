@@ -9,7 +9,7 @@
 
 Rolling Pebble is a local lyrics workstation for searching, editing, timing, organizing, and publishing LRC lyrics.
 
-It gives you a browser-based interface backed by a local Python server. Your projects, audio, lyrics, runtime environments, and model caches stay on your machine. Auto Timing is powered by `py-roller` in an isolated runtime so large audio dependencies do not pollute the main app environment.
+It provides a Tauri desktop app for macOS Apple Silicon and a browser interface backed by a local Python server. Your projects, audio, lyrics, runtime environments, and model caches stay on your machine. Auto Timing is powered by `py-roller` in an isolated runtime so large audio dependencies do not pollute the main app environment.
 
 ## What It Does
 
@@ -23,17 +23,19 @@ It gives you a browser-based interface backed by a local Python server. Your pro
 
 ## Typical Workflow
 
-1. Create or import a project with an audio file.
+1. Open an audio file in a temporary workspace; importing does not create a project.
 2. Import lyrics from LRCLIB, a local file, or the editor.
 3. Clean up the lyric text and metadata.
-4. Use the Synchronizer for manual timing, or Auto Timing for py-roller based alignment.
+4. Use the Synchronizer for manual timing and export directly. Save Project keeps your audio and lyrics; Auto Timing also saves the workspace before processing.
 5. Review the generated LRC, export it, or publish it through LRCLIB.
+
+The Project panel uses the same layout throughout, with **Project Status** showing **Saved** or **Unsaved**. Repeated saves update the existing project without copying the audio again.
 
 ## Install
 
 ### macOS Desktop (Apple Silicon)
 
-Download the v0.7.1 arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**.
+Download the v0.7.3 arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**.
 
 1. Open the app and go to **Settings -> Auto Timing**.
 2. Leave the runtime profile on **Auto**, then click **Create / Repair Runtime** and wait for success.
@@ -45,7 +47,7 @@ The app includes Python 3.12.15, but not py-roller, audio dependencies, or model
 
 ### Command Line
 
-The macOS arm64 desktop build includes standalone Python 3.12. It does not include `py-roller`, its audio dependencies, or model caches. Desktop users configure these from Settings; no separate Python or Homebrew installation is required. See [DESKTOP.md](DESKTOP.md) for packaging and release-validation requirements.
+The macOS arm64 desktop build includes standalone Python 3.12. It does not include `py-roller`, its audio dependencies, or model caches. Desktop users configure these from Settings; no separate Python or Homebrew installation is required. See [desktop packaging](docs/DESKTOP.md) for packaging and release-validation requirements.
 
 For the command-line installation below, Rolling Pebble requires Python 3.10 or newer. Auto Timing additionally needs a Python 3.12 executable available on your system because the isolated `py-roller` runtime is built on Python 3.12.
 
@@ -74,22 +76,6 @@ Then open:
 ```text
 http://127.0.0.1:6789
 ```
-
-## First Run
-
-Start Rolling Pebble:
-
-```bash
-rollingpebble
-```
-
-Then open:
-
-```text
-http://127.0.0.1:6789
-```
-
-The default server binds to `127.0.0.1`, so it is intended for local use.
 
 ## Auto Timing
 
@@ -128,34 +114,10 @@ Inside the app, **Settings -> Storage & Cleanup** shows project data, model cach
 
 Rolling Pebble only contacts external services when you use features that need them, such as LRCLIB lookup/publishing, supported online source import, or model downloads for Auto Timing.
 
-## Developer Notes
+## Documentation
 
-For source development:
-
-```bash
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install -U pip setuptools wheel
-python -m pip install -e .
-pnpm install
-```
-
-Run the backend and frontend together:
-
-```bash
-. .venv/bin/activate
-rollingpebble dev
-```
-
-Or use two terminals:
-
-```bash
-# terminal 1
-. .venv/bin/activate
-rollingpebble serve --reload
-
-# terminal 2
-pnpm dev
-```
-
-Release packaging details live in [RELEASE.md](./RELEASE.md).
+- [User guide / 使用指南](docs/USER_GUIDE.md): temporary workspaces, saving, timing, shortcuts, export and deletion.
+- [Storage and cleanup](docs/STORAGE.md): storage roots and the exact automatic-deletion behavior.
+- [Development](docs/DEVELOPMENT.md) and [architecture](docs/ARCHITECTURE.md).
+- [Desktop packaging](docs/DESKTOP.md) and [release checklist](docs/RELEASE.md).
+- [Documentation index](docs/README.md) and [changelog](CHANGELOG.md).

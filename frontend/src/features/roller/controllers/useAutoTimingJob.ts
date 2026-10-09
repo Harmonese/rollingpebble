@@ -1,19 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
-import { toastPubSub } from "../../../ui/Toast.js";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { computeAutoTimingInputState } from "../../../domain/auto-timing/inputReadiness.js";
 import type { AutoTimingHook } from "../../../domain/auto-timing/useAutoTimingState.js";
 import { useMessage } from "../../../hooks/useMessage.js";
 import type { Language } from "../../../languages/index.js";
-import { batchRoll, roll, rollPreview } from "../../../shared/api/autoTiming.js";
+import { autoRollerRuntime, batchRoll, roll, rollPreview } from "../../../shared/api/autoTiming.js";
 import { cancelJob, getJob, openJobFolder as openJobFolderApi } from "../../../shared/api/jobs.js";
-import { getProject, listProjects, saveEditor } from "../../../shared/api/projects.js";
+import { getProject, listProjects } from "../../../shared/api/projects.js";
 import { backendMessageText } from "../../../shared/api/request.js";
-import {
-    type JobModel,
-    type MetaModel,
-    type ProjectModel,
-    type RollPreview,
-} from "../../../shared/api/types.js";
+import { type JobModel, type MetaModel, type ProjectModel, type RollPreview } from "../../../shared/api/types.js";
+import { toastPubSub } from "../../../ui/Toast.js";
 
 export type AutoTimingMode = "single" | "batch";
 
@@ -25,11 +20,30 @@ export function useAutoTimingJob(args: {
     editorMeta: MetaModel;
     uiLang: string;
     lang: Language;
-    onProject: (project: ProjectModel, applyToEditor?: boolean) => void;
-    onImportText: (text: string) => void;
+    draftAudioReady: boolean;
+    saveWorkspace: () => Promise<ProjectModel>;
+    workspaceId: string;
+    workspaceSignature: string;
+    onJobResult: (workspaceId: string, signature: string, project: ProjectModel) => boolean;
 }) {
-    const { at, project, plainLyrics, syncedLyrics, editorMeta, uiLang, lang, onProject, onImportText } = args;
+    const {
+        at,
+        project,
+        plainLyrics,
+        syncedLyrics,
+        uiLang,
+        lang,
+        draftAudioReady,
+        saveWorkspace,
+        workspaceId,
+        workspaceSignature,
+        onJobResult,
+    } = args;
     const u = lang.ui;
+    const contextRef = useRef({ workspaceId, workspaceSignature, onJobResult });
+    contextRef.current = { workspaceId, workspaceSignature, onJobResult };
+    const jobContext = useRef<{ workspaceId: string; signature: string; projectId: string } | null>(null);
+    const starting = useRef(false);
     const tm = lang.toast.autoTiming;
     const [batchMode, setBatchMode] = useState<AutoTimingMode>("single");
     const [batchProjects, setBatchProjects] = useState<ProjectModel[]>([]);
@@ -45,13 +59,31 @@ export function useAutoTimingJob(args: {
 
     const inputState = useMemo(
         () =>
-            computeAutoTimingInputState(project, plainLyrics, syncedLyrics, at.stages, {
-                noProject: u.selectProject,
-                noAudio: u.noAudio,
-                noLyrics: u.noLyrics,
-                ready: u.ready,
-            }),
-        [project, plainLyrics, syncedLyrics, at.stages, u.selectProject, u.noAudio, u.noLyrics, u.ready],
+            computeAutoTimingInputState(
+                project || (draftAudioReady || plainLyrics.trim() || syncedLyrics.trim()
+                    ? { audio_path: draftAudioReady ? "draft" : null }
+                    : null),
+                plainLyrics,
+                syncedLyrics,
+                at.stages,
+                {
+                    noProject: u.selectProject,
+                    noAudio: u.noAudio,
+                    noLyrics: u.noLyrics,
+                    ready: u.ready,
+                },
+            ),
+        [
+            project,
+            draftAudioReady,
+            plainLyrics,
+            syncedLyrics,
+            at.stages,
+            u.selectProject,
+            u.noAudio,
+            u.noLyrics,
+            u.ready,
+        ],
     );
 
     useEffect(() => {
@@ -85,60 +117,84 @@ export function useAutoTimingJob(args: {
 
     useEffect(() => {
         if (!job || !["queued", "running"].includes(job.status)) return;
+        let canceled = false;
+        let polling = false;
         const timer = window.setInterval(async () => {
+            if (polling) return;
+            polling = true;
             try {
                 const updated = await getJob(job.job_id);
-                setJob(updated);
-                if (updated.status === "succeeded" && updated.result?.synced_lyrics) {
-                    onImportText(String(updated.result.synced_lyrics));
-                    if (project) {
-                        const refreshed = await getProject(project.project_id);
-                        onProject(refreshed, false);
-                    }
-                    toastPubSub.pub({ type: "success", text: tm.finished });
+                if (canceled) return;
+                if (updated.status === "succeeded") {
+                    const origin = jobContext.current;
+                    if (origin && updated.result?.synced_lyrics) {
+                        const refreshed = await getProject(origin.projectId);
+                        if (!canceled) {
+                            const applied = contextRef.current.onJobResult(
+                                origin.workspaceId,
+                                origin.signature,
+                                refreshed,
+                            );
+                            toastPubSub.pub({ type: "success", text: applied ? tm.finished : u.jobSavedElsewhere });
+                        }
+                    } else toastPubSub.pub({ type: "success", text: tm.finished });
                 }
+                if (canceled) return;
+                setJob(updated);
                 if (updated.status === "failed") toastPubSub.pub({ type: "error", text: updated.error || tm.failed });
                 if (updated.status === "canceled") toastPubSub.pub({ type: "warning", text: tm.canceled });
             } catch (error) {
-                setMessage(backendMessageText(error, lang.backendMessages), "error");
+                if (!canceled) setMessage(backendMessageText(error, lang.backendMessages), "error");
+            } finally {
+                polling = false;
             }
         }, 1500);
-        return () => window.clearInterval(timer);
-    }, [job, onImportText, onProject, project]);
-
-    const saveAndPreview = async () => {
-        if (!project) throw new Error(tm.selectProject);
-        await saveEditor(project.project_id, {
-            plain_lyrics: plainLyrics,
-            synced_lyrics: syncedLyrics,
-            metadata: editorMeta,
-        });
-        const next = await rollPreview(project.project_id, rollPayload());
-        setPreview(next);
-        setPreviewError("");
-        return next;
-    };
+        return () => {
+            canceled = true;
+            window.clearInterval(timer);
+        };
+    }, [job?.job_id, job?.status]);
 
     const start = async () => {
-        if (!project) {
-            setMessage(tm.selectProject, "warning");
-            return;
-        }
+        if (starting.current) return;
         if (!inputState.ready) {
             setMessage(inputState.reason, "warning");
             return;
         }
+        starting.current = true;
         setBusy(true);
         setMessage(tm.starting, "info");
+        const origin = { workspaceId, signature: workspaceSignature };
+        const payload = rollPayload();
         try {
-            await saveAndPreview();
-            const created = await roll(project.project_id, rollPayload());
+            const runtime = await autoRollerRuntime();
+            if (!runtime.available) {
+                throw new Error(
+                    backendMessageText(
+                        runtime.detail_message || runtime.detail || u.runtimeRequired,
+                        lang.backendMessages,
+                    ),
+                );
+            }
+            if (
+                contextRef.current.workspaceId !== origin.workspaceId
+                || contextRef.current.workspaceSignature !== origin.signature
+            ) {
+                setMessage(u.workspaceChanged, "warning");
+                return;
+            }
+            const saved = await saveWorkspace();
+            const next = await rollPreview(saved.project_id, payload);
+            if (contextRef.current.workspaceId === origin.workspaceId) setPreview(next);
+            jobContext.current = { ...origin, projectId: saved.project_id };
+            const created = await roll(saved.project_id, payload);
             setJob(created);
             setMessage("");
             toastPubSub.pub({ type: "success", text: tm.started.replace("{id}", created.job_id) });
         } catch (error) {
             setMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
+            starting.current = false;
             setBusy(false);
         }
     };
@@ -206,6 +262,7 @@ export function useAutoTimingJob(args: {
         setMessage(tm.batchStarting, "info");
         try {
             const payload = { ...rollPayload(), project_ids: [...selectedBatchIds], continue_on_error: true };
+            jobContext.current = null;
             const created = await batchRoll(payload);
             setJob(created);
             setMessage("");

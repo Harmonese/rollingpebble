@@ -159,6 +159,16 @@ class SaveEditorRequest(BaseModel):
     metadata: MetaModel | None = None
 
 
+class WorkspaceSaveRequest(SaveEditorRequest):
+    source: str = "manual"
+    lrclib_id: int | None = None
+
+
+class AudioMetadataRequest(BaseModel):
+    filename: str
+    metadata: MetaModel = Field(default_factory=MetaModel)
+
+
 class RollRequest(BaseModel):
     language: Literal["zh", "en", "mul"] = "zh"
     # UI should prefer business-level presets, but keep raw stages for

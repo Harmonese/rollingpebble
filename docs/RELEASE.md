@@ -1,6 +1,6 @@
 # Release Checklist
 
-Current release target: `v0.7.1`.
+Read the release version from `pyproject.toml`; current examples use `0.7.3`. Run commands from the repository root.
 
 Publishing a GitHub Release triggers `.github/workflows/python-publish.yml` and
 publishes Python distributions to PyPI through trusted publishing. Pushing the
@@ -24,6 +24,8 @@ cargo test --manifest-path src-tauri/Cargo.toml
 The Chinese i18n check is the release gate; the all-locale audit may report
 historical untranslated non-Chinese strings.
 
+Before publishing, also verify the [workspace and deletion flow](USER_GUIDE.md) using isolated data: opening audio creates no project, Save Project creates one complete project, Auto Timing saves once, and React confirmation cancellation/undo works in the actual native app.
+
 ## macOS DMG
 
 Build on Apple Silicon with the tools described in [DESKTOP.md](DESKTOP.md):
@@ -31,8 +33,8 @@ Build on Apple Silicon with the tools described in [DESKTOP.md](DESKTOP.md):
 ```bash
 pnpm desktop:build
 codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Rolling Pebble.app"
-hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.7.1_aarch64.dmg"
-shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.7.1_aarch64.dmg"
+hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.7.3_aarch64.dmg"
+shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.7.3_aarch64.dmg"
 ```
 
 The build hook rebuilds the sidecar with standalone Python, includes app version
@@ -68,8 +70,8 @@ cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
 
 Expected files:
 
-- `dist/rollingpebble-0.7.1-py3-none-any.whl`
-- `dist/rollingpebble-0.7.1.tar.gz`
+- `dist/rollingpebble-0.7.3-py3-none-any.whl`
+- `dist/rollingpebble-0.7.3.tar.gz`
 
 Verify these include the WebUI and current metadata, but not standalone Python,
 virtual environments, or models. CLI/PyPI users still need Python 3.12 for Auto
@@ -80,12 +82,12 @@ Timing. The workflow checks that the release tag matches the package version.
 After checks and artifact verification:
 
 ```bash
-git tag -a v0.7.1 -m "Release v0.7.1"
-git push --atomic origin main v0.7.1
+git tag -a v0.7.3 -m "Release v0.7.3"
+git push --atomic origin main v0.7.3
 ```
 
-Manually publish the GitHub Release for `v0.7.1`, attach
-`Rolling Pebble_0.7.1_aarch64.dmg` and its SHA-256 checksum, and use the v0.7.1
+Manually publish the GitHub Release for `v0.7.3`, attach
+`Rolling Pebble_0.7.3_aarch64.dmg` and its SHA-256 checksum, and use the v0.7.3
 changelog as release notes. Mention that only Python is bundled: dependencies
 and models are downloaded through Settings, a proxy may be needed, and Full
 processing may download Demucs separately on first use. Then verify the PyPI

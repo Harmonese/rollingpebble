@@ -1,8 +1,5 @@
 import { useCallback, useEffect } from "react";
 import { useAudioDurationEffect } from "../../domain/audio/useAudioTimeline.js";
-import { useEditorMetadataSetting } from "../../hooks/useEditorMetadataSetting.js";
-import type { ProjectModel } from "../../shared/api/types.js";
-import { editorStorageKeys, readLocalText, readSessionNumber, writeLocalText, writeSessionText } from "../../storage/browserStorage.js";
 import {
     convertTimeToTag,
     LyricsDocumentActionType,
@@ -12,7 +9,16 @@ import {
     useLyricsEngine,
 } from "../../domain/lyrics/lyricsDocument.js";
 import type { LyricsTrimOptions } from "../../domain/lyrics/types.js";
+import { useEditorMetadataSetting } from "../../hooks/useEditorMetadataSetting.js";
+import type { ProjectModel } from "../../shared/api/types.js";
 import { buildImportTextFromProject } from "../../shared/lrc.js";
+import {
+    editorStorageKeys,
+    readLocalText,
+    readSessionNumber,
+    writeLocalText,
+    writeSessionText,
+} from "../../storage/browserStorage.js";
 
 function fixedValue(value: unknown): Fixed {
     return value === 0 || value === 1 || value === 2 || value === 3 ? value : 3;
@@ -21,7 +27,7 @@ function fixedValue(value: unknown): Fixed {
 export function useLyricsDocument(args: {
     trimOptions: LyricsTrimOptions;
     prefState: unknown;
-    project: ProjectModel | null;
+    project: Pick<ProjectModel, "metadata"> | null;
 }) {
     const includeMetadataTags = useEditorMetadataSetting();
     const [state, dispatch] = useLyricsEngine(() => ({
@@ -42,14 +48,20 @@ export function useLyricsDocument(args: {
         useCallback((duration) => {
             dispatch({
                 type: LyricsDocumentActionType.info,
-                payload: { name: "length", value: convertTimeToTag(duration, fixedValue((args.prefState as { fixed?: number }).fixed), false) },
+                payload: {
+                    name: "length",
+                    value: convertTimeToTag(duration, fixedValue((args.prefState as { fixed?: number }).fixed), false),
+                },
             });
         }, [dispatch, args.prefState]),
     );
 
     useEffect(() => {
         const saveState = (): void => {
-            writeLocalText(editorStorageKeys.lyric, lyricsDocumentSyncedText(state, args.prefState, includeMetadataTags));
+            writeLocalText(
+                editorStorageKeys.lyric,
+                lyricsDocumentSyncedText(state, args.prefState, includeMetadataTags),
+            );
             writeSessionText(editorStorageKeys.selectIndex, state.selectIndex.toString());
         };
         const onVisibilitychange = () => {

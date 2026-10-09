@@ -1,109 +1,55 @@
 # Storage and cleanup
 
-rollingpebble stores local data under the configured data directory. The default is usually:
+[Documentation index](README.md) · [User guide](USER_GUIDE.md)
 
-```text
-~/.local/share/rollingpebble
-```
+## What creates files
 
-You can override it with `--data-dir` or `LRC_ROLLER_DATA_DIR`.
+Opening local audio uses a temporary frontend workspace. It does not create a project or upload the audio. **Save Project** or starting single-project **Auto Timing** persists the workspace. Re-saving a project updates its lyrics and metadata without another audio copy. Direct LRC export needs no project.
 
-## Storage & Cleanup panel
+Unsaved audio is session-only. Browser editor text recovery is separate from backend project persistence and does not restore an audio file after restart. Model downloads and runtime setup are separate, explicit operations.
 
-The Settings drawer has a **Storage & Cleanup** section at the bottom. The current panel focuses on the parts that actually matter for this app right now:
+The default data directory is `~/.local/share/rollingpebble`. Override it with `--data-dir` or `LRC_ROLLER_DATA_DIR`.
 
-- **Projects**
-- **Models**
-- **Runtime Environments**
-- **Other**
-- **Browser Storage**
+| Location | Contents |
+| --- | --- |
+| `projects/` | Saved audio, project metadata, lyrics, Auto Timing intermediates and artifacts |
+| `models/` | Transcriber and other audio-model caches |
+| `envs/` | Isolated py-roller environments |
+| `cache/` | Redirected pip/XDG and other reproducible caches |
+| `work/` | Job request files and temporary task work |
+| `toolchains/` | Python copied from a supported desktop bundle for runtime setup |
+| `settings.json` | Application settings and runtime history |
 
-External tool cache data is no longer exposed as a first-class cleanup section. If present, it appears under **Other** as **External Cache** and is included in **Safe Cleanup**.
+Projects and model roots can be relocated through Settings. Runtime layout also understands configured cache, runtime, and work roots. A project audio reference is relative to its project directory. Root migration updates persisted settings and services, and retains the source backup; it must not be treated as automatic source-disk cleanup.
 
-## Overview
+## Manual cleanup
 
-The overview shows total disk usage and these categories:
+Settings → Storage & Cleanup reports projects, models, runtimes, and other data.
 
-- **Projects**: all project folders under `projects/`.
-- **Models**: the whole `models/` directory.
-- **Runtime Environments**: the whole `envs/` directory.
-- **Other**: known app data and first-level files/folders under the data directory that are not `projects/`, `models/`, or `envs/`.
+| Operation | Scope |
+| --- | --- |
+| Safe Cleanup | Project `intermediate/` directories and external cache |
+| Clear Intermediates | Only intermediates for the selected/listed projects |
+| Delete Projects | Entire selected project directories, including audio and saved lyrics |
+| Delete Model | The selected model cache; future use can download it again |
+| Delete Runtime | The selected inactive runtime, without deleting models |
+| Other cleanup | Selected removable app-data items |
+| Browser Storage | Fixed browser keys and application CacheStorage entries; no backend project files |
 
-The **Other** section also lists its first-level items. Known entries get readable names:
+The **Older Than** filter limits which projects are listed and selected by bulk actions. It does not enable automatic deletion. Model caches can include transcriber provider hub directories, manifests, and Torch/Demucs data.
 
-- **Settings File**: `settings.json`.
-- **External Cache**: `cache/`, currently used for redirected pip/XDG cache paths.
+Confirmation dialogs run inside the application. Project List deletion has a ten-second undo period before the delete request. Settings cleanup executes after confirmation and does not have that undo period. Deletions use filesystem removal, not the operating system Trash.
 
-System noise such as `.DS_Store` is ignored. Unknown first-level files or folders are shown by their own names so they can be noticed and removed intentionally from **Other**.
+## Automatic project deletion — current behavior
 
-Each **Other** row can open its location. Folder rows open that folder; file rows open the parent folder. **Settings File** can be opened but is protected from deletion.
+`project_auto_delete_days` defaults to `0` (off). A positive value enables deletion of entire expired projects, including audio and saved lyrics.
 
-## Safe Cleanup
+**This is not a background scheduler.** The policy runs when the backend storage-usage operation is requested, including opening Settings or refreshing storage. The field saves on blur, then refreshes storage; enabling or shortening the period can therefore delete qualifying projects immediately.
 
-The top-level **Safe Cleanup** action removes project `intermediate/` directories and **External Cache**. These files can be recreated or downloaded again when needed. External Cache is locked while Auto Timing or runtime maintenance is running.
+Age is calculated from the recorded last-opened timestamp, falling back to directory modification time. Projects associated with running jobs are skipped. This protection does not represent an editor-session lease and does not cover every manually open workspace. Automatic deletion has no confirmation or ten-second undo window. Leave it off if you need to retain saved work indefinitely.
 
-## Projects
+## Deletion boundaries
 
-Projects are filtered by **Older Than**. The project list only shows projects whose `updated_at` is older than the selected value. **Clear Intermediates** and **Delete** only operate on the projects currently shown by this filter.
+Paths are resolved against configured managed roots, which can be outside the original data directory. Cleanup rejects paths outside those roots and does not accept arbitrary frontend deletion paths. Symlink roots are rejected. The cleanup service protects active runtimes, running projects, settings, and busy model/runtime/cache operations according to their job guards. These storage-cleanup guards should not be confused with a general guarantee that every project has an active-editing lock.
 
-Each project row shows:
-
-- **Total**: the whole project folder size.
-- **Intermediate**: the size of `projects/<project_id>/intermediate/`.
-
-Per-project actions:
-
-- **Clear Intermediates**: deletes only `projects/<project_id>/intermediate/`.
-- **Delete**: deletes the whole `projects/<project_id>/` folder.
-
-A project with a running job is blocked from deletion and intermediate cleanup.
-
-## Models
-
-Models are scanned from the managed `models/` directory.
-
-Known py-roller transcriber cache layouts are detected under:
-
-```text
-models/transcriber/providers/huggingface/hub/models--*
-models/transcriber/providers/faster_whisper/hub/models--*
-models/transcriber/manifests/transcriber-index.json
-```
-
-The panel also detects:
-
-```text
-models/torch/*
-models/<other-first-level-folder>
-```
-
-Model rows show the label, provider/backend, path, size, and file count. You can open a model folder or delete a specific model cache item. Deleting a model does not delete projects, but Auto Timing may download the model again when needed.
-
-## Runtime Environments
-
-Runtime environments are scanned from:
-
-```text
-envs/*
-```
-
-Each runtime row shows its runtime id, profile, status, py-roller version, Python version, size, and file count when available from `runtime.json`.
-
-The current active runtime is marked and protected. Runtimes are also protected while Auto Timing, runtime install, or runtime doctor jobs are running.
-
-## Browser Storage
-
-Browser Storage clears fixed local browser keys and rollingpebble CacheStorage entries. It does not delete backend project files.
-
-## Safety boundaries
-
-The cleanup backend enforces these rules:
-
-- cleanup paths must stay inside the configured data directory;
-- symbolic links are not followed or deleted as cleanup roots;
-- running projects cannot be deleted or modified;
-- model and runtime cleanup are locked while Auto Timing or runtime maintenance is running;
-- the active runtime is protected;
-- `settings.json` is protected;
-- Other cleanup is limited to first-level data directory items already reported by the backend;
-- frontend requests do not pass arbitrary paths for deletion; the backend maps selected IDs or reported Other paths to known paths.
+First-time workspace saves are written in a staging directory and made visible only after completion. Failed saves remove their staging data. A stable draft ID makes creation retries reuse the same saved project rather than duplicate audio.

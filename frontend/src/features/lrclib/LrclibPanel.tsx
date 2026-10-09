@@ -2,17 +2,16 @@ import { useContext, useMemo, useRef, useState } from "react";
 import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { ButtonGroup, FormGrid, Message, MutedText, Panel, Tabs } from "../../ui/index.js";
 
-import { toastPubSub } from "../../ui/Toast.js";
-import { useProjectMetadataSeed } from "../shared/useProjectMetadataSeed.js";
 import { useMessage } from "../../hooks/useMessage.js";
 import type { Language } from "../../languages/index.js";
 import { lrclibGet, lrclibGetById, lrclibSearch, neteaseLyrics } from "../../shared/api/lyricsSources.js";
-import { applyLyrics } from "../../shared/api/projects.js";
 import { backendMessageText } from "../../shared/api/request.js";
 import type { LyricsRecord, MetaModel, ProjectModel } from "../../shared/api/types.js";
 import { buildImportText } from "../../shared/lrc.js";
+import { toastPubSub } from "../../ui/Toast.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
+import { useProjectMetadataSeed } from "../shared/useProjectMetadataSeed.js";
 
 type LibraryKind = "lrclib" | "local" | "netease";
 
@@ -27,14 +26,11 @@ const previewText = (record: LyricsRecord, u: Language["ui"]) => {
     ].filter(Boolean).join("\n\n");
 };
 
-const hasLrcTimestamps = (text: string) => /\[\d{1,2}:\d{2}(?:\.\d{1,3})?\]/.test(text);
-
 export const LrclibPanel: React.FC<{
     project: ProjectModel | null;
     editorMeta: MetaModel;
-    onProject: (project: ProjectModel, applyToEditor?: boolean) => void;
-    onImportText: (text: string) => void;
-}> = ({ project, editorMeta, onProject, onImportText }) => {
+    onImportText: (text: string, origin?: { source: string; lrclib_id: number | null }) => void;
+}> = ({ project, editorMeta, onImportText }) => {
     const [library, setLibrary] = useState<LibraryKind>("lrclib");
     const [query, setQuery] = useState("");
     const { meta, updateMeta } = useProjectMetadataSeed({ project, fallbackMeta: editorMeta, updateQuery: setQuery });
@@ -114,28 +110,12 @@ export const LrclibPanel: React.FC<{
         try {
             const syncedLyrics = mode === "plain" ? "" : record.synced_lyrics.trim();
             const plainLyrics = mode === "synced" ? "" : record.plain_lyrics;
-            const payload = {
-                metadata: {
-                    track: record.track_name || meta.track,
-                    artist: record.artist_name || meta.artist,
-                    album: record.album_name || meta.album,
-                    duration: record.duration || meta.duration || 0,
-                },
-                plain_lyrics: plainLyrics,
-                synced_lyrics: syncedLyrics,
-                source: "lrclib",
-                lrclib_id: record.id,
-            };
             const text = buildImportText({
                 ...record,
                 plain_lyrics: plainLyrics,
                 synced_lyrics: syncedLyrics,
             });
-            onImportText(text);
-            if (project) {
-                const updated = await applyLyrics(project.project_id, payload);
-                onProject(updated, false);
-            }
+            onImportText(text, { source: "lrclib", lrclib_id: record.id ?? null });
             toastPubSub.pub({ type: "success", text: t.lrclib.imported });
         } catch (error) {
             setMessage(backendMessageText(error, lang.backendMessages), "error");
@@ -161,29 +141,13 @@ export const LrclibPanel: React.FC<{
     const importLocalText = async () => {
         const raw = localText.trim();
         if (!raw) return;
-        const synced = hasLrcTimestamps(raw);
         try {
             const text = raw;
-            onImportText(text);
-            if (project) {
-                const updated = await applyLyrics(project.project_id, {
-                    metadata: meta,
-                    plain_lyrics: synced ? "" : text,
-                    synced_lyrics: synced ? text : "",
-                    source: "local file",
-                    lrclib_id: null,
-                });
-                onProject(updated, false);
-                toastPubSub.pub({
-                    type: "success",
-                    text: t.lrclib.importedLocal.replace("{name}", localFileName || "local lyrics"),
-                });
-            } else {
-                toastPubSub.pub({
-                    type: "success",
-                    text: t.lrclib.importedEditor.replace("{name}", localFileName || "local lyrics"),
-                });
-            }
+            onImportText(text, { source: "local file", lrclib_id: null });
+            toastPubSub.pub({
+                type: "success",
+                text: t.lrclib.importedEditor.replace("{name}", localFileName || "local lyrics"),
+            });
         } catch (error) {
             setMessage(backendMessageText(error, lang.backendMessages), "error");
         }
@@ -351,7 +315,6 @@ export const LrclibPanel: React.FC<{
 
     return (
         <Panel title={u.importLyrics} className="lyrics-import-card">
-
             <Tabs
                 ariaLabel="Lyric libraries"
                 items={[{ value: "lrclib", label: u.lrclib }, { value: "netease", label: u.netease }, {

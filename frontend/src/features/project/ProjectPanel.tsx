@@ -1,15 +1,16 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
-import { appContext, AppContextBits } from "../../shared/appContext.js";
-import { Message, Panel } from "../../ui/index.js";
-import { toastPubSub } from "../../ui/Toast.js";
 import { useMessage } from "../../hooks/useMessage.js";
 import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
+import { deleteProject, listProjects } from "../../shared/api/projects.js";
 import { backendMessageText } from "../../shared/api/request.js";
-import { deleteProject, getProject, listProjects, projectAudioUrl } from "../../shared/api/projects.js";
 import { settings } from "../../shared/api/settings.js";
 import type { ProjectModel } from "../../shared/api/types.js";
-import { loadProjectAudioUrlForPlayback } from "../../shared/audioEvents.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { notifyProjectsChanged, PROJECTS_CHANGED_EVENT } from "../../shared/projectEvents.js";
 import { readLocalText, writeLocalText } from "../../storage/browserStorage.js";
+import { useConfirmDialog } from "../../ui/ConfirmDialog.js";
+import { Button, ButtonGroup, Message, Panel } from "../../ui/index.js";
+import { toastPubSub } from "../../ui/Toast.js";
 import { ProjectSummary } from "./parts/ProjectSummary.js";
 import { ProjectSwitcher } from "./parts/ProjectSwitcher.js";
 import { RecentProjectList } from "./parts/RecentProjectList.js";
@@ -48,12 +49,34 @@ function applyOrder(projects: ProjectModel[], order: string[]): ProjectModel[] {
 
 export const ProjectPanel: React.FC<{
     project: ProjectModel | null;
-    onProject: (project: ProjectModel, applyToEditor?: boolean) => void;
-}> = ({ project, onProject }) => {
+    onOpenProject: (projectId: string) => Promise<void>;
+    onSave: () => Promise<ProjectModel>;
+    draftAudioName?: string;
+    draftMetadata?: ProjectModel["metadata"];
+    draftSource?: string;
+    dirty: boolean;
+    canSave: boolean;
+    saving: boolean;
+    transitioning: boolean;
+}> = (
+    {
+        project,
+        onOpenProject,
+        onSave,
+        draftAudioName,
+        draftMetadata,
+        draftSource,
+        dirty,
+        canSave,
+        saving,
+        transitioning,
+    },
+) => {
+    const confirm = useConfirmDialog();
     const [projects, setProjects] = useState<ProjectModel[]>([]);
     const [projectOrder, setProjectOrder] = useState<string[]>(() => readProjectOrder());
     const [recentLimit, setRecentLimit] = useState(DEFAULT_RECENT_PROJECTS_LIMIT);
-    const [_busy, setBusy] = useState(false);
+    const [busy, setBusy] = useState(false);
     const { lang } = useContext(appContext, AppContextBits.lang);
     const t = lang.toast;
     const u = lang.ui;
@@ -106,9 +129,26 @@ export const ProjectPanel: React.FC<{
 
     useEffect(() => {
         if (!project?.project_id) return;
-        // Refresh when a new project is created externally (ImportAudio)
+        // Refresh when saving or Auto Timing establishes a project identity.
         refresh().catch((error: Error) => setMessage(backendMessageText(error, lang.backendMessages), "error"));
     }, [project?.project_id]);
+
+    useEffect(() => {
+        const changed = () => {
+            void refresh().catch((error) => setMessage(backendMessageText(error, lang.backendMessages), "error"));
+        };
+        window.addEventListener(PROJECTS_CHANGED_EVENT, changed);
+        return () => window.removeEventListener(PROJECTS_CHANGED_EVENT, changed);
+    }, [lang]);
+
+    const saveCurrent = async () => {
+        try {
+            await onSave();
+            setMessage(u.projectSaved, "success");
+        } catch (error) {
+            setMessage(backendMessageText(error, lang.backendMessages), "error");
+        }
+    };
 
     // Clean up pending delete timer on unmount
     useEffect(() => {
@@ -125,14 +165,10 @@ export const ProjectPanel: React.FC<{
     };
 
     const loadProject = async (projectId: string) => {
+        if (saving || transitioning || busy) return;
         setBusy(true);
         try {
-            const loaded = await getProject(projectId);
-            onProject(loaded, true);
-            if (loaded.audio_name) {
-                loadProjectAudioUrlForPlayback(projectAudioUrl(projectId));
-            }
-            toastPubSub.pub({ type: "success", text: t.project.loaded.replace("{id}", projectId) });
+            await onOpenProject(projectId);
         } catch (error) {
             setMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
@@ -153,6 +189,7 @@ export const ProjectPanel: React.FC<{
         removePendingDelete(projectId);
         try {
             await deleteProject(projectId);
+            notifyProjectsChanged([projectId]);
             toastPubSub.pub({ type: "warning", text: t.project.deleted.replace("{id}", projectId) });
             setProjectOrder((prev) => {
                 const next = prev.filter((id) => id !== projectId);
@@ -165,9 +202,9 @@ export const ProjectPanel: React.FC<{
         await refresh();
     };
 
-    const handleDismiss = (projectId: string) => {
+    const handleDismiss = async (projectId: string) => {
         if (pendingDeleteTimers.current.has(projectId)) return;
-        if (!window.confirm(u.deleteConfirm.replace("{id}", projectId))) return;
+        if (await confirm({ message: u.deleteConfirm.replace("{id}", projectId), danger: true }) !== "confirm") return;
         const timer = setTimeout(() => {
             void finalizeDelete(projectId);
         }, DELETE_UNDO_MS);
@@ -245,8 +282,20 @@ export const ProjectPanel: React.FC<{
 
     return (
         <Panel title={u.project}>
-            <ProjectSummary project={project} labels={u} />
-            <ProjectSwitcher currentIndex={currentIndex} total={orderedProjects.length} labels={u} onSwitch={switchProject} />
+            <ProjectSummary
+                project={project}
+                draftAudioName={draftAudioName}
+                draftMetadata={draftMetadata}
+                draftSource={draftSource}
+                saved={Boolean(project && !dirty)}
+                labels={u}
+            />
+            <ProjectSwitcher
+                currentIndex={currentIndex}
+                total={orderedProjects.length}
+                labels={u}
+                onSwitch={switchProject}
+            />
             <RecentProjectList
                 projects={visibleProjects}
                 total={orderedProjects.length}
@@ -264,6 +313,16 @@ export const ProjectPanel: React.FC<{
                 onRestore={handleRestore}
                 onDismiss={handleDismiss}
             />
+            <ButtonGroup>
+                <Button
+                    tone="primary"
+                    className="studio-action-start"
+                    disabled={!canSave || saving || transitioning || busy || (!dirty && Boolean(project))}
+                    onClick={() => void saveCurrent()}
+                >
+                    {saving ? u.savingProject : u.saveProject}
+                </Button>
+            </ButtonGroup>
             <Message message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
         </Panel>
     );
