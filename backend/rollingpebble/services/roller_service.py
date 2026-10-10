@@ -314,6 +314,9 @@ class RollerService:
             if not output.exists():
                 raise FileNotFoundError(f"Auto timing did not create {output}")
             synced = output.read_text(encoding="utf-8")
+            current = self.project_service.get(project_id)
+            if current.audio_ref != project.audio_ref or current.audio_path != project.audio_path:
+                raise RuntimeError("Project audio changed during Auto Timing. Run Auto Timing again.")
             updated = self.project_service.write_pyroller_result(project_id, synced)
             return {
                 "project_id": project_id,

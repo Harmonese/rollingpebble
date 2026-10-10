@@ -36,8 +36,11 @@ export function useLyricsDocument(args: {
         select: readSessionNumber(editorStorageKeys.selectIndex, 0),
     }));
 
-    const importText = useCallback((text: string) => {
-        dispatch({ type: LyricsDocumentActionType.parse, payload: { text, options: args.trimOptions } });
+    const importText = useCallback((text: string, preserveMetadata = false) => {
+        dispatch({
+            type: LyricsDocumentActionType.parse,
+            payload: { text, options: args.trimOptions, preserveMetadata },
+        });
     }, [dispatch, args.trimOptions]);
 
     const importProject = useCallback((project: ProjectModel) => {

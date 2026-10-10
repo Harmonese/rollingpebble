@@ -16,7 +16,8 @@ It provides a Tauri desktop app for macOS Apple Silicon and a browser interface 
 - **Import** audio and lyrics from local files, LRCLIB, and supported online sources.
 - **Edit** metadata and lyric text in a focused LRC editor.
 - **Synchronize** timestamps manually when you want frame-level control.
-- **Auto-time** lyrics with `py-roller` using isolated CPU/CUDA runtime profiles.
+- **Repeat lyrics** with numbered marks, playback-time insertion and undo.
+- **Auto-time (Experimental)** lyrics with `py-roller` using isolated CPU/CUDA runtime profiles.
 - **Review and clean up** projects, model caches, runtime environments, and app data.
 - **Publish** prepared lyrics through LRCLIB workflows.
 - **Use multiple languages** through the built-in i18n layer.
@@ -29,13 +30,13 @@ It provides a Tauri desktop app for macOS Apple Silicon and a browser interface 
 4. Use the Synchronizer for manual timing and export directly. Save Project keeps your audio and lyrics; Auto Timing also saves the workspace before processing.
 5. Review the generated LRC, export it, or publish it through LRCLIB.
 
-The Project panel uses the same layout throughout, with **Project Status** showing **Saved** or **Unsaved**. Repeated saves update the existing project without copying the audio again.
+The Project panel shows **Saved** or **Unsaved**. Replacing local audio preserves lyrics, timestamps and marks. Importing lyrics preserves existing metadata unless the imported file supplies replacements. Save Project updates the same project, uploading audio only when it changes.
 
 ## Install
 
 ### macOS Desktop (Apple Silicon)
 
-Download the v0.7.3 arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**.
+Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**. This checkout prepares version **0.7.4**.
 
 1. Open the app and go to **Settings -> Auto Timing**.
 2. Leave the runtime profile on **Auto**, then click **Create / Repair Runtime** and wait for success.

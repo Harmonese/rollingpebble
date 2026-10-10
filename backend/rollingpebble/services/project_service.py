@@ -23,6 +23,7 @@ from rollingpebble.storage.files import (
     new_project_id,
     read_project,
     read_text,
+    resolve_audio_path,
     save_upload_file,
     write_project,
     write_text,
@@ -132,6 +133,38 @@ class ProjectService:
             project.last_opened_at = _utc_now_iso()
             write_project(self.projects_root, project)
         return project
+
+    async def replace_workspace_audio(
+        self, project_id: str, upload: UploadFile, snapshot: WorkspaceSaveRequest,
+    ) -> ProjectModel:
+        async with self._create_lock:
+            destination = self.project_folder(project_id)
+            # Prepare the complete replacement before touching the saved project.
+            with tempfile.TemporaryDirectory(prefix=".saving-", dir=self.projects_root) as temporary:
+                staging = ProjectService(Path(temporary))
+                staged_dir = staging.projects_root / project_id
+                shutil.copytree(destination, staged_dir, ignore=shutil.ignore_patterns("artifacts", "intermediate", PYROLLER_NAME))
+                project = staging.get(project_id)
+                old_audio = resolve_audio_path(staging.projects_root, project)
+                audio_path = await save_upload_file(staging.projects_root, project_id, upload)
+                versioned_audio = audio_path.with_name(f"audio-{uuid.uuid4().hex}{audio_path.suffix}")
+                audio_path.replace(versioned_audio)
+                audio_path = versioned_audio
+                project = staging.apply_lyrics(project_id, ApplyLyricsRequest(**snapshot.model_dump()))
+                project.audio_name = upload.filename
+                project.audio_ref = audio_ref_for_path(staging.projects_root, project_id, audio_path)
+                project.audio_path = None
+                write_project(staging.projects_root, project)
+                if old_audio and old_audio != audio_path and old_audio.is_relative_to(staged_dir):
+                    old_audio.unlink(missing_ok=True)
+                backup = staging.projects_root / "previous"
+                destination.replace(backup)
+                try:
+                    staged_dir.replace(destination)
+                except BaseException:
+                    backup.replace(destination)
+                    raise
+            return self.get(project_id)
 
     def list_projects(self) -> list[ProjectModel]:
         projects: list[ProjectModel] = []

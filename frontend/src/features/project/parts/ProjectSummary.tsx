@@ -35,14 +35,14 @@ export const ProjectSummary: React.FC<{
     };
 }> = ({ project, draftAudioName, draftMetadata, draftSource, saved, labels }) => {
     if (!project && !draftAudioName && !draftMetadata) return null;
-    const metadata = project?.metadata || draftMetadata || { track: "", artist: "", album: "", duration: 0 };
-    const source = project?.source || draftSource || "manual";
+    const metadata = draftMetadata || project?.metadata || { track: "", artist: "", album: "", duration: 0 };
+    const source = draftSource || project?.source || "manual";
     return (
         <KeyValueList>
             <b>{labels.id}</b>
             <span>{project?.project_id || "-"}</span>
             <b>{labels.audio}</b>
-            <span>{project?.audio_name || draftAudioName || "-"}</span>
+            <span>{draftAudioName || project?.audio_name || "-"}</span>
             <b>{labels.title}</b>
             <span>{metadata.track || "-"}</span>
             <b>{labels.artist}</b>

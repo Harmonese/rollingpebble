@@ -17,9 +17,18 @@ export const enum ActionType {
     select,
     deleteTime,
     getState,
+    markLine,
+    unmarkLine,
+    insertMarkedLine,
+    undoMarkedLine,
+    deleteLine,
+    selectPlaying,
 }
 
 export interface IState extends LrcState {
+    readonly marks: readonly { id: number; text: string }[];
+    readonly nextMarkId: number;
+    readonly insertHistory: readonly { lyric: LrcState["lyric"]; selectIndex: number }[];
     readonly currentTime: number;
     readonly currentIndex: number;
     readonly nextTime: number;
@@ -31,7 +40,7 @@ type Map$Type$Payload<T, U> = { [key in keyof T]: U extends key ? { type: key; p
 
 export type Action = Map$Type$Payload<
     {
-        [ActionType.parse]: { text: string; options: TrimOptios };
+        [ActionType.parse]: { text: string; options: TrimOptios; preserveMarks?: boolean; preserveMetadata?: boolean };
         [ActionType.refresh]: number;
         [ActionType.next]: number;
         [ActionType.time]: number;
@@ -39,6 +48,12 @@ export type Action = Map$Type$Payload<
         [ActionType.select]: (index: number) => number;
         [ActionType.deleteTime]: undefined;
         [ActionType.getState]: (state: IState) => void;
+        [ActionType.markLine]: { slot?: number };
+        [ActionType.unmarkLine]: { slot?: number };
+        [ActionType.insertMarkedLine]: { slot: number; time: number };
+        [ActionType.undoMarkedLine]: undefined;
+        [ActionType.deleteLine]: undefined;
+        [ActionType.selectPlaying]: number;
     },
     ActionType
 >;
@@ -63,13 +78,94 @@ const mergeObject = <T extends O, O>(target: T, obj: O): T => {
     return target;
 };
 
-const reducer = (state: IState, action: Action): IState => {
+export const reducer = (state: IState, action: Action): IState => {
     switch (action.type) {
         case ActionType.parse: {
             const { text, options } = action.payload;
             const lrc = parser(text, options);
-            const selectIndex = guard(state.selectIndex, 0, lrc.lyric.length - 1);
-            return { ...state, ...lrc, selectIndex };
+            const selectIndex = guard(state.selectIndex, 0, lrc.lyric.length);
+            return {
+                ...state,
+                ...lrc,
+                info: action.payload.preserveMetadata ? new Map([...state.info, ...lrc.info]) : lrc.info,
+                selectIndex,
+                marks: action.payload.preserveMarks ? state.marks : [],
+                insertHistory: [],
+                currentTime: Infinity,
+                nextTime: -Infinity,
+            };
+        }
+
+        case ActionType.markLine: {
+            const { slot } = action.payload;
+            if (slot !== undefined && (!Number.isInteger(slot) || slot < 0)) return state;
+            const text = state.lyric[state.selectIndex]?.text;
+            if (!text?.trim() || state.marks.some((mark) => mark.text === text)) return state;
+            const marks = [...state.marks];
+            if (slot !== undefined && slot < marks.length) {
+                marks[slot] = { ...marks[slot], text };
+                return { ...state, marks };
+            }
+            marks.push({ id: state.nextMarkId, text });
+            return { ...state, marks, nextMarkId: state.nextMarkId + 1 };
+        }
+        case ActionType.unmarkLine: {
+            const slot = action.payload.slot
+                ?? state.marks.findIndex((mark) => mark.text === state.lyric[state.selectIndex]?.text);
+            if (!Number.isInteger(slot) || slot < 0 || slot >= state.marks.length) return state;
+            return { ...state, marks: state.marks.filter((_, index) => index !== slot) };
+        }
+        case ActionType.insertMarkedLine: {
+            const { slot, time } = action.payload;
+            const text = state.marks[slot]?.text;
+            if (!text || !Number.isFinite(time) || time < 0) return state;
+            const lyric = [...state.lyric];
+            const selectIndex = state.selectIndex + 1;
+            lyric.splice(state.selectIndex, 0, { text, time });
+            return {
+                ...state,
+                lyric,
+                selectIndex,
+                currentTime: Infinity,
+                nextTime: -Infinity,
+                insertHistory: [...state.insertHistory.slice(-99), {
+                    lyric: state.lyric,
+                    selectIndex: state.selectIndex,
+                }],
+            };
+        }
+        case ActionType.deleteLine: {
+            if (!state.lyric[state.selectIndex]) return state;
+            return {
+                ...state,
+                lyric: state.lyric.filter((_, index) => index !== state.selectIndex),
+                currentTime: Infinity,
+                nextTime: -Infinity,
+                insertHistory: [...state.insertHistory.slice(-99), {
+                    lyric: state.lyric,
+                    selectIndex: state.selectIndex,
+                }],
+            };
+        }
+        case ActionType.selectPlaying: {
+            const refreshed = reducer({ ...state, currentTime: Infinity, nextTime: -Infinity }, {
+                type: ActionType.refresh,
+                payload: action.payload,
+            });
+            return Number.isFinite(refreshed.currentIndex)
+                ? { ...refreshed, selectIndex: refreshed.currentIndex }
+                : state;
+        }
+        case ActionType.undoMarkedLine: {
+            const previous = state.insertHistory[state.insertHistory.length - 1];
+            if (!previous) return state;
+            return {
+                ...state,
+                ...previous,
+                insertHistory: state.insertHistory.slice(0, -1),
+                currentTime: Infinity,
+                nextTime: -Infinity,
+            };
         }
 
         case ActionType.refresh: {
@@ -80,7 +176,7 @@ const reducer = (state: IState, action: Action): IState => {
 
             const record = state.lyric.reduce(
                 (p, c, i) => {
-                    if (c.time) {
+                    if (c.time !== undefined && Number.isFinite(c.time)) {
                         if (c.time < p.nextTime && c.time > audioTime) {
                             p.nextTime = c.time;
                             p.nextIndex = i;
@@ -105,10 +201,11 @@ const reducer = (state: IState, action: Action): IState => {
 
         case ActionType.next: {
             const index = state.selectIndex;
+            if (!state.lyric[index]) return state;
 
             const lyric = state.lyric;
 
-            const selectIndex = guard(index + 1, 0, lyric.length - 1);
+            const selectIndex = guard(index + 1, 0, lyric.length);
 
             return {
                 ...reducer(state, {
@@ -122,6 +219,7 @@ const reducer = (state: IState, action: Action): IState => {
         case ActionType.time: {
             const time = action.payload;
             const index = state.selectIndex;
+            if (!state.lyric[index]) return state;
 
             let lyric = state.lyric;
             if (lyric[index].time !== time) {
@@ -130,7 +228,7 @@ const reducer = (state: IState, action: Action): IState => {
                 lyric = newLyric;
             }
 
-            return { ...state, lyric, currentTime: time, nextTime: -Infinity };
+            return { ...state, lyric, insertHistory: [], currentTime: time, nextTime: -Infinity };
         }
 
         case ActionType.info: {
@@ -150,7 +248,7 @@ const reducer = (state: IState, action: Action): IState => {
         }
 
         case ActionType.select: {
-            const selectIndex = guard(action.payload(state.selectIndex), 0, state.lyric.length - 1);
+            const selectIndex = guard(action.payload(state.selectIndex), 0, state.lyric.length);
             return state.selectIndex === selectIndex ? state : { ...state, selectIndex };
         }
 
@@ -158,7 +256,7 @@ const reducer = (state: IState, action: Action): IState => {
             const { selectIndex, currentIndex } = state;
 
             let lyric = state.lyric;
-            if (lyric[selectIndex].time !== undefined) {
+            if (lyric[selectIndex]?.time !== undefined) {
                 const newLyric = lyric.slice();
                 newLyric[selectIndex] = { text: lyric[selectIndex].text };
                 lyric = newLyric;
@@ -172,6 +270,7 @@ const reducer = (state: IState, action: Action): IState => {
                 return {
                     ...state,
                     lyric,
+                    insertHistory: [],
                     currentTime,
                     nextTime,
                 };
@@ -189,15 +288,19 @@ const reducer = (state: IState, action: Action): IState => {
     return state;
 };
 
-const init = (lazyInit: () => InitArgs): IState => {
+export const init = (lazyInit: () => InitArgs): IState => {
     const { text, options, select } = lazyInit();
+    const parsed = parser(text, options);
     return {
-        ...parser(text, options),
+        ...parsed,
+        marks: [],
+        nextMarkId: 0,
+        insertHistory: [],
         currentTime: Infinity,
         currentIndex: Infinity,
         nextTime: -Infinity,
         nextIndex: -Infinity,
-        selectIndex: select,
+        selectIndex: guard(select, 0, parsed.lyric.length),
     };
 };
 

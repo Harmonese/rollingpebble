@@ -1,5 +1,6 @@
 import SSK from "#const/session_key.json" with { type: "json" };
 import STRINGS from "#const/strings.json" with { type: "json" };
+import { memo, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
     convertTimeToTag,
     formatText,
@@ -8,16 +9,16 @@ import {
     type LyricsDocumentLine as ILyric,
     type LyricsDocumentState as IState,
 } from "../../domain/lyrics/lyricsDocument.js";
-import { memo, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { useKeyBindings } from "../../hooks/useKeyBindings.js";
-import type { PreferenceState as PrefState } from "../../shared/preferences.js";
-import { currentTimePubSub } from "../../shared/audioPlaybackEvents.js";
 import { useAudio } from "../../hooks/useAudio.js";
+import { useKeyBindings } from "../../hooks/useKeyBindings.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { currentTimePubSub } from "../../shared/audioPlaybackEvents.js";
+import type { PreferenceState as PrefState } from "../../shared/preferences.js";
+import { readSessionText, writeSessionText } from "../../storage/browserStorage.js";
 import { InputAction } from "../../utils/input-action.js";
 import { isKeyboardElement } from "../../utils/is-keyboard-element.js";
 import { getMatchedAction } from "../../utils/keybindings.js";
-import { readSessionText, writeSessionText } from "../../storage/browserStorage.js";
-import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { blocksSynchronizerKeys, lyricMarkKey, synchronizerCommand } from "../../utils/lyricMarkKeys.js";
 import { AsidePanel } from "./parts/AsidePanel.js";
 import { PlaybackCursor } from "./parts/PlaybackCursor.js";
 import { SyncMode } from "./syncMode.js";
@@ -64,7 +65,9 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
 
     const ul = useRef<HTMLUListElement>(null);
 
-    const needScrollLine = {
+    const [selectionRequest, setSelectionRequest] = useState(0);
+    const handledSelectionRequest = useRef(0);
+    const needScrollLine = selectIndex === lyric.length ? selectIndex : {
         [SyncMode.select]: selectIndex,
         [SyncMode.highlight]: highlightIndex,
     }[syncMode];
@@ -79,6 +82,16 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
             });
         }
     }, [needScrollLine]);
+
+    useEffect(() => {
+        if (selectionRequest === handledSelectionRequest.current) return;
+        handledSelectionRequest.current = selectionRequest;
+        ul.current?.children[selectIndex]?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }, [selectionRequest, selectIndex]);
+
+    useEffect(() => {
+        dispatch({ type: ActionType.refresh, payload: audio.currentTime });
+    }, [lyric, dispatch, audio]);
 
     useEffect(() => {
         return currentTimePubSub.sub(self.current, (time) => {
@@ -117,12 +130,46 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
         [dispatch, lyric],
     );
 
+    const insertMarked = useCallback((slot: number) => {
+        if (!audio.duration) return;
+        dispatch({ type: ActionType.insertMarkedLine, payload: { slot, time: audio.currentTime } });
+    }, [audio, dispatch]);
+
     useEffect(() => {
         function onKeydown(ev: KeyboardEvent): void {
             if (isKeyboardElement(ev.target)) {
                 return;
             }
 
+            if (blocksSynchronizerKeys(ev.target)) return;
+            const markKey = lyricMarkKey(ev);
+            if (markKey) {
+                ev.preventDefault();
+                if (!ev.repeat) {
+                    if (markKey.action === "insert") insertMarked(markKey.slot);
+                    else if (markKey.action === "unmark") {
+                        dispatch({ type: ActionType.unmarkLine, payload: { slot: markKey.slot } });
+                    } else dispatch({ type: ActionType.markLine, payload: { slot: markKey.slot } });
+                }
+                return;
+            }
+            const command = synchronizerCommand(ev);
+            if (command) {
+                ev.preventDefault();
+                if (!ev.repeat) {
+                    if (command === "selectPlaying") {
+                        if (!lyric.some((line) => line.time !== undefined && line.time <= audio.currentTime)) return;
+                        dispatch({ type: ActionType.selectPlaying, payload: audio.currentTime });
+                        setSelectionRequest((value) => value + 1);
+                    } else {
+                        dispatch({
+                            type: command === "deleteLine" ? ActionType.deleteLine : ActionType.undoMarkedLine,
+                            payload: undefined,
+                        });
+                    }
+                }
+                return;
+            }
             const action = getMatchedAction(ev, keyBindings);
 
             switch (action) {
@@ -178,7 +225,7 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
         return (): void => {
             document.removeEventListener("keydown", onKeydown);
         };
-    }, [adjust, dispatch, keyBindings, selectIndex, sync]);
+    }, [adjust, dispatch, keyBindings, selectIndex, sync, insertMarked, lyric, audio]);
 
     const onLineClick = useCallback(
         (ev: React.MouseEvent<HTMLUListElement & HTMLLIElement>) => {
@@ -218,12 +265,14 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
         (line: Readonly<ILyric>, index: number, lines: readonly ILyric[]) => {
             const select = index === selectIndex;
             const highlight = index === highlightIndex;
+            const markNumber = state.marks.findIndex((mark) => mark.text === line.text) + 1;
             const error = index > 0 && lines[index].time! <= lines[index - 1].time!;
 
             const className = Object.entries({
                 line: true,
                 select,
                 highlight,
+                marked: markNumber > 0,
                 error,
             })
                 .reduce<string[]>((p, [name, value]) => {
@@ -241,11 +290,13 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
                     className={className}
                     line={line}
                     select={select}
+                    markNumber={markNumber}
+                    markLabel={lang.ui.lyricMarks}
                     prefState={prefState}
                 />
             );
         },
-        [selectIndex, highlightIndex, prefState],
+        [selectIndex, highlightIndex, prefState, state.marks, lang.ui.lyricMarks],
     );
 
     const ulClassName = prefState.screenButton ? "lyric-list on-screen-button" : "lyric-list";
@@ -254,6 +305,12 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
         <>
             <ul ref={ul} className={ulClassName} onClickCapture={onLineClick} onDoubleClickCapture={onLineDoubleClick}>
                 {state.lyric.map(LyricLineIter)}
+                <li
+                    data-key={state.lyric.length}
+                    className={`line line-placeholder${selectIndex === state.lyric.length ? " select" : ""}`}
+                >
+                    {selectIndex === state.lyric.length && <PlaybackCursor fixed={prefState.fixed} />}
+                </li>
             </ul>
             <AsidePanel syncMode={syncMode} setSyncMode={setSyncMode} lrcDispatch={dispatch} prefState={prefState} />
             {prefState.screenButton && <SpaceButton sync={sync} label={lang.ui.spaceKey} />}
@@ -265,28 +322,44 @@ interface ILyricLineProps {
     line: ILyric;
     index: number;
     select: boolean;
+    markNumber: number;
+    markLabel: string;
     className: string;
     prefState: PrefState;
 }
 
-const LyricLine: React.FC<ILyricLineProps> = memo(({ line, index, select, className, prefState }) => {
-    const lineTime = convertTimeToTag(line.time, prefState.fixed);
+const LyricLine: React.FC<ILyricLineProps> = memo(
+    ({ line, index, select, markNumber, markLabel, className, prefState }) => {
+        const lineTime = convertTimeToTag(line.time, prefState.fixed);
 
-    const lineText = formatText(line.text, prefState.spaceStart, prefState.spaceEnd);
+        const lineText = formatText(line.text, prefState.spaceStart, prefState.spaceEnd);
 
-    return (
-        <li key={index} data-key={index} className={className}>
-            {select && <PlaybackCursor fixed={prefState.fixed} />}
-            <time className="line-time">{lineTime}</time>
-            <span className="line-text">{lineText}</span>
-        </li>
-    );
-}, (prev, next) => {
-    return prev.line === next.line
-        && prev.index === next.index
-        && prev.select === next.select
-        && prev.className === next.className
-        && prev.prefState.fixed === next.prefState.fixed
-        && prev.prefState.spaceStart === next.prefState.spaceStart
-        && prev.prefState.spaceEnd === next.prefState.spaceEnd;
-});
+        return (
+            <li key={index} data-key={index} className={className}>
+                {select && <PlaybackCursor fixed={prefState.fixed} />}
+                {markNumber > 0 && (
+                    <span
+                        className="ui-button ui-button-primary lyric-mark-number line-mark-indicator"
+                        title={`${markLabel} ${markNumber}`}
+                        aria-label={`${markLabel} ${markNumber}`}
+                    >
+                        {markNumber}
+                    </span>
+                )}
+                <time className="line-time">{lineTime}</time>
+                <span className="line-text">{lineText}</span>
+            </li>
+        );
+    },
+    (prev, next) => {
+        return prev.line === next.line
+            && prev.index === next.index
+            && prev.select === next.select
+            && prev.markNumber === next.markNumber
+            && prev.markLabel === next.markLabel
+            && prev.className === next.className
+            && prev.prefState.fixed === next.prefState.fixed
+            && prev.prefState.spaceStart === next.prefState.spaceStart
+            && prev.prefState.spaceEnd === next.prefState.spaceEnd;
+    },
+);

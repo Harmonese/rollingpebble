@@ -6,6 +6,26 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+## [0.7.4] - 2026-10-10
+
+### Added
+
+- Added dynamic lyric marks with compact right-aligned numbered buttons and top-bar Mark/Unmark actions. The first ten marks support capture, insertion and removal shortcuts; repeated lyrics use the current playback time and support insertion undo.
+
+### Changed
+
+- Import Audio now replaces only the workspace audio, preserving lyrics, timing, marks and existing metadata. Saving replaces audio within the same project; audio changes invalidate earlier Auto Timing results.
+- Synchronizer lyric rows now show matching mark numbers on the right using the mark-button style, reserving space only for marked rows.
+- Repeated lyrics are inserted above the selected line while keeping the pending line selected. A transient trailing placeholder supports continued insertion after the final timestamp.
+- Added `1` to select the playing lyric and `Ctrl/Cmd + Delete/Backspace` to delete a lyric line. Insertion and line deletion share chronological undo with `Ctrl/Cmd + Z`.
+- Marked Auto Timing as Experimental in its panel and About descriptions.
+
+### Fixed
+
+- Preserved existing metadata when importing lyrics without tags, and prevented Auto Timing from starting after the workspace changes during save or preview.
+- Retained draft identity across audio changes and recovered projects after a lost initial save response to avoid duplicate projects.
+- Audio replacement is staged before publication, preserves the project identity, and invalidates old audio processing artifacts. Saves wait for running timing jobs before replacing their input audio.
+
 ## [0.7.3] - 2026-10-10
 
 ### Added

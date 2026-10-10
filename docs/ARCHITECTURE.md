@@ -116,6 +116,10 @@ The Tauri shell chooses a loopback port, starts the Python backend and opens its
 
 `ui/ConfirmDialog` provides asynchronous decisions using the existing Modal, Button and DialogActionRow components. Modal focus and keyboard handling belong to the topmost modal; business actions do not use browser-native confirm dialogs. Project-list and storage deletion notify the workspace and project list through a shared event.
 
+Audio import preserves the current lyric document and project association. A session audio revision participates in dirty-state and job-result matching. Existing projects save pending audio through `PUT /api/projects/{project_id}/audio` with the workspace snapshot; replacement is staged before publication and removes the superseded project-local audio. Ordinary lyric saves do not upload audio again. Existing text metadata is retained, empty fields are filled from audio tags, and duration follows playback metadata.
+
+Draft persistence identity is separate from playback/workspace revision and survives audio changes. A failed initial save probes the stable project identity before retrying. Lyrics imports merge explicit metadata tags over existing tags; project loading replaces the entire document. Online audio URLs are playback previews, not persisted project audio.
+
 ## Frontend layout
 
 ```text

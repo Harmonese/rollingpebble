@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { convertTimeToTag, LyricsDocumentActionType as ActionType } from "../../domain/lyrics/lyricsDocument.js";
 import type { LyricsTrimOptions } from "../../domain/lyrics/types.js";
 import type { Language } from "../../languages/index.js";
 import {
@@ -6,12 +7,13 @@ import {
     audioMetadata,
     getProject,
     projectAudioUrl,
+    replaceWorkspaceAudio,
     saveWorkspace,
     type WorkspaceSnapshot,
 } from "../../shared/api/projects.js";
 import type { MetaModel, ProjectModel } from "../../shared/api/types.js";
 import { loadProjectAudioForPlayback, loadProjectAudioUrlForPlayback } from "../../shared/audioEvents.js";
-import { buildImportTextFromProject, hasLyricContent } from "../../shared/lrc.js";
+import { hasLyricContent } from "../../shared/lrc.js";
 import { notifyProjectsChanged, PROJECTS_CHANGED_EVENT } from "../../shared/projectEvents.js";
 import { useConfirmDialog } from "../../ui/ConfirmDialog.js";
 import { useLyricsDocument } from "../lyrics/useLyricsDocument.js";
@@ -22,6 +24,10 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
     const confirm = useConfirmDialog();
     const [project, setProject] = useState<ProjectModel | null>(null);
     const [file, setFile] = useState<File | null>(null);
+    const [audioRevision, setAudioRevision] = useState("");
+    const savedFile = useRef<File | null>(null);
+    const draftId = useRef(crypto.randomUUID());
+    const recoveredProject = useRef<ProjectModel | null>(null);
     const [metadata, setMetadata] = useState<MetaModel>(emptyMeta);
     const [provenance, setProvenance] = useState({ source: "manual", lrclib_id: null as number | null });
     const [workspaceId, setWorkspaceId] = useState(() => crypto.randomUUID());
@@ -37,7 +43,7 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
         metadata: lyrics.editorMeta,
         ...provenance,
     };
-    const signature = JSON.stringify(snapshot);
+    const signature = JSON.stringify({ snapshot, audioRevision });
     const canSave = Boolean(file || project || hasLyricContent(lyrics.plainLyrics));
     const dirty = canSave && signature !== savedSignature;
     const latest = useRef({ project, file, workspaceId, snapshot, signature, dirty });
@@ -56,12 +62,23 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
         const captured = latest.current;
         setSaving(true);
         const operation = (async () => {
-            const saved = captured.project
-                ? await applyLyrics(captured.project.project_id, captured.snapshot)
-                : await saveWorkspace(captured.workspaceId, captured.file, captured.snapshot);
+            // Resolve a possibly successful creation before retrying a lost response.
+            const existing = captured.project || recoveredProject.current;
+            const saved = existing
+                ? captured.file && captured.file !== savedFile.current
+                    ? await replaceWorkspaceAudio(existing.project_id, captured.file, captured.snapshot)
+                    : await applyLyrics(existing.project_id, captured.snapshot)
+                : await saveWorkspace(draftId.current, captured.file, captured.snapshot).catch(async (error) => {
+                    try {
+                        recoveredProject.current = await getProject(draftId.current.replace(/-/g, ""));
+                    } catch { /* A failed creation has no project to recover. */ }
+                    throw error;
+                });
             if (latest.current.workspaceId === captured.workspaceId) {
+                recoveredProject.current = saved;
                 // Never re-import saved text: edits made during upload belong to the editor.
                 setProject(saved);
+                savedFile.current = captured.file;
                 setSavedSignature(captured.signature);
             }
             notifyProjectsChanged();
@@ -93,7 +110,7 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
         transitionLock.current = true;
         setTransitioning(true);
         try {
-            if (!await mayReplace()) return false;
+            if (inFlight.current) await inFlight.current;
             const stem = audio.name.replace(/\.[^.]+$/, "");
             let meta = { ...emptyMeta, track: stem };
             try {
@@ -108,13 +125,19 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
             } catch { /* Untagged or unsupported metadata must not prevent playback. */ }
             // Only tag text and the filename are sent; the audio stays in the WebView.
             meta = await audioMetadata(audio.name, meta);
-            setProject(null);
             setFile(audio);
             setMetadata(meta);
-            setProvenance({ source: "manual", lrclib_id: null });
+            setAudioRevision(crypto.randomUUID());
             setWorkspaceId(crypto.randomUUID());
-            setSavedSignature(null);
-            lyrics.importText(buildImportTextFromProject({ metadata: meta }));
+            const current = latest.current.snapshot.metadata;
+            for (
+                const [name, value] of Object.entries({
+                    ti: current.track || meta.track,
+                    ar: current.artist || meta.artist,
+                    al: current.album || meta.album,
+                    length: convertTimeToTag(meta.duration, 0, false),
+                })
+            ) lyrics.dispatch({ type: ActionType.info, payload: { name, value } });
             loadProjectAudioForPlayback(audio);
             return true;
         } finally {
@@ -132,6 +155,10 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
             const next = await getProject(projectId);
             setProject(next);
             setFile(null);
+            recoveredProject.current = null;
+            draftId.current = crypto.randomUUID();
+            savedFile.current = null;
+            setAudioRevision("");
             setMetadata(next.metadata);
             setProvenance({ source: next.source, lrclib_id: next.lrclib_id ?? null });
             setWorkspaceId(crypto.randomUUID());
@@ -145,7 +172,7 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
     };
 
     const importLyrics = (text: string, origin = { source: "local file", lrclib_id: null as number | null }) => {
-        lyrics.importText(text);
+        lyrics.importText(text, true);
         setProvenance(origin);
     };
 
@@ -166,6 +193,10 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
             if (!ids.includes(latest.current.project?.project_id || "")) return;
             setProject(null);
             setFile(null);
+            recoveredProject.current = null;
+            draftId.current = crypto.randomUUID();
+            savedFile.current = null;
+            setAudioRevision("");
             setMetadata(emptyMeta);
             setProvenance({ source: "manual", lrclib_id: null });
             setWorkspaceId(crypto.randomUUID());

@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from rollingpebble.api.context import AppServices, async_service_call, open_folder, service_call, text_detail
 from rollingpebble.models import ApplyLyricsRequest, ProjectModel, SaveEditorRequest, WorkspaceSaveRequest, AudioMetadataRequest, MetaModel
 from rollingpebble.storage.files import resolve_audio_path
+from rollingpebble import job_kinds
 
 
 def create_projects_router(services: AppServices) -> APIRouter:
@@ -30,6 +31,15 @@ def create_projects_router(services: AppServices) -> APIRouter:
     @router.post("/api/audio/metadata", response_model=MetaModel)
     def audio_metadata(request: AudioMetadataRequest) -> MetaModel:
         return services.projects.audio_metadata(request.filename, request.metadata, services.runtime.get_settings())
+
+    @router.put("/api/projects/{project_id}/audio", response_model=ProjectModel)
+    async def replace_audio(
+        project_id: str, snapshot: str = Form(...), audio: UploadFile = File(...),
+    ) -> ProjectModel:
+        if job_kinds.has_running_job(services.jobs, job_kinds.AUTO_TIMING, job_kinds.BATCH_AUTO_TIMING):
+            raise HTTPException(status_code=409, detail=text_detail("An Auto Timing or Batch job is already running."))
+        parsed = service_call(lambda: WorkspaceSaveRequest.model_validate_json(snapshot))
+        return await async_service_call(lambda: services.projects.replace_workspace_audio(project_id, audio, parsed))
 
     @router.get("/api/projects", response_model=list[ProjectModel])
     def list_projects() -> list[ProjectModel]:

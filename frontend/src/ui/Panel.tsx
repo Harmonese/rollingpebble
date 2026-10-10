@@ -1,4 +1,4 @@
-export const Panel: React.FC<React.HTMLAttributes<HTMLElement> & { title?: React.ReactNode }> = (
+export const Panel: React.FC<Omit<React.HTMLAttributes<HTMLElement>, "title"> & { title?: React.ReactNode }> = (
     { title, className = "", children, ...props },
 ) => (
     <section className={`ui-panel${className ? ` ${className}` : ""}`} {...props}>

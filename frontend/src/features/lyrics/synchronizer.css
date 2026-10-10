@@ -124,6 +124,7 @@
 }
 
 .line {
+    position: relative;
     box-sizing: border-box;
     padding-top: 9px;
     padding-bottom: 9px;
@@ -155,6 +156,33 @@
     box-shadow: none;
 }
 
+.line.marked {
+    border-left-color: rgba(var(--theme-rgb), 0.62);
+    padding-right: 4.5rem;
+}
+
+.line-mark-indicator {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.line.highlight .line-mark-indicator.ui-button {
+    color: inherit;
+    border-color: currentColor;
+    background: rgba(var(--theme-rgb), 0.18);
+}
+
+.line-placeholder {
+    min-height: 3rem;
+}
+
+.line-text {
+    overflow-wrap: anywhere;
+}
+
 .line.highlight {
     color: var(--theme-contrast-color);
     background: linear-gradient(90deg, rgba(var(--theme-rgb), 0.95), rgba(94, 197, 255, 0.86));
@@ -163,4 +191,52 @@
 .space-button {
     background-color: rgba(var(--theme-rgb), 0.28);
     color: var(--theme-color);
+}
+
+.lyric-marks {
+    flex: 0 0 auto;
+    min-width: 0;
+    padding: 4px 10px;
+    overflow-x: auto;
+    background: var(--ui-panel-bg);
+}
+
+.lyric-marks-buttons {
+    display: flex;
+    width: max-content;
+    margin-left: auto;
+    gap: 4px;
+}
+
+.lyric-mark-number.ui-button {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 6px;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 24px;
+    border-radius: 999px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.studio-center-tabs {
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.lyric-mark-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.lyric-mark-actions .ui-button {
+    padding: 4px 10px;
+    font-size: 12px;
 }

@@ -50,3 +50,14 @@ export function saveWorkspace(draftId: string, audio: File | null, snapshot: Wor
 export function audioMetadata(filename: string, metadata: MetaModel): Promise<MetaModel> {
     return request<MetaModel>("/api/audio/metadata", { method: "POST", body: JSON.stringify({ filename, metadata }) });
 }
+
+export function replaceWorkspaceAudio(
+    projectId: string,
+    audio: File,
+    snapshot: WorkspaceSnapshot,
+): Promise<ProjectModel> {
+    const form = new FormData();
+    form.append("audio", audio);
+    form.append("snapshot", JSON.stringify(snapshot));
+    return request<ProjectModel>(`/api/projects/${projectId}/audio`, { method: "PUT", body: form });
+}

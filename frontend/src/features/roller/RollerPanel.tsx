@@ -1,6 +1,6 @@
 import { useContext } from "react";
 import { appContext, AppContextBits } from "../../shared/appContext.js";
-import { Message, Panel, SectionTitle, Tabs } from "../../ui/index.js";
+import { Message, Panel, SectionTitle, StatusPill, Tabs } from "../../ui/index.js";
 
 import { useAutoTimingState } from "../../domain/auto-timing/useAutoTimingState.js";
 import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
@@ -76,7 +76,13 @@ export const RollerPanel: React.FC<{
     const batchStartDisabled = jobState.busy || jobState.running || jobState.selectedBatchIds.size === 0;
 
     return (
-        <Panel title={u.autoTiming}>
+        <Panel
+            title={
+                <>
+                    {u.autoTiming} <StatusPill>Experimental</StatusPill>
+                </>
+            }
+        >
             <Tabs
                 ariaLabel={u.autoTiming}
                 items={[{ value: "single", label: u.single }, { value: "batch", label: u.batch }]}

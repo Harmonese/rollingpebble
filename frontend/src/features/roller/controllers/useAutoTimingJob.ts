@@ -185,6 +185,13 @@ export function useAutoTimingJob(args: {
             }
             const saved = await saveWorkspace();
             const next = await rollPreview(saved.project_id, payload);
+            if (
+                contextRef.current.workspaceId !== origin.workspaceId
+                || contextRef.current.workspaceSignature !== origin.signature
+            ) {
+                setMessage(u.workspaceChanged, "warning");
+                return;
+            }
             if (contextRef.current.workspaceId === origin.workspaceId) setPreview(next);
             jobContext.current = { ...origin, projectId: saved.project_id };
             const created = await roll(saved.project_id, payload);

@@ -1,14 +1,14 @@
 import SSK from "#const/session_key.json" with { type: "json" };
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
     type LyricsDocumentAction as LrcAction,
     LyricsDocumentActionType as LrcActionType,
     type LyricsDocumentState as LrcState,
     lyricsDocumentSyncedText,
 } from "../../domain/lyrics/lyricsDocument.js";
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { readSessionText, writeSessionText } from "../../storage/browserStorage.js";
 import { lrcFileName } from "../../domain/lyrics/lyricsFileName.js";
 import { appContext } from "../../shared/appContext.js";
+import { readSessionText, writeSessionText } from "../../storage/browserStorage.js";
 import { CopySVG, DownloadSVG, OpenFileSVG, UtilitySVG } from "../../ui/icons.js";
 import { toastPubSub } from "../../ui/Toast.js";
 
@@ -60,7 +60,7 @@ export const LyricsEditor: React.FC<{
             const text = includeMetadataTags ? body : [metadataHeader(), body].filter(Boolean).join("\n");
             lrcDispatch({
                 type: LrcActionType.parse,
-                payload: { text, options: trimOptions },
+                payload: { text, options: trimOptions, preserveMarks: true },
             });
         },
         [includeMetadataTags, lrcDispatch, metadataHeader, trimOptions],
@@ -93,7 +93,9 @@ export const LyricsEditor: React.FC<{
     const [href, setHref] = useState<string | undefined>(undefined);
 
     useEffect(() => {
-        const onBeforeUnload = () => { (document.activeElement as HTMLElement)?.blur(); };
+        const onBeforeUnload = () => {
+            (document.activeElement as HTMLElement)?.blur();
+        };
         window.addEventListener("beforeunload", onBeforeUnload);
         return () => window.removeEventListener("beforeunload", onBeforeUnload);
     }, []);
@@ -157,41 +159,50 @@ export const LyricsEditor: React.FC<{
         <div className="app-editor">
             <div className="editor-header-row">
                 <details ref={details} open={detailsOpened} onToggle={onDetailsToggle}>
-                        <summary>{u.metadata}</summary>
-                        <section className="app-editor-infobox" onBlur={setInfo}>
-                            <label htmlFor="info-ti">[ti:</label>
-                            <input
-                                id="info-ti"
-                                name="ti"
-                                placeholder={u.titleTrack}
-                                {...disableCheck}
-                                {...useDefaultValue(lrcState.info.get("ti") || "")}
-                            />
-                            <label htmlFor="info-ti">]</label>
-                            <label htmlFor="info-ar">[ar:</label>
-                            <input
-                                id="info-ar"
-                                name="ar"
-                                placeholder={u.artist}
-                                {...disableCheck}
-                                {...useDefaultValue(lrcState.info.get("ar") || "")}
-                            />
-                            <label htmlFor="info-ar">]</label>
-                            <label htmlFor="info-al">[al:</label>
-                            <input
-                                id="info-al"
-                                name="al"
-                                placeholder={u.album}
-                                {...disableCheck}
-                                {...useDefaultValue(lrcState.info.get("al") || "")}
-                            />
-                            <label htmlFor="info-al">]</label>
-                        </section>
-                    </details>
+                    <summary>{u.metadata}</summary>
+                    <section className="app-editor-infobox" onBlur={setInfo}>
+                        <label htmlFor="info-ti">[ti:</label>
+                        <input
+                            id="info-ti"
+                            name="ti"
+                            placeholder={u.titleTrack}
+                            {...disableCheck}
+                            {...useDefaultValue(lrcState.info.get("ti") || "")}
+                        />
+                        <label htmlFor="info-ti">]</label>
+                        <label htmlFor="info-ar">[ar:</label>
+                        <input
+                            id="info-ar"
+                            name="ar"
+                            placeholder={u.artist}
+                            {...disableCheck}
+                            {...useDefaultValue(lrcState.info.get("ar") || "")}
+                        />
+                        <label htmlFor="info-ar">]</label>
+                        <label htmlFor="info-al">[al:</label>
+                        <input
+                            id="info-al"
+                            name="al"
+                            placeholder={u.album}
+                            {...disableCheck}
+                            {...useDefaultValue(lrcState.info.get("al") || "")}
+                        />
+                        <label htmlFor="info-al">]</label>
+                    </section>
+                </details>
 
                 <section className="editor-tools">
-                    <label className={`editor-tools-item ripple${importing ? " importing" : ""}`} title={u.importLyricsText}>
-                        <input hidden={true} type="file" accept="text/*, .txt, .lrc" onChange={onTextFileUpload} disabled={importing} />
+                    <label
+                        className={`editor-tools-item ripple${importing ? " importing" : ""}`}
+                        title={u.importLyricsText}
+                    >
+                        <input
+                            hidden={true}
+                            type="file"
+                            accept="text/*, .txt, .lrc"
+                            onChange={onTextFileUpload}
+                            disabled={importing}
+                        />
                         <OpenFileSVG />
                     </label>
                     <button className="editor-tools-item ripple" title={u.selectAllCopy} onClick={onCopyClick}>
@@ -207,7 +218,12 @@ export const LyricsEditor: React.FC<{
                         <DownloadSVG />
                     </a>
                     {onOpenUtils && (
-                        <button className="editor-tools-item ripple" title={u.lrcUtilities} type="button" onClick={onOpenUtils}>
+                        <button
+                            className="editor-tools-item ripple"
+                            title={u.lrcUtilities}
+                            type="button"
+                            onClick={onOpenUtils}
+                        >
                             <UtilitySVG />
                         </button>
                     )}
