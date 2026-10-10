@@ -654,6 +654,11 @@
     "undoMarkedLine": "Cofnij wstawienie / usunięcie wiersza"
   },
   "about": {
+    "hotkeySeekSelected": "Przejdź do czasu wybranego wiersza",
+    "hotkeyFirstLast": "Pierwszy / końcowy pusty wiersz",
+    "hotkeyPage": "10 wierszy w górę / dół",
+    "hotkeyRate": "Zwiększ / zmniejsz prędkość",
+    "hotkeyResetRate": "Przywróć prędkość odtwarzania",
     "hotkeySelectPlaying": "Wybierz odtwarzany wiersz tekstu",
     "hotkeyDeleteLine": "Usuń wybrany wiersz tekstu",
     "kicker": "O programie",

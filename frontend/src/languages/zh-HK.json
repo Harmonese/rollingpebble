@@ -654,6 +654,11 @@
     "undoMarkedLine": "復原插入 / 整行刪除"
   },
   "about": {
+    "hotkeySeekSelected": "跳到選取行時間",
+    "hotkeyFirstLast": "首行 / 末尾空行",
+    "hotkeyPage": "向上 / 下移動 10 行",
+    "hotkeyRate": "加快 / 減慢播放速度",
+    "hotkeyResetRate": "恢復正常播放速度",
     "hotkeySelectPlaying": "選取正在播放的歌詞行",
     "hotkeyDeleteLine": "刪除選取的整行歌詞",
     "kicker": "關於",

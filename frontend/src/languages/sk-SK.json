@@ -654,6 +654,11 @@
     "undoMarkedLine": "Vrátiť vloženie / odstránenie riadka"
   },
   "about": {
+    "hotkeySeekSelected": "Prejsť na čas vybraného riadka",
+    "hotkeyFirstLast": "Prvý / posledný prázdny riadok",
+    "hotkeyPage": "10 riadkov nahor / nadol",
+    "hotkeyRate": "Zvýšiť / znížiť rýchlosť",
+    "hotkeyResetRate": "Obnoviť rýchlosť prehrávania",
     "hotkeySelectPlaying": "Vybrať prehrávaný riadok textu",
     "hotkeyDeleteLine": "Odstrániť vybraný riadok textu",
     "kicker": "O aplikácii",

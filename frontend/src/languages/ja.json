@@ -654,6 +654,11 @@
     "undoMarkedLine": "挿入 / 行削除を元に戻す"
   },
   "about": {
+    "hotkeySeekSelected": "選択行の時刻に移動",
+    "hotkeyFirstLast": "先頭行 / 末尾の空行",
+    "hotkeyPage": "10 行上 / 下に移動",
+    "hotkeyRate": "再生速度を上げる / 下げる",
+    "hotkeyResetRate": "再生速度を戻す",
     "hotkeySelectPlaying": "再生中の歌詞行を選択",
     "hotkeyDeleteLine": "選択した歌詞行を削除",
     "kicker": "概要",

@@ -14,6 +14,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Changed
 
+- Swapped mark shortcuts: Alt/Option + digit captures a mark; Ctrl/Cmd + digit inserts it. Expanded About with common navigation, timing, playback and mark shortcuts.
 - Import Audio now replaces only the workspace audio, preserving lyrics, timing, marks and existing metadata. Saving replaces audio within the same project; audio changes invalidate earlier Auto Timing results.
 - Synchronizer lyric rows now show matching mark numbers on the right using the mark-button style, reserving space only for marked rows.
 - Repeated lyrics are inserted above the selected line while keeping the pending line selected. A transient trailing placeholder supports continued insertion after the final timestamp.

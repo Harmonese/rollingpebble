@@ -654,6 +654,11 @@
     "undoMarkedLine": "삽입 / 행 삭제 실행 취소"
   },
   "about": {
+    "hotkeySeekSelected": "선택한 행 시간으로 이동",
+    "hotkeyFirstLast": "첫 행 / 마지막 빈 행",
+    "hotkeyPage": "10행 위 / 아래로 이동",
+    "hotkeyRate": "재생 속도 높이기 / 낮추기",
+    "hotkeyResetRate": "재생 속도 초기화",
     "hotkeySelectPlaying": "재생 중인 가사 행 선택",
     "hotkeyDeleteLine": "선택한 가사 행 삭제",
     "kicker": "정보",

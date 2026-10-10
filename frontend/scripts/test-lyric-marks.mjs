@@ -83,9 +83,9 @@ try {
     assert.deepEqual(state.marks, []);
     const event = { code: "Digit0", ctrlKey: false, metaKey: false, altKey: false, shiftKey: false };
     assert.equal(lyricMarkKey(event), null);
-    assert.deepEqual(lyricMarkKey({ ...event, altKey: true }), { slot: 9, action: "insert" });
-    assert.deepEqual(lyricMarkKey({ ...event, code: "Digit1", metaKey: true }), { slot: 0, action: "mark" });
-    assert.deepEqual(lyricMarkKey({ ...event, code: "Numpad5", ctrlKey: true }), { slot: 4, action: "mark" });
+    assert.deepEqual(lyricMarkKey({ ...event, altKey: true }), { slot: 9, action: "mark" });
+    assert.deepEqual(lyricMarkKey({ ...event, code: "Digit1", metaKey: true }), { slot: 0, action: "insert" });
+    assert.deepEqual(lyricMarkKey({ ...event, code: "Numpad5", ctrlKey: true }), { slot: 4, action: "insert" });
     assert.equal(lyricMarkKey({ ...event, ctrlKey: true, altKey: true }), null);
     assert.equal(lyricMarkKey({ ...event, altKey: true, shiftKey: true }), null);
     assert.deepEqual(lyricMarkKey({ ...event, ctrlKey: true, shiftKey: true }), { slot: 9, action: "unmark" });

@@ -10,7 +10,7 @@ commit/tag alone does not publish a GitHub Release or upload the DMG.
 
 - Automated checks: frontend types/lint/Chinese localization, lyric-mark and workspace-audio tests, 92 Python tests, Ruff, Rust formatting and compilation passed. Rust currently has no unit tests.
 - Built macOS arm64 app/DMG and Python wheel/sdist. Verified app version, ad-hoc signature integrity, DMG checksum and app/Applications contents; Python packages include the WebUI and 0.7.4 metadata.
-- DMG SHA-256: `c3abf40fa629ff4296994ba51258c4b2cb8ed169fea5b9119b07380b5cdc7e6f`.
+- DMG SHA-256: `314d5a9478cacdc23f643025c077036fbde512704a43102f28bed244f2b0bcbd`.
 - Native interactive acceptance, first-run runtime/model setup and real alignment remain manual checks. Local isolated UI testing was omitted at the maintainer's request.
 - This preparation does not publish a GitHub Release, PyPI package or release tag.
 

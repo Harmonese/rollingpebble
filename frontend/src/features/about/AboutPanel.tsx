@@ -72,18 +72,46 @@ export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ o
                     <dd>{a.hotkeyDelete}</dd>
                     <dt>1</dt>
                     <dd>{a.hotkeySelectPlaying}</dd>
+                    <dt>0</dt>
+                    <dd>{a.hotkeySeekSelected}</dd>
+                    <dt>Alt/Option + 1–9, 0</dt>
+                    <dd>{u.markCurrentLine}</dd>
+                    <dt>Ctrl/⌘ + 1–9, 0</dt>
+                    <dd>{u.insertMarkedLine}</dd>
+                    <dt>Ctrl/⌘ + Shift + 1–9, 0</dt>
+                    <dd>{u.clearLyricMark}</dd>
                     <dt>Ctrl/⌘ + Delete / Backspace</dt>
                     <dd>{a.hotkeyDeleteLine}</dd>
                     <dt>Ctrl/⌘ + Z</dt>
                     <dd>{lang.ui.undoMarkedLine}</dd>
                     <dt>Ctrl/⌘ + Enter</dt>
                     <dd>{a.hotkeyPlay}</dd>
-                    <dt>↑ / ↓</dt>
+                    <dt>↑ / ↓ · W / S · J / K</dt>
                     <dd>{a.hotkeyUpDown}</dd>
-                    <dt>← / →</dt>
-                    <dd>{a.hotkeyLeftRight}</dd>
-                    <dt>+ / -</dt>
-                    <dd>{a.hotkeyPlusMinus}</dd>
+                    <dt>Home / End</dt>
+                    <dd>{a.hotkeyFirstLast}</dd>
+                    <dt>Page Up / Page Down</dt>
+                    <dd>{a.hotkeyPage}</dd>
+                    <dt>← / → · A / D · H / L</dt>
+                    <dd>{a.hotkeyLeftRight} · 5s</dd>
+                    <dt>Alt/Option + ← / →</dt>
+                    <dd>{a.hotkeyLeftRight} · 1s</dd>
+                    <dt>Shift + ← / →</dt>
+                    <dd>{a.hotkeyLeftRight} · 2.5s</dd>
+                    <dt>Alt/Option + Shift + ← / →</dt>
+                    <dd>{a.hotkeyLeftRight} · 0.5s</dd>
+                    <dt>- / =</dt>
+                    <dd>{a.hotkeyPlusMinus} · ±0.5s</dd>
+                    <dt>Alt/Option + - / =</dt>
+                    <dd>{a.hotkeyPlusMinus} · ±0.1s</dd>
+                    <dt>Shift + - / =</dt>
+                    <dd>{a.hotkeyPlusMinus} · ±0.25s</dd>
+                    <dt>Alt/Option + Shift + - / =</dt>
+                    <dd>{a.hotkeyPlusMinus} · ±0.05s</dd>
+                    <dt>Ctrl/⌘ + ↑ / ↓ · Ctrl/⌘ + J / K</dt>
+                    <dd>{a.hotkeyRate}</dd>
+                    <dt>R</dt>
+                    <dd>{a.hotkeyResetRate}</dd>
                 </dl>
             </section>
 

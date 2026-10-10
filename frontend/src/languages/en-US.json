@@ -654,6 +654,11 @@
     "undoMarkedLine": "Undo insertion / line deletion"
   },
   "about": {
+    "hotkeySeekSelected": "Seek to selected timestamp",
+    "hotkeyFirstLast": "First line / trailing blank line",
+    "hotkeyPage": "Previous / next 10 lines",
+    "hotkeyRate": "Increase / decrease playback speed",
+    "hotkeyResetRate": "Reset playback speed",
     "hotkeySelectPlaying": "Select playing lyric line",
     "hotkeyDeleteLine": "Delete selected lyric line",
     "kicker": "About",

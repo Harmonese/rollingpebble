@@ -14,7 +14,7 @@ export const LyricMarks: React.FC<{
                 {marks.map((mark, slot) => {
                     const digit = (slot + 1) % 10;
                     const shortcuts = slot < 10
-                        ? ` · Alt/Option+${digit}: ${u.insertMarkedLine} · Ctrl/⌘+Shift+${digit}: ${u.clearLyricMark}`
+                        ? ` · Ctrl/⌘+${digit}: ${u.insertMarkedLine} · Ctrl/⌘+Shift+${digit}: ${u.clearLyricMark}`
                         : "";
                     const label = `${slot + 1}: ${mark.text}${shortcuts}`;
                     return (

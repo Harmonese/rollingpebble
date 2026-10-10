@@ -3,7 +3,7 @@ export function lyricMarkKey(
 ): { slot: number; action: "mark" | "insert" | "unmark" } | null {
     const digit = /^(?:Digit|Numpad)([0-9])$/.exec(event.code);
     if (!digit || ((event.ctrlKey || event.metaKey) === event.altKey) || (event.altKey && event.shiftKey)) return null;
-    return { slot: (Number(digit[1]) + 9) % 10, action: event.altKey ? "insert" : event.shiftKey ? "unmark" : "mark" };
+    return { slot: (Number(digit[1]) + 9) % 10, action: event.altKey ? "mark" : event.shiftKey ? "unmark" : "insert" };
 }
 
 export function synchronizerCommand(

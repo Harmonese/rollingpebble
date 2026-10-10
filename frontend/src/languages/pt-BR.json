@@ -654,6 +654,11 @@
     "undoMarkedLine": "Desfazer inserção / exclusão de linha"
   },
   "about": {
+    "hotkeySeekSelected": "Ir ao tempo do verso selecionado",
+    "hotkeyFirstLast": "Primeiro verso / linha vazia final",
+    "hotkeyPage": "Subir / descer 10 linhas",
+    "hotkeyRate": "Aumentar / reduzir velocidade",
+    "hotkeyResetRate": "Restaurar velocidade",
     "hotkeySelectPlaying": "Selecionar verso em reprodução",
     "hotkeyDeleteLine": "Excluir verso selecionado",
     "kicker": "Sobre",
