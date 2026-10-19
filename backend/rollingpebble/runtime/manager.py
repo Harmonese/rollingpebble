@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.metadata
 import json
 import subprocess
 import sys
@@ -11,7 +10,6 @@ from rollingpebble.models import RuntimeSettingsModel
 from rollingpebble.paths import StorageLayout
 from rollingpebble.runtime.environment import build_runtime_env, runtime_python_path
 from rollingpebble.runtime.recipe import DEFAULT_RUNTIME_RECIPE
-from rollingpebble.runtime.python import select_runtime_python, target_runtime_python_tag
 from rollingpebble.runtime.reports import protocol_status_ok
 
 
@@ -19,7 +17,6 @@ def _module_command(module: str) -> list[str]:
     if getattr(sys, "frozen", False):
         internal_commands = {
             "rollingpebble.runtime.installer": "__runtime-installer",
-            "rollingpebble.runtime.dependencies": "__runtime-dependencies",
         }
         return [sys.executable, internal_commands[module]]
     return [sys.executable, "-m", module]
@@ -55,23 +52,19 @@ class RuntimeManager:
         self.layout = data_dir if isinstance(data_dir, StorageLayout) else StorageLayout.from_data_dir(data_dir)
         self.data_dir = self.layout.app_root
         self.envs_root = self.layout.runtime_root
-        self.models_root = self.layout.models_root / "transcriber"
+        self.models_root = self.layout.models_root
 
     def update_layout(self, layout: StorageLayout) -> None:
         self.layout = layout
         self.data_dir = layout.app_root
         self.envs_root = layout.runtime_root
-        self.models_root = layout.models_root / "transcriber"
+        self.models_root = layout.models_root
 
     def runtime_id(self, profile: str) -> str:
-        try:
-            version = select_runtime_python().tag
-        except RuntimeError:
-            version = target_runtime_python_tag()
-        return f"pyroller-{version}-{profile}"
+        return "managed"
 
     def runtime_root(self, profile: str) -> Path:
-        return self.envs_root / self.runtime_id(profile)
+        return self.envs_root
 
     def runtime_json_path(self, profile: str) -> Path:
         return self.runtime_root(profile) / "runtime.json"
@@ -94,13 +87,16 @@ class RuntimeManager:
         return payload
 
     def venv_path(self, profile: str) -> Path:
-        return self.runtime_root(profile) / ".venv"
+        return self.runtime_root(profile) / "venv"
 
     def python_path(self, profile: str) -> Path:
         return runtime_python_path(self.venv_path(profile))
 
     def default_model_store(self) -> Path:
-        return self.models_root
+        return self.engine_data()
+
+    def engine_data(self) -> Path:
+        return self.layout.engine_root
 
     def active_runtime(self, settings: RuntimeSettingsModel) -> IsolatedRuntimeInfo:
         return self.inspect(settings.auto_roller_profile)
@@ -146,7 +142,14 @@ class RuntimeManager:
             )
         doctor_report = payload.get("doctor_report") if isinstance(payload.get("doctor_report"), dict) else None
         last_doctor_status = payload.get("last_doctor_status")
-        if doctor_report is not None and not protocol_status_ok(doctor_report):
+        from rollingpebble.auto_timing.protocol import compatible
+        if payload.get("last_install_status") in {"running", "failed"}:
+            status = "unhealthy"
+            detail = "Auto Timing preparation is incomplete"
+        elif not compatible(version):
+            status = "unhealthy"
+            detail = "Protocol v2 requires py-roller >=0.10.2,<0.11"
+        elif doctor_report is not None and not protocol_status_ok(doctor_report):
             status = "unhealthy"
             detail = "Runtime exists, but the last doctor check reported problems."
         elif doctor_report is not None and protocol_status_ok(doctor_report):
@@ -200,13 +203,13 @@ class RuntimeManager:
             raise RuntimeError(
                 "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before running py-roller."
             )
-        return [str(info.python_path), "-m", "pyroller.cli.main"]
+        return [str(info.python_path), "-m", "pyroller"]
 
     def doctor_command(self, profile: str) -> list[str]:
         info = self.inspect(profile)
         if not info.doctorable:
             raise RuntimeError("Isolated Auto Timing runtime is not ready. Create or repair it before running Runtime Check.")
-        return [str(info.python_path), "-m", "pyroller.cli.main", "doctor", "--output-format", "json"]
+        return [str(info.python_path), "-m", "pyroller", "doctor", "--json", "--cache-dir", str(self.engine_data())]
 
     def install_command(self, profile: str, *, skip_doctor: bool = False) -> list[str]:
         command = [
@@ -220,69 +223,5 @@ class RuntimeManager:
             command.append("--skip-doctor")
         return command
 
-    def upgrade_command(self, profile: str) -> list[str]:
-        info = self.inspect(profile)
-        if not info.ready:
-            raise RuntimeError(
-                "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before upgrading."
-            )
-        return [
-            *_module_command("rollingpebble.runtime.dependencies"),
-            "upgrade",
-            "--data-dir",
-            str(self.data_dir),
-            "--venv",
-            str(info.venv_path),
-        ]
-
     def dependency_source_label(self) -> str:
-        return DEFAULT_RUNTIME_RECIPE.source_label(
-            DEFAULT_RUNTIME_RECIPE.source_from_env()
-        )
-
-    def cache_model_command(
-        self, profile: str, *, language: str = "mul", backend: str | None = None,
-        model_name: str | None = None, model_path: str | None = None,
-        hf_xet: str | None = None, hf_proxy: str | None = None,
-        hf_etag_timeout: int | None = None, hf_download_timeout: int | None = None,
-        hf_max_workers: int | None = None,
-    ) -> list[str]:
-        info = self.inspect(profile)
-        if not info.ready:
-            raise RuntimeError(
-                "Auto Timing runtime is not ready. Create or repair the isolated runtime in Settings before caching models."
-            )
-        command = [
-            *self.command_prefix(profile),
-            "cache-model",
-            "--language",
-            language,
-            "--progress-format",
-            "jsonl",
-            "--output-format",
-            "json",
-        ]
-        if backend:
-            command.extend(["--transcriber-backend", backend])
-        if model_name:
-            command.extend(["--transcriber-model-name", model_name])
-        effective_model_path = model_path or str(self.default_model_store())
-        command.extend(["--transcriber-model-path", str(Path(effective_model_path).expanduser())])
-        if hf_xet:
-            command.extend(["--transcriber-hf-xet", hf_xet])
-        if hf_proxy:
-            command.extend(["--transcriber-hf-proxy", hf_proxy])
-        if hf_etag_timeout is not None:
-            command.extend(["--transcriber-hf-etag-timeout", str(hf_etag_timeout)])
-        if hf_download_timeout is not None:
-            command.extend(["--transcriber-hf-download-timeout", str(hf_download_timeout)])
-        if hf_max_workers is not None:
-            command.extend(["--transcriber-hf-max-workers", str(hf_max_workers)])
-        return command
-
-    def legacy_dependency_status(self) -> tuple[bool, str | None, str | None]:
-        try:
-            version = importlib.metadata.version("py-roller")
-        except importlib.metadata.PackageNotFoundError:
-            version = None
-        return False, version, "Legacy PATH py-roller is ignored; rollingpebble uses an isolated runtime."
+        return f"bundled:{DEFAULT_RUNTIME_RECIPE.pyroller_spec}"

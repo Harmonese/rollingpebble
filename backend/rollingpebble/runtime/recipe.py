@@ -63,7 +63,7 @@ class RuntimeDependencyRecipe:
 
 
 DEFAULT_RUNTIME_RECIPE = RuntimeDependencyRecipe(
-    pyroller_spec="py-roller>=0.9.0,<0.10",
+    pyroller_spec="py-roller==0.10.2",
     support_specs=("PySocks>=1.7.1", "av>=11,<19"),
     bootstrap_specs=("pip", "setuptools", "wheel"),
     event_prefix="PYROLLER_EVENT ",

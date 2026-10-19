@@ -111,7 +111,8 @@
 }
 
 .settings-header button:hover:not(:disabled),
-.settings-section :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):hover:not(:disabled) {
+.settings-section
+    :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):hover:not(:disabled) {
     transform: translateY(-1px);
     background: rgba(var(--theme-rgb), 0.16);
     border-color: rgba(var(--theme-rgb), 0.62);
@@ -120,12 +121,14 @@
 }
 
 .settings-header button:active:not(:disabled),
-.settings-section :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):active:not(:disabled) {
+.settings-section
+    :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):active:not(:disabled) {
     transform: translateY(0);
 }
 
 .settings-header button:focus-visible,
-.settings-section :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):focus-visible {
+.settings-section
+    :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.14);
 }
@@ -714,6 +717,20 @@
 
 .settings-section button.space-stepper-btn:disabled {
     opacity: 0.38;
+}
+
+.settings-section .translation-prompt {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 140px;
+    resize: vertical;
+    padding: 10px;
+    border: 1px solid var(--studio-border-soft);
+    border-radius: var(--studio-radius-sm);
+    background: var(--studio-surface-control);
+    color: var(--studio-text);
+    font: inherit;
+    line-height: 1.5;
 }
 
 @media (prefers-reduced-motion: reduce) {

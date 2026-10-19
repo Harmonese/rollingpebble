@@ -1,18 +1,14 @@
 # Release Checklist
 
-Read the release version from `pyproject.toml`; current examples use `0.7.4`. Run commands from the repository root.
+Read the release version from `pyproject.toml`; current examples use `0.8.0`. Run commands from the repository root.
 
 Publishing a GitHub Release triggers `.github/workflows/python-publish.yml` and
 publishes Python distributions to PyPI through trusted publishing. Pushing the
 commit/tag alone does not publish a GitHub Release or upload the DMG.
 
-## 0.7.4 Preparation Status
+## Current Preparation
 
-- Automated checks: frontend types/lint/Chinese localization, lyric-mark and workspace-audio tests, 92 Python tests, Ruff, Rust formatting and compilation passed. Rust currently has no unit tests.
-- Built macOS arm64 app/DMG and Python wheel/sdist. Verified app version, ad-hoc signature integrity, DMG checksum and app/Applications contents; Python packages include the WebUI and 0.7.4 metadata.
-- DMG SHA-256: `314d5a9478cacdc23f643025c077036fbde512704a43102f28bed244f2b0bcbd`.
-- Native interactive acceptance, first-run runtime/model setup and real alignment remain manual checks. Local isolated UI testing was omitted at the maintainer's request.
-- This preparation does not publish a GitHub Release, PyPI package or release tag.
+Version 0.8.0 includes Protocol v2 Auto Timing, model management, Translation, project autosave and workspace recovery. The validation archive records earlier development builds; use freshly built 0.8.0 artifacts for release. Commit/tag pushes do not publish packages.
 
 ## Version and Checks
 
@@ -41,8 +37,8 @@ Build on Apple Silicon with the tools described in [DESKTOP.md](DESKTOP.md):
 ```bash
 pnpm desktop:build
 codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Rolling Pebble.app"
-hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.7.4_aarch64.dmg"
-shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.7.4_aarch64.dmg"
+hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.8.0_aarch64.dmg"
+shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.8.0_aarch64.dmg"
 ```
 
 The build hook rebuilds the sidecar with standalone Python, includes app version
@@ -52,15 +48,15 @@ the developer's system/Homebrew Python.
 Mount the DMG read-only and confirm it contains the app and Applications link.
 Check the bundled version and signature, then smoke-test startup and a real
 alignment with an isolated data directory and a PATH without Homebrew. Confirm
-long run reports retain quality and artifact fields. First-run acceptance also
-requires Settings runtime creation/repair and model download from empty
+completed + exit zero, alignment/LRC consistency and independent preview results. First-run acceptance also
+requires automatic startup preparation/repair and explicit model download from empty
 runtime/model directories. Check normal shutdown reaps the backend.
 
 **Signing limitation:** this configuration uses ad-hoc signing, not Developer ID
 signing or Apple notarization. Signature integrity is not proof of Gatekeeper
 acceptance. Publish this limitation prominently; do not describe this artifact
 as notarized or as requiring no first-launch approval. This is an arm64 build,
-not a universal/Intel build. macOS 11 is the declared binary minimum, not proof
+not a universal/Intel build. macOS 14 is the declared binary minimum, not proof
 of dependency compatibility on every older OS version.
 
 ## Python Distributions
@@ -78,25 +74,32 @@ cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
 
 Expected files:
 
-- `dist/rollingpebble-0.7.4-py3-none-any.whl`
-- `dist/rollingpebble-0.7.4.tar.gz`
+- `dist/rollingpebble-0.8.0-py3-none-any.whl`
+- `dist/rollingpebble-0.8.0.tar.gz`
 
 Verify these include the WebUI and current metadata, but not standalone Python,
-virtual environments, or models. CLI/PyPI users still need Python 3.12 for Auto
-Timing. The workflow checks that the release tag matches the package version.
+virtual environments, or models. CLI/PyPI users need the bundled Python 3.12 and matching engine resources prepared from source for Auto
+Timing; the Python package alone does not include an engine wheelhouse. The workflow checks that the release tag matches the package version.
 
 ## Push and Publish
 
 After checks and artifact verification:
 
 ```bash
-git tag -a v0.7.4 -m "Release v0.7.4"
-git push --atomic origin main v0.7.4
+git tag -a v0.8.0 -m "Release v0.8.0"
+git push --atomic origin main v0.8.0
 ```
 
-Manually publish the GitHub Release for `v0.7.4`, attach
-`Rolling Pebble_0.7.4_aarch64.dmg` and its SHA-256 checksum, and use the v0.7.4
-changelog as release notes. Mention that only Python is bundled: dependencies
-and models are downloaded through Settings, a proxy may be needed, and Full
-processing may download Demucs separately on first use. Then verify the PyPI
+Manually publish the GitHub Release for `v0.8.0`, attach
+`Rolling Pebble_0.8.0_aarch64.dmg` and its SHA-256 checksum, and use the v0.8.0
+changelog as release notes after maintainer acceptance. Mention that Python, FFmpeg and binary dependencies are bundled, model weights are prepared separately in Settings, and Vocals needs Demucs. Then verify the PyPI
 publishing workflow completes. Do not publish a Release merely to test CI.
+
+## Remaining Public Distribution Gates
+
+- Maintainer acceptance of first-use component preparation, cancellation while waiting, failure/repair, and Vocals dependency preparation. This UI simplification is checked with mocked installation tests; real inference is left to the maintainer.
+- Maintainer acceptance of Preview editing, keyboard focus, Apply, batch review and narrow/wide window layout. Automated browser testing is intentionally omitted.
+- Validate on the actual minimum supported macOS version; the current machine's success and Mach-O audit are not an OS matrix.
+- Preserve the bundled FFmpeg LGPL license, corresponding source archive and build parameters; verify their hashes against the engine manifest.
+- Developer ID signing/notarization, if required for the intended distribution.
+- Obtain explicit GitHub Release/PyPI publication instructions after artifact acceptance.

@@ -113,6 +113,8 @@ def run_subprocess_job(
 ) -> None:
     with managed.lock:
         if managed.model.status == JobStatus.canceled:
+            if cleanup:
+                cleanup()
             return
         managed.model.status = JobStatus.running
         managed.model.updated_at = utc_now_iso()
@@ -128,6 +130,10 @@ def run_subprocess_job(
             env=env,
         )
         managed.process = process
+        with managed.lock:
+            canceled = managed.model.status == JobStatus.canceled
+        if canceled:
+            request_process_stop(managed, process)
         with managed.lock:
             managed.model.command = command
             managed.model.pid = process.pid
@@ -175,7 +181,13 @@ def run_subprocess_job(
         with managed.lock:
             if managed.model.status == JobStatus.canceled:
                 return
-        if return_code != 0:
+        runtime_healthy = False
+        if return_code == 1 and managed.model.kind == job_kinds.RUNTIME_DOCTOR:
+            from rollingpebble.runtime.reports import json_from_log_lines
+            report = json_from_log_lines(managed.model.logs) or {}
+            runtime_healthy = (report.get("protocol_version") == 2 and report.get("type") == "doctor"
+                               and report.get("engine") == "py-roller" and report.get("runtime_ok") is True)
+        if return_code != 0 and not runtime_healthy:
             with managed.lock:
                 failure_model = managed.model.model_copy(deep=True)
             result = _run_callback(on_failure, failure_model)

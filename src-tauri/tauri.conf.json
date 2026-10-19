@@ -1,10 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Rolling Pebble",
-  "version": "0.7.4",
+  "version": "0.8.0",
   "identifier": "cn.harmonese.rollingpebble",
   "build": {
-    "beforeBuildCommand": "pnpm -C frontend build && .venv/bin/python desktop/build_resources.py",
+    "beforeBuildCommand": "pnpm -C frontend build && node desktop/build.mjs",
     "frontendDist": "../frontend/dist"
   },
   "app": {
@@ -17,7 +17,7 @@
   "bundle": {
     "active": true,
     "macOS": {
-      "minimumSystemVersion": "11.0",
+      "minimumSystemVersion": "14.0",
       "signingIdentity": "-"
     },
     "targets": "all",
@@ -30,11 +30,12 @@
     ],
     "resources": {
       "../desktop/bin/rollingpebble-backend*": "bin/",
-      "../desktop/python-runtime": "python-runtime/"
+      "../desktop/python-runtime": "python-runtime/",
+      "../desktop/engine": "engine/"
     },
     "copyright": "Copyright (c) 2026 Harmonese",
     "category": "Utility",
     "shortDescription": "Local lyrics workstation",
-    "longDescription": "Rolling Pebble is a local lyrics workstation for importing, timing, editing, and publishing LRC lyrics."
+    "longDescription": "Rolling Pebble is a local lyrics workstation for editing, timing, translating, and publishing LRC lyrics, with project autosave and workspace recovery."
   }
 }

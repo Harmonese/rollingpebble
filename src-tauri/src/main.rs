@@ -1,9 +1,14 @@
+mod external_links;
+
 use std::{
     env,
     net::{SocketAddr, TcpListener, TcpStream},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::Mutex,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -14,9 +19,93 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 use std::os::unix::process::CommandExt;
 
 struct BackendState(Mutex<Option<Child>>);
+#[derive(Default)]
+struct ExitState {
+    ready: AtomicBool,
+    pending: AtomicBool,
+    approved: AtomicBool,
+}
+
+#[derive(Debug, PartialEq)]
+enum ExitDecision {
+    Allow,
+    Notify,
+    Wait,
+}
+impl ExitState {
+    fn request(&self) -> ExitDecision {
+        if self.approved.load(Ordering::SeqCst) || !self.ready.load(Ordering::SeqCst) {
+            ExitDecision::Allow
+        } else if self.pending.swap(true, Ordering::SeqCst) {
+            ExitDecision::Wait
+        } else {
+            ExitDecision::Notify
+        }
+    }
+    fn reply(&self, approved: bool) -> bool {
+        if !self.pending.swap(false, Ordering::SeqCst) {
+            return false;
+        }
+        self.approved.store(approved, Ordering::SeqCst);
+        approved
+    }
+}
+
+#[tauri::command]
+fn workspace_ready(window: tauri::WebviewWindow, state: tauri::State<ExitState>) {
+    if window.label() == "main" {
+        state.ready.store(true, Ordering::SeqCst);
+    }
+}
+
+#[tauri::command]
+fn workspace_exit_reply(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    state: tauri::State<ExitState>,
+    approved: bool,
+) {
+    if window.label() == "main" && state.reply(approved) {
+        app.exit(0);
+    }
+}
+
+fn request_exit(app: &tauri::AppHandle) -> bool {
+    let state = app.state::<ExitState>();
+    let decision = state.request();
+    if decision == ExitDecision::Allow {
+        return false;
+    }
+    if decision == ExitDecision::Notify {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.eval("window.dispatchEvent(new Event('rollingpebble:exit-requested'))");
+        }
+    }
+    true
+}
+
+#[cfg(test)]
+mod exit_tests {
+    use super::*;
+    #[test]
+    fn close_and_quit_wait_for_one_decision() {
+        let state = ExitState::default();
+        assert_eq!(state.request(), ExitDecision::Allow);
+        assert!(!state.reply(true));
+        state.ready.store(true, Ordering::SeqCst);
+        assert_eq!(state.request(), ExitDecision::Notify);
+        assert_eq!(state.request(), ExitDecision::Wait);
+        assert!(!state.reply(false));
+        assert_eq!(state.request(), ExitDecision::Notify);
+        assert!(state.reply(true));
+        assert_eq!(state.request(), ExitDecision::Allow);
+    }
+}
 
 fn main() {
     tauri::Builder::default()
+        .manage(ExitState::default())
+        .invoke_handler(tauri::generate_handler![workspace_ready, workspace_exit_reply])
         .setup(|app| {
             let port = pick_port()?;
             let mut child = start_backend(port)?;
@@ -28,7 +117,26 @@ fn main() {
             app.manage(BackendState(Mutex::new(Some(child))));
 
             let url = format!("http://127.0.0.1:{port}");
+            app.add_capability(format!(r#"{{"identifier":"workspace-exit","windows":["main"],"remote":{{"urls":["{url}"]}},"permissions":["allow-workspace-ready","allow-workspace-exit-reply"]}}"#))?;
+            let navigation_app = app.handle().clone();
+            let popup_app = app.handle().clone();
             WebviewWindowBuilder::new(app, "main", WebviewUrl::External(url.parse().unwrap()))
+                .on_navigation(move |url| match external_links::route(url, port) {
+                    external_links::Route::Internal => true,
+                    external_links::Route::Browser => {
+                        external_links::open_browser(&navigation_app, url);
+                        false
+                    }
+                    external_links::Route::Block => false,
+                })
+                .on_new_window(move |url, _| match external_links::route(&url, port) {
+                    external_links::Route::Browser => {
+                        external_links::open_browser(&popup_app, &url);
+                        tauri::webview::NewWindowResponse::Deny
+                    }
+                    external_links::Route::Internal => tauri::webview::NewWindowResponse::Allow,
+                    external_links::Route::Block => tauri::webview::NewWindowResponse::Deny,
+                })
                 .title("Rolling Pebble")
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(980.0, 640.0)
@@ -37,6 +145,12 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if request_exit(window.app_handle()) {
+                    api.prevent_close();
+                    return;
+                }
+            }
             if matches!(
                 event,
                 tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
@@ -49,6 +163,12 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("failed to build Rolling Pebble desktop app")
         .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { ref api, .. } = event {
+                if request_exit(app_handle) {
+                    api.prevent_exit();
+                    return;
+                }
+            }
             if matches!(
                 event,
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
@@ -202,6 +322,18 @@ fn stop_backend(state: &BackendState) {
     #[cfg(unix)]
     unsafe {
         libc::kill(-(child.id() as i32), libc::SIGTERM);
+    }
+
+    // Let the backend stop its independently grouped preparation/inference workers.
+    #[cfg(unix)]
+    {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
     }
 
     let _ = child.kill();

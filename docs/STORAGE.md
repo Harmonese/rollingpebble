@@ -2,54 +2,69 @@
 
 [Documentation index](README.md) · [User guide](USER_GUIDE.md)
 
-## What creates files
+## One application directory
 
-Opening local audio uses a temporary frontend workspace. It does not create a project or upload the audio. **Save Project** or starting single-project **Auto Timing** persists the workspace. Re-saving a project updates its lyrics and metadata without another audio copy. Direct LRC export needs no project.
-
-Unsaved audio is session-only. Browser editor text recovery is separate from backend project persistence and does not restore an audio file after restart. Model downloads and runtime setup are separate, explicit operations.
-
-The default data directory is `~/.local/share/rollingpebble`. Override it with `--data-dir` or `LRC_ROLLER_DATA_DIR`.
+The default is `~/.local/share/rollingpebble`. Settings → Storage changes the
+entire location; individual categories do not have separate locations.
+CLI `--data-dir` and `LRC_ROLLER_DATA_DIR` remain explicit overrides.
 
 | Location | Contents |
 | --- | --- |
-| `projects/` | Saved audio, project metadata, lyrics, Auto Timing intermediates and artifacts |
-| `models/` | Transcriber and other audio-model caches |
-| `envs/` | Isolated py-roller environments |
-| `cache/` | Redirected pip/XDG and other reproducible caches |
-| `work/` | Job request files and temporary task work |
-| `toolchains/` | Python copied from a supported desktop bundle for runtime setup |
-| `settings.json` | Application settings and runtime history |
+| `settings.json` | Current preferences |
+| `projects/` | Saved audio, lyrics, translations and metadata |
+| `recovery/` | One current workspace snapshot, unfinished editor text and pending audio |
+| `engine/models/` | Current Whisper, CTC and Demucs weights |
+| `engine/ctc/`, `engine/whisper/`, `engine/separation/` | Reusable inference cache |
+| `runtime/python/`, `runtime/venv/` | Managed interpreter and one environment |
+| `results/<project>/<run>/` | Requests, results, logs and editable drafts |
+| `cache/` | Temporary application and dependency data |
 
-Projects and model roots can be relocated through Settings. Runtime layout also understands configured cache, runtime, and work roots. A project audio reference is relative to its project directory. Root migration updates persisted settings and services, and retains the source backup; it must not be treated as automatic source-disk cleanup.
+The engine's internal directory layout follows its public cache-root contract.
+Model weights are persistent data, not ordinary cache. Explicit external model
+files remain unmanaged.
 
-## Manual cleanup
+Opening audio is transient. Save Project or starting single-project Auto Timing
+establishes the project; later edits save automatically. Recovery may stage temporary audio without creating a project. Re-saving does not duplicate audio. Task audio snapshots
+are released after process exit; retained results do not retain another audio copy.
 
-Settings → Storage & Cleanup reports projects, models, runtimes, and other data.
+## Settings
 
-| Operation | Scope |
-| --- | --- |
-| Safe Cleanup | Project `intermediate/` directories and external cache |
-| Clear Intermediates | Only intermediates for the selected/listed projects |
-| Delete Projects | Entire selected project directories, including audio and saved lyrics |
-| Delete Model | The selected model cache; future use can download it again |
-| Delete Runtime | The selected inactive runtime, without deleting models |
-| Other cleanup | Selected removable app-data items |
-| Browser Storage | Fixed browser keys and application CacheStorage entries; no backend project files |
+Auto Timing owns model download/removal, defaults, network options and diagnostics.
+Model integrity receipts live under `engine/models/.installations.json`; they track installation
+and intentional deletion, not persisted successful hash checks. Resumable download files live
+under `cache/model-downloads` and can be removed by cache cleanup when no task is active.
+Storage shows Location and five usage rows: Projects, Models, Results, Cache,
+Components. Models links to Auto Timing. Projects and Results open management
+dialogs; Components is read-only. Usage is exclusive logical file-byte accounting,
+not a promise of physical space reclaimed on a deduplicating filesystem.
 
-The **Older Than** filter limits which projects are listed and selected by bulk actions. It does not enable automatic deletion. Model caches can include transcriber provider hub directories, manifests, and Torch/Demucs data.
+Clear Cache removes known temporary data and engine inference caches. It preserves
+models, components, projects, workspace recovery, results and drafts, and refuses locked caches.
+Deleting a result also deletes its draft; empty batch records are removed.
+Deleting a project does not delete independent results. There is no automatic
+project expiry, and reading usage never deletes data.
 
-Confirmation dialogs run inside the application. Project List deletion has a ten-second undo period before the delete request. Settings cleanup executes after confirmation and does not have that undo period. Deletions use filesystem removal, not the operating system Trash.
+Deletion uses the existing application confirmation dialog and filesystem removal,
+not Trash. Project List retains its ten-second undo period; Settings deletions
+take effect after confirmation.
 
-## Automatic project deletion — current behavior
+## Location changes and initial cleanup
 
-`project_auto_delete_days` defaults to `0` (off). A positive value enables deletion of entire expired projects, including audio and saved lyrics.
+The selected root is recorded in the system application configuration directory
+(on macOS, `~/Library/Application Support/Rolling Pebble/storage.json`).
+It is separate from user preferences, so Reset does not disconnect data.
 
-**This is not a background scheduler.** The policy runs when the backend storage-usage operation is requested, including opening Settings or refreshing storage. The field saves on blur, then refreshes storage; enabling or shortening the period can therefore delete qualifying projects immediately.
+Relocation requires an empty, non-overlapping destination and idle resources.
+The frontend completes its workspace-save prompt and flushes preview drafts.
+Durable files are copied and verified, readable artifact paths are updated, and
+the runtime is prepared at its final location before switching. Virtual
+environments are rebuilt because they contain absolute paths. A transaction
+records progress for retries. Successful relocation removes owned source data;
+unknown files are left intact. No permanent source backup or redirect directory
+is retained.
 
-Age is calculated from the recorded last-opened timestamp, falling back to directory modification time. Projects associated with running jobs are skipped. This protection does not represent an editor-session lease and does not cover every manually open workspace. Automatic deletion has no confirmation or ten-second undo window. Leave it off if you need to retain saved work indefinitely.
-
-## Deletion boundaries
-
-Paths are resolved against configured managed roots, which can be outside the original data directory. Cleanup rejects paths outside those roots and does not accept arbitrary frontend deletion paths. Symlink roots are rejected. The cleanup service protects active runtimes, running projects, settings, and busy model/runtime/cache operations according to their job guards. These storage-cleanup guards should not be confused with a general guarantee that every project has an active-editing lock.
-
-First-time workspace saves are written in a staging directory and made visible only after completion. Failed saves remove their staging data. A stable draft ID makes creation retries reuse the same saved project rather than duplicate audio.
+The one-time layout transition preserves projects, current engine models and
+results. After the new runtime passes its check, it removes old `envs/`,
+`toolchains/`, legacy `models/`, pip cache and the old settings backup.
+Old preferences and per-category relocation APIs are not supported. External
+shared caches and custom files are never swept into application cleanup.

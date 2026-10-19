@@ -7,6 +7,7 @@ import { Toast } from "../ui/Toast.js";
 import { AppProvider } from "./AppContext.js";
 import { Footer } from "./Footer.js";
 import { Header } from "./Header.js";
+import { StartupGate } from "./StartupGate.js";
 import { ThemeEffects } from "./ThemeEffects.js";
 import { WorkspaceShell } from "./WorkspaceShell.js";
 
@@ -34,6 +35,15 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { err
 
 export const App: React.FC = () => {
     const [settingsOpen, setSettingsOpen] = React.useState(false);
+    const [settingsSection, setSettingsSection] = React.useState<"autoTiming" | "translation" | undefined>();
+    React.useEffect(() => {
+        const open = () => {
+            setSettingsSection("translation");
+            setSettingsOpen(true);
+        };
+        window.addEventListener("rollingpebble:translation-settings", open);
+        return () => window.removeEventListener("rollingpebble:translation-settings", open);
+    }, []);
     const [aboutOpen, setAboutOpen] = React.useState(false);
     const audioElRef = React.useRef<HTMLAudioElement>(null);
     return (
@@ -43,12 +53,29 @@ export const App: React.FC = () => {
                     <AppProvider>
                         <ConfirmProvider>
                             <ThemeEffects />
-                            <Header onAbout={() => setAboutOpen(true)} onSettings={() => setSettingsOpen(true)} />
-                            <WorkspaceShell />
-                            <Footer />
-                            <Toast />
-                            <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
-                            <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+                            <StartupGate
+                                onSettings={() => {
+                                    setSettingsSection("autoTiming");
+                                    setSettingsOpen(true);
+                                }}
+                            >
+                                <Header
+                                    onAbout={() => setAboutOpen(true)}
+                                    onSettings={() => {
+                                        setSettingsSection(undefined);
+                                        setSettingsOpen(true);
+                                    }}
+                                />
+                                <WorkspaceShell />
+                                <Footer />
+                                <Toast />
+                                <AboutPanel open={aboutOpen} onClose={() => setAboutOpen(false)} />
+                                <SettingsPanel
+                                    open={settingsOpen}
+                                    initialSection={settingsSection}
+                                    onClose={() => setSettingsOpen(false)}
+                                />
+                            </StartupGate>
                         </ConfirmProvider>
                     </AppProvider>
                 </audioElementContext.Provider>

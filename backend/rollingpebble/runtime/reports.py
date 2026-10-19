@@ -40,6 +40,8 @@ def is_protocol_report(payload: object, *, report_type: str | None = None) -> bo
 def protocol_status_ok(report: dict[str, Any] | None, *, fallback: bool = False) -> bool:
     if not report:
         return fallback
+    if report.get("protocol_version") == 2 and report.get("type") == "doctor":
+        return report.get("runtime_ok") is True
     status = report.get("status")
     if isinstance(status, str):
         return status.lower() in {"ok", "success", "succeeded", "passed"}

@@ -4,13 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rollingpebble"
-version = "0.7.4"
-description = "Local WebUI frontend for py-roller and pylrclib."
+version = "0.8.0"
+description = "Local lyrics workstation for editing, timing, translation, and publishing."
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Harmonese" }]
 license = "MIT"
 dependencies = [
+  "httpx>=0.27,<1",
+  "keyring>=25,<26",
   "fastapi>=0.110",
   "uvicorn[standard]>=0.27",
   "python-multipart>=0.0.9",

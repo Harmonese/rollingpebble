@@ -50,23 +50,32 @@ def build_runtime_env(venv: Path, data_dir: Path | StorageLayout, *, include_dev
     layout = data_dir if isinstance(data_dir, StorageLayout) else StorageLayout.from_data_dir(data_dir)
     env = build_base_subprocess_env(include_dev=include_dev)
     bin_dir = runtime_bin_dir(venv)
+    from rollingpebble.runtime.installer import engine_resources
+    resources = engine_resources()
+    ffmpeg = str(resources / "bin") + os.pathsep if resources else ""
     env.update(
         {
             "PYTHONUNBUFFERED": "1",
             "PYTHONNOUSERSITE": "1",
             "PIP_DISABLE_PIP_VERSION_CHECK": "1",
             "PIP_PROGRESS_BAR": "off",
+            "PIP_NO_CACHE_DIR": "1",
             "PIP_CACHE_DIR": str(layout.cache_root / "pip"),
             "XDG_CACHE_HOME": str(layout.cache_root / "xdg"),
-            "TORCH_HOME": str(layout.models_root / "torch"),
-            "HF_HOME": str(
-                layout.models_root / "transcriber" / "providers" / "huggingface"
-            ),
-            "HUGGINGFACE_HUB_CACHE": str(
-                layout.models_root / "transcriber" / "providers" / "huggingface" / "hub"
-            ),
+            "TORCH_HOME": str(layout.cache_root / "torch"),
+            "HF_HOME": str(layout.cache_root / "huggingface"),
+            "HUGGINGFACE_HUB_CACHE": str(layout.cache_root / "huggingface" / "hub"),
             "VIRTUAL_ENV": str(venv),
-            "PATH": f"{bin_dir}{os.pathsep}{env.get('PATH', '')}",
+            "PATH": f"{bin_dir}{os.pathsep}{ffmpeg}{env.get('PATH', '')}",
         }
     )
+    from rollingpebble.storage.app_settings import SettingsStore
+    settings = SettingsStore(layout.app_root).read()
+    proxy = settings.auto_timing_hf_proxy
+    if proxy and settings.model_proxy_enabled:
+        env.update(HTTP_PROXY=proxy, HTTPS_PROXY=proxy)
+    for name, value in (("HF_HUB_ETAG_TIMEOUT", settings.auto_timing_hf_etag_timeout),
+                        ("HF_HUB_DOWNLOAD_TIMEOUT", settings.auto_timing_hf_download_timeout)):
+        if value:
+            env[name] = str(int(value))
     return env

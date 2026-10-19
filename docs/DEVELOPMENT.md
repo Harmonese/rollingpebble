@@ -35,12 +35,32 @@ pnpm -C frontend check:lint
 pnpm -C frontend check:i18n:zh
 python -m ruff check backend tests desktop
 python -m pytest -q
+node frontend/scripts/test-lyric-marks.mjs
+node frontend/scripts/test-translation.mjs
+node frontend/scripts/test-paired-editor.mjs
+node frontend/scripts/test-translation-task.mjs
+node frontend/scripts/test-workspace-audio.mjs
+node frontend/scripts/test-desktop-exit.mjs
+node frontend/scripts/test-workspace-metadata.mjs
+node frontend/scripts/test-timing-preview.mjs
+node frontend/scripts/test-preview-presentation.mjs
+node frontend/scripts/test-review-readonly.mjs
+node frontend/scripts/test-runtime-preparation.mjs
+node frontend/scripts/test-startup.mjs
+node frontend/scripts/test-model-setup.mjs
+node frontend/scripts/test-engine-models.mjs
+node frontend/scripts/test-storage-transition.mjs
 pnpm -C frontend build
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 The Chinese i18n gate is required. Other locales still contain historical English fallback text. Run dprint on changed frontend files; avoid unrelated whole-repository formatting churn.
+
+Auto Timing uses the separate Protocol v2 engine described in [migration](AUTO_TIMING_V2.md). Source installations need the prepared platform wheelhouse in `desktop/engine`; the desktop bundles it. For automatic preparation from source, set
+`ROLLINGPEBBLE_APP_RESOURCES` to the absolute `desktop` directory after preparing
+both its engine resources and standalone Python. There is no system-Python fallback.
+Real inference acceptance uses `desktop/validate_engine.py --data-dir <isolated-root> --audio <sample.wav> --lyrics <plain.txt>` after explicit model preparation. It never writes to the source sample or user projects. No automated browser/page tests are required for this upgrade; the maintainer handles interactive acceptance.
 
 For interactive checks use a separate `LRC_ROLLER_DATA_DIR`. Verify the project directory remains empty after import, one complete project appears after saving, repeated saves do not copy audio again, and confirmation cancel/undo behave correctly in both browser and native shell. Generated local QA artifacts belong under ignored `output/`.
 

@@ -1,5 +1,5 @@
 import { request } from "./request.js";
-import type { MetaModel, ProjectModel } from "./types.js";
+import type { MetadataSources, MetaModel, ProjectModel } from "./types.js";
 
 export function createProject(audio: File): Promise<ProjectModel> {
     const form = new FormData();
@@ -33,6 +33,8 @@ export const saveEditor = (
     request<ProjectModel>(`/api/projects/${projectId}/editor`, { method: "POST", body: JSON.stringify(payload) });
 
 export type WorkspaceSnapshot = {
+    lyric_document?: import("../../domain/lyrics/translationDocument.js").LyricDocument;
+    metadata_sources?: MetadataSources;
     plain_lyrics: string;
     synced_lyrics: string;
     metadata: MetaModel;

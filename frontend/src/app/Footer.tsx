@@ -30,6 +30,7 @@ export const Footer: React.FC = () => {
         "",
     );
     const fallbackAudioUrlRef = useRef("");
+    const audioLoadRevision = useRef(0);
 
     useEffect(() => {
         function onKeydown(ev: KeyboardEvent) {
@@ -81,11 +82,12 @@ export const Footer: React.FC = () => {
 
     useEffect(() => {
         const onProjectAudio = (ev: Event) => {
+            const revision = ++audioLoadRevision.current;
             const detail = (ev as CustomEvent<ProjectAudioLoadDetail>).detail;
             if (detail?.file) {
                 fallbackAudioUrlRef.current = "";
                 removeSessionText(SSK.audioSrc);
-                receiveFile(detail.file, setAudioSrc, lang);
+                receiveFile(detail.file, setAudioSrc, lang, () => revision === audioLoadRevision.current);
                 return;
             }
             if (detail && "url" in detail && typeof detail.url === "string") {
@@ -229,12 +231,14 @@ const receiveFile = (
     file: File,
     setAudioSrc: TsetAudioSrc,
     lang: { ui: { unsupportedAudioFile: string; audioDecodeWorkerFailed: string } },
+    isCurrent: () => boolean,
 ): void => {
     void prepareAudioFile(file)
         .then(({ file: prepared }) => {
-            setAudioSrc(URL.createObjectURL(prepared));
+            if (isCurrent()) setAudioSrc(URL.createObjectURL(prepared));
         })
         .catch((error: Error) => {
+            if (!isCurrent()) return;
             toastPubSub.pub({
                 type: "warning",
                 text: audioImportErrorText(error, lang),

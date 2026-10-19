@@ -36,23 +36,23 @@
 
 [lang]:lang(zh-HK) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "PingFang HK", "Microsoft JhengHei UI",
-        "Microsoft JhengHei", "Source Han Sans HK", "Noto Sans CJK TC", sans-serif, "Apple Color Emoji",
-        "Segoe UI Emoji";
+        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "PingFang HK",
+        "Microsoft JhengHei UI", "Microsoft JhengHei", "Source Han Sans HK", "Noto Sans CJK TC", sans-serif,
+        "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 [lang]:lang(zh-TW) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "PingFang TC", "Microsoft JhengHei UI",
-        "Microsoft JhengHei", "Source Han Sans TW", "Noto Sans CJK TC", sans-serif, "Apple Color Emoji",
-        "Segoe UI Emoji";
+        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "PingFang TC",
+        "Microsoft JhengHei UI", "Microsoft JhengHei", "Source Han Sans TW", "Noto Sans CJK TC", sans-serif,
+        "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 [lang]:lang(ja) {
     font-family:
-        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "Hiragino Kaku Gothic Pro", "Yu Gothic UI",
-        "Yu Gothic", "Meiryo UI", Meiryo, "Source Han Sans JP", "Noto Sans CJK JP", sans-serif, "Apple Color Emoji",
-        "Segoe UI Emoji";
+        -apple-system, BlinkMacSystemFont, system-ui, "RollingPebble Fallback UI", "Hiragino Kaku Gothic Pro",
+        "Yu Gothic UI", "Yu Gothic", "Meiryo UI", Meiryo, "Source Han Sans JP", "Noto Sans CJK JP", sans-serif,
+        "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 select, input, textarea {
@@ -295,6 +295,75 @@ select, input, textarea, button {
 }
 
 /* rollingpebble startup screen */
+.startup-gate {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.startup-content {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    width: min(100%, 520px);
+    text-align: center;
+}
+
+.startup-content h1 {
+    font-size: 24px;
+    margin: 0;
+}
+
+.startup-content p {
+    margin: 0;
+}
+
+.startup-content details {
+    max-width: 100%;
+}
+
+.startup-content pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.startup-progress {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    border: 0;
+    border-radius: 0;
+    accent-color: var(--theme);
+}
+
+.model-download-fields {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+}
+
+.model-byte-progress {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 4px 0 12px;
+    font-size: 12px;
+}
+
+.model-byte-progress progress {
+    flex: 1;
+    min-width: 100px;
+    height: 4px;
+    accent-color: var(--theme);
+}
+
 .page-loading::before {
     background:
         radial-gradient(circle at 50% 45%, rgba(var(--theme-rgb), 0.12), transparent 32vmin),
@@ -319,9 +388,7 @@ select, input, textarea, button {
     object-fit: contain;
     border-radius: 0;
     border: 0;
-    box-shadow:
-        0 0 46px rgba(var(--theme-rgb), 0.26),
-        0 24px 70px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 0 46px rgba(var(--theme-rgb), 0.26), 0 24px 70px rgba(0, 0, 0, 0.15);
     animation: studio-splash-float 2.8s ease-in-out infinite alternate;
 }
 
@@ -392,6 +459,10 @@ select, input, textarea, button {
 }
 
 @keyframes drag-pulse {
-    0%, 100% { border-color: rgba(var(--theme-rgb), 0.25); }
-    50% { border-color: rgba(var(--theme-rgb), 0.55); }
+    0%, 100% {
+        border-color: rgba(var(--theme-rgb), 0.25);
+    }
+    50% {
+        border-color: rgba(var(--theme-rgb), 0.55);
+    }
 }

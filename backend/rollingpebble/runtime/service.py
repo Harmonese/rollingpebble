@@ -1,24 +1,20 @@
 from __future__ import annotations
 
 from pathlib import Path
+import os
 
 from rollingpebble.jobs import JobManager
 from rollingpebble.messages import message_from_text
 from rollingpebble.models import (
     AutoRollerRuntimeResponse,
-    JobModel,
-    ModelCacheRequest,
-    RuntimeInstallRequest,
     RuntimeSettingsModel,
     RuntimeSettingsUpdateRequest,
-    RuntimeUpgradeRequest,
 )
 from rollingpebble.paths import StorageLayout
 from rollingpebble.runtime.constants import PYROLLER_RUNTIME_SPEC
-from rollingpebble.runtime.jobs import RuntimeJobService
 from rollingpebble.runtime.manager import RuntimeManager
-from rollingpebble.runtime.results import RuntimeResultStore
 from rollingpebble.runtime.settings import RuntimeSettingsService
+from rollingpebble.runtime.preparation import RuntimePreparation
 
 
 class RuntimeService:
@@ -38,15 +34,11 @@ class RuntimeService:
         self.layout = layout
         self.data_dir = self.layout.app_root
         self.manager = manager or RuntimeManager(self.layout)
+        self.preparation = RuntimePreparation(self.manager, jobs)
         self.settings = RuntimeSettingsService(self.data_dir)
         self.settings_store = self.settings.store
-        self.results = RuntimeResultStore(manager=self.manager, settings=self.settings)
-        self.jobs = RuntimeJobService(
-            jobs=jobs,
-            manager=self.manager,
-            settings=self.settings,
-            results=self.results,
-        )
+        from rollingpebble.auto_timing.model_service import ModelService
+        self.models = ModelService(self, jobs)
 
     def update_layout(self, layout: StorageLayout) -> None:
         self.layout = layout
@@ -59,6 +51,8 @@ class RuntimeService:
         settings = self.settings.read()
         runtime = self.manager.active_runtime(settings)
         return AutoRollerRuntimeResponse(
+            startup_preparation=bool(os.environ.get("ROLLINGPEBBLE_APP_RESOURCES")),
+            preparation=self.preparation.snapshot(),
             available=runtime.ready,
             version=runtime.version,
             cli_path=" ".join(self.manager.command_prefix(settings.auto_roller_profile)) if runtime.ready else None,
@@ -88,15 +82,3 @@ class RuntimeService:
 
     def reset_settings_defaults(self) -> RuntimeSettingsModel:
         return self.settings.reset_defaults()
-
-    def run_doctor(self) -> JobModel:
-        return self.jobs.run_doctor()
-
-    def run_upgrade(self, request: RuntimeUpgradeRequest) -> JobModel:
-        return self.jobs.run_upgrade(request)
-
-    def run_cache_model(self, request: ModelCacheRequest) -> JobModel:
-        return self.jobs.run_cache_model(request)
-
-    def run_install(self, request: RuntimeInstallRequest) -> JobModel:
-        return self.jobs.run_install(request)

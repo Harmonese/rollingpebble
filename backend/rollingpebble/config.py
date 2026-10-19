@@ -18,7 +18,9 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        data_dir = Path(os.getenv("LRC_ROLLER_DATA_DIR", str(DEFAULT_DATA_DIR))).expanduser()
+        from rollingpebble.storage.location import selected_root
+        override = os.getenv("LRC_ROLLER_DATA_DIR")
+        data_dir = Path(override).expanduser() if override else selected_root(DEFAULT_DATA_DIR)
         frontend_dist_raw = os.getenv("LRC_ROLLER_FRONTEND_DIST")
         return cls(
             host=os.getenv("LRC_ROLLER_HOST", DEFAULT_HOST),

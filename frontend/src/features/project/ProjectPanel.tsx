@@ -51,24 +51,28 @@ export const ProjectPanel: React.FC<{
     project: ProjectModel | null;
     onOpenProject: (projectId: string) => Promise<void>;
     onSave: () => Promise<ProjectModel>;
+    onNewProject: () => Promise<void>;
     draftAudioName?: string;
     draftMetadata?: ProjectModel["metadata"];
     draftSource?: string;
     dirty: boolean;
     canSave: boolean;
     saving: boolean;
+    saveError?: boolean;
     transitioning: boolean;
 }> = (
     {
         project,
         onOpenProject,
         onSave,
+        onNewProject,
         draftAudioName,
         draftMetadata,
         draftSource,
         dirty,
         canSave,
         saving,
+        saveError,
         transitioning,
     },
 ) => {
@@ -82,6 +86,17 @@ export const ProjectPanel: React.FC<{
     const u = lang.ui;
     const [message, setMessage, clearMessage, messageFading, messageType, messageKey] = useMessage();
     const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(() => new Set());
+    const createNew = async () => {
+        setBusy(true);
+        clearMessage();
+        try {
+            await onNewProject();
+        } catch (error) {
+            setMessage(backendMessageText(error, lang.backendMessages), "error");
+        } finally {
+            setBusy(false);
+        }
+    };
     const pendingDeleteTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
     // Drag state
@@ -144,7 +159,7 @@ export const ProjectPanel: React.FC<{
     const saveCurrent = async () => {
         try {
             await onSave();
-            setMessage(u.projectSaved, "success");
+            clearMessage();
         } catch (error) {
             setMessage(backendMessageText(error, lang.backendMessages), "error");
         }
@@ -288,6 +303,7 @@ export const ProjectPanel: React.FC<{
                 draftMetadata={draftMetadata}
                 draftSource={draftSource}
                 saved={Boolean(project && !dirty)}
+                status={saveError ? u.saveFailed : saving ? u.savingProject : undefined}
                 labels={u}
             />
             <ProjectSwitcher
@@ -314,13 +330,16 @@ export const ProjectPanel: React.FC<{
                 onDismiss={handleDismiss}
             />
             <ButtonGroup>
+                <Button disabled={saving || transitioning || busy} onClick={() => void createNew()}>
+                    {u.newProject}
+                </Button>
                 <Button
                     tone="primary"
                     className="studio-action-start"
                     disabled={!canSave || saving || transitioning || busy || (!dirty && Boolean(project))}
                     onClick={() => void saveCurrent()}
                 >
-                    {saving ? u.savingProject : u.saveProject}
+                    {saving ? u.savingProject : saveError ? u.retrySave : u.saveProject}
                 </Button>
             </ButtonGroup>
             <Message message={message} type={messageType} fading={messageFading} messageKey={messageKey} />

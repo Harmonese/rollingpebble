@@ -1,6 +1,6 @@
 {
     "background_color": "#0e1113",
-    "description": "Local lyrics timing, editing, import, and publishing workbench",
+    "description": "Local lyrics editing, timing, translation, and publishing workstation",
     "display": "standalone",
     "icons": [
         {

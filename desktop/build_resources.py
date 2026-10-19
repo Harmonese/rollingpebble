@@ -34,6 +34,8 @@ def prepare_build_python() -> Path:
 def main() -> None:
     prepare()
     python = prepare_build_python()
+    from prepare_engine import prepare as prepare_engine
+    prepare_engine(python)
     frontend = ROOT / "frontend" / "dist"
     if not (frontend / "index.html").is_file():
         raise RuntimeError("Build the frontend before preparing desktop resources")
@@ -43,6 +45,8 @@ def main() -> None:
             "--name", "rollingpebble-backend", "--onefile", "--noconfirm", "--clean",
             "--paths", str(ROOT / "backend"),
             "--copy-metadata", "rollingpebble",
+            "--collect-submodules", "keyring.backends",
+            "--copy-metadata", "keyring",
             "--distpath", str(ROOT / "desktop" / "bin"),
             "--workpath", str(ROOT / "build" / "pyinstaller"),
             "--specpath", str(ROOT / "build" / "pyinstaller"),

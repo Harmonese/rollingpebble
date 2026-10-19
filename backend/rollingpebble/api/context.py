@@ -9,13 +9,13 @@ from typing import TypeVar
 
 from fastapi import HTTPException
 
+from rollingpebble.auto_timing.service import AutoTimingService
 from rollingpebble.config import Settings
 from rollingpebble.jobs import JobManager
 from rollingpebble.messages import message_from_exception, message_from_text
 from rollingpebble.services.lrclib_service import LrclibService
 from rollingpebble.services.netease_service import NeteaseService
 from rollingpebble.services.project_service import ProjectService
-from rollingpebble.services.roller_service import RollerService
 from rollingpebble.runtime.service import RuntimeService
 from rollingpebble.services.storage_service import StorageService
 from rollingpebble.services.upload_service import UploadService
@@ -31,10 +31,11 @@ class AppServices:
     lrclib: LrclibService
     netease: NeteaseService
     runtime: RuntimeService
-    roller: RollerService
     upload: UploadService
     storage: StorageService
     apply_storage_layout: Callable[[], None]
+    auto_timing: AutoTimingService | None = None
+    translation: object | None = None
 
 
 def error_detail(exc: Exception, *, default_code: str = "system.error") -> dict:

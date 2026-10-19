@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
-
 from rollingpebble.models import RuntimeSettingsModel
+from rollingpebble.auto_timing.store import atomic_json
 
 SETTINGS_JSON = "settings.json"
 
@@ -17,28 +18,27 @@ class SettingsStore:
         self.path = data_dir / SETTINGS_JSON
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _read_settings_or_default(self) -> RuntimeSettingsModel:
-        try:
-            return RuntimeSettingsModel.model_validate_json(self.path.read_text(encoding="utf-8"))
-        except Exception:
-            return RuntimeSettingsModel()
-
     def read(self) -> RuntimeSettingsModel:
         if not self.path.exists():
             return RuntimeSettingsModel()
-        return self._read_settings_or_default()
+        data = json.loads(self.path.read_text(encoding="utf-8"))
+        data.setdefault("model_onboarding_complete", True)
+        data.setdefault("model_proxy_enabled", bool(data.get("auto_timing_hf_proxy")))
+        if data.get("auto_timing_hf_download_timeout") is not None:
+            data["auto_timing_hf_download_timeout"] = min(30, max(1, data["auto_timing_hf_download_timeout"]))
+        data.setdefault("auto_timing_v2_options", {}).setdefault("alignment_mode", "unordered")
+        return RuntimeSettingsModel.model_validate(data)
 
     def write(self, settings: RuntimeSettingsModel) -> RuntimeSettingsModel:
-        self.path.write_text(settings.model_dump_json(indent=2), encoding="utf-8")
+        atomic_json(self.path, settings.model_dump())
         return settings
 
     def reset_defaults(self, *, preserve_runtime_history: bool = True) -> RuntimeSettingsModel:
         current = self.read()
         defaults = RuntimeSettingsModel()
+        defaults.model_onboarding_complete = current.model_onboarding_complete
         if preserve_runtime_history:
-            defaults.last_doctor_status = current.last_doctor_status
-            defaults.last_doctor_at = current.last_doctor_at
-            defaults.last_install_profile = current.last_install_profile
-            defaults.last_install_at = current.last_install_at
-            defaults.last_install_status = current.last_install_status
+            for field in ("last_doctor_status", "last_doctor_at", "last_install_profile",
+                          "last_install_at", "last_install_status"):
+                setattr(defaults, field, getattr(current, field))
         return self.write(defaults)

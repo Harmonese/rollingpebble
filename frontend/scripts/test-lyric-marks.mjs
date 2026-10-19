@@ -13,11 +13,15 @@ async function load(name, source) {
     const path = resolve(temp, name + ".mjs");
     await writeFile(
         path,
-        code.replaceAll("\"@lrc-maker/lrc-parser\"", "\"@lrc-maker/lrc-parser/build/esm/lrc-parser.js\""),
+        code.replaceAll("\"@lrc-maker/lrc-parser\"", "\"@lrc-maker/lrc-parser/build/esm/lrc-parser.js\"").replaceAll(
+            "./translationDocument.js",
+            "./translationDocument.mjs",
+        ),
     );
     return import(pathToFileURL(path));
 }
 try {
+    await load("translationDocument", "src/domain/lyrics/translationDocument.ts");
     const { init, reducer, ActionType: A } = await load("engine", "src/domain/lyrics/useLyricsEngine.ts");
     const { lyricMarkKey, synchronizerCommand, blocksSynchronizerKeys } = await load(
         "keys",
@@ -131,7 +135,7 @@ try {
     assert.equal(state.selectIndex, 0);
     assert.equal(state.marks[0].text, "Start");
     dispatch(A.insertMarkedLine, { slot: 0, time: 6 });
-    assert.deepEqual(state.lyric, [{ text: "Start", time: 6 }]);
+    assert.deepEqual(state.lyric.map(({ text, time }) => ({ text, time })), [{ text: "Start", time: 6 }]);
     assert.equal(state.selectIndex, 1);
     const unmatched = state;
     dispatch(A.selectPlaying, 1);

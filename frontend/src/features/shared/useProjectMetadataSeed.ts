@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
-import type { MetaModel, ProjectModel } from "../../shared/api/types.js";
 import { settings } from "../../shared/api/settings.js";
+import type { MetaModel, ProjectModel } from "../../shared/api/types.js";
 
 const emptyMeta: MetaModel = { track: "", artist: "", album: "", duration: 0 };
 
@@ -20,9 +20,9 @@ export function useProjectMetadataSeed(args: {
     updateQuery?: (query: string) => void;
 }) {
     const { project, fallbackMeta, updateQuery } = args;
-    const [meta, setMeta] = useState<MetaModel>(normalizedMeta(project?.metadata || fallbackMeta || emptyMeta));
+    const [meta, setMeta] = useState<MetaModel>(normalizedMeta(fallbackMeta || project?.metadata || emptyMeta));
     const [autoFillFromProject, setAutoFillFromProject] = useState(true);
-    const lastAutoFilledProjectId = useRef<string | null>(null);
+    const lastAutoFilledSeed = useRef<string | null>(null);
 
     const refreshSettings = async () => {
         try {
@@ -37,12 +37,12 @@ export function useProjectMetadataSeed(args: {
 
     useEffect(() => {
         if (!autoFillFromProject) return;
-        const source = project?.metadata || fallbackMeta || emptyMeta;
+        const source = fallbackMeta || project?.metadata || emptyMeta;
         const next = normalizedMeta(source);
         setMeta(next);
-        const currentProjectId = project?.project_id || null;
-        if (currentProjectId !== lastAutoFilledProjectId.current) {
-            lastAutoFilledProjectId.current = currentProjectId;
+        const seed = JSON.stringify([project?.project_id || null, next]);
+        if (seed !== lastAutoFilledSeed.current) {
+            lastAutoFilledSeed.current = seed;
             updateQuery?.([next.artist, next.track].filter(Boolean).join(" "));
         }
     }, [

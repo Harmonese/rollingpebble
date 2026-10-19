@@ -7,6 +7,7 @@ const languagesDir = path.resolve(__dirname, "../src/languages");
 const baseFile = "en-US.json";
 
 const allowedExactValues = new Set([
+    "Python",
     "{message}",
     "Rolling Pebble",
     "Commit hash",
@@ -21,6 +22,7 @@ const allowedExactValues = new Set([
     "CUDA 12.4",
     "HF XET / CAS",
     "MPS",
+    "Whisper",
     "VAD",
     "LRC",
     "ASS",

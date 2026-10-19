@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-workspace-exit-reply"
+description = "Enables the workspace_exit_reply command without any pre-configured scope."
+commands.allow = ["workspace_exit_reply"]
+
+[[permission]]
+identifier = "deny-workspace-exit-reply"
+description = "Denies the workspace_exit_reply command without any pre-configured scope."
+commands.deny = ["workspace_exit_reply"]

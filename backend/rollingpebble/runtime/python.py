@@ -11,7 +11,6 @@ from pathlib import Path
 RUNTIME_PYTHON_VERSION = (3, 12)
 PREFERRED_RUNTIME_PYTHONS = ("python3.12",)
 BUNDLED_RUNTIME_DIR_NAME = "python-runtime"
-USER_TOOLCHAIN_DIR_NAME = "toolchains"
 
 
 def target_runtime_python_tag() -> str:
@@ -67,7 +66,7 @@ def prepare_bundled_runtime(data_dir: Path) -> Path | None:
     if source_python is None:
         return None
 
-    target_root = data_dir.expanduser() / USER_TOOLCHAIN_DIR_NAME / "python3.12"
+    target_root = data_dir.expanduser() / "runtime" / "python"
     target_python = target_root / "bin" / "python3.12"
     if target_python.is_file() and _version_for(str(target_python)) == RUNTIME_PYTHON_VERSION:
         return target_python

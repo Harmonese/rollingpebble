@@ -208,15 +208,43 @@
 
 /* rollingpebble editor header: Metadata row + compact tools */
 .editor-header-row {
-    display: flex;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     padding-bottom: 4px;
     opacity: 0.6;
 }
 
 .editor-header-row > details {
-    flex: 1 1 auto;
+    grid-column: 1;
+    grid-row: 1;
     min-width: 0;
+}
+.editor-header-row > details > summary {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+}
+.editor-header-row > .app-editor-infobox:not([hidden]) {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+}
+.editor-header-row > .app-editor-infobox[hidden] {
+    display: none;
+}
+.editor-header-row .app-editor-infobox > input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+.editor-header-row > .editor-tools {
+    position: static;
+    grid-column: 2;
+    grid-row: 1;
+    padding: 0;
+    align-self: center;
 }
 
 .editor-tools {
@@ -252,7 +280,9 @@
 }
 
 @keyframes import-spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .editor-tools-item > svg {

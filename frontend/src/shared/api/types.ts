@@ -5,13 +5,17 @@ export type MetaModel = {
     duration: number;
 };
 
+export type MetadataSources = Partial<Record<"track" | "artist" | "album", "audio" | "manual" | "lyrics" | null>>;
+
 export type ProjectModel = {
+    lyric_document?: import("../../domain/lyrics/translationDocument.js").LyricDocument | null;
     project_id: string;
     last_opened_at?: string | null;
     audio_name?: string | null;
     audio_ref?: string | null;
     audio_path?: string | null;
     metadata: MetaModel;
+    metadata_sources?: MetadataSources | null;
     plain_lyrics: string;
     synced_lyrics: string;
     source: string;
@@ -89,7 +93,7 @@ export type JobModel = {
     job_id: string;
     kind: string;
     project_id?: string | null;
-    status: "queued" | "running" | "succeeded" | "failed" | "canceled";
+    status: "queued" | "running" | "cancelling" | "succeeded" | "failed" | "canceled";
     command: string[];
     logs: string[];
     result?: Record<string, unknown> | null;
@@ -103,15 +107,6 @@ export type JobModel = {
     started_at?: string | null;
     updated_at?: string | null;
     last_output_at?: string | null;
-};
-
-export type RollPreview = {
-    command: string[];
-    command_text: string;
-    warnings: string[];
-    warning_messages?: BackendMessage[];
-    output_path?: string | null;
-    intermediate_dir?: string | null;
 };
 
 export type UploadPlan = {
@@ -133,58 +128,22 @@ export type UploadRunResponse = {
 };
 
 export type RuntimeSettings = {
-    auto_roller_profile: "auto" | "cpu" | "cu124";
+    auto_timing_v2_options?: import("./timingV2.js").TimingOptions;
+    auto_roller_profile: "auto";
     auto_fill_lyrics_library_from_project_metadata: boolean;
     auto_cleanup_imported_lyrics: boolean;
     editor_show_metadata: boolean;
     editor_write_metadata_tags: boolean;
     upload_derive_plain_from_synced: boolean;
 
-    auto_timing_default_language: "zh" | "en" | "mul";
-    auto_timing_default_stages: string;
-    auto_timing_default_writer_backend: string;
-    auto_timing_default_writer_spacing: "keep" | "drop";
-    auto_timing_default_cleanup: "on-success" | "never";
-    auto_timing_default_log_level: "DEBUG" | "INFO" | "WARNING" | "ERROR" | "CRITICAL";
-
-    auto_timing_splitter_backend: string;
-    auto_timing_splitter_demucs_model: string;
-    auto_timing_splitter_demucs_device: string;
-    auto_timing_splitter_demucs_jobs?: number | null;
-    auto_timing_splitter_demucs_overlap?: number | null;
-    auto_timing_splitter_demucs_segment?: number | null;
-
-    auto_timing_filter_chain: string;
-
-    auto_timing_transcriber_backend: string;
-    auto_timing_transcriber_device: string;
-    auto_timing_transcriber_model_name: string;
-    auto_timing_model_store: string;
-    auto_timing_transcriber_compute_type: string;
-    auto_timing_transcriber_batch_size?: number | null;
-    auto_timing_local_files_only_default: boolean;
-    auto_timing_hf_xet: "auto" | "on" | "off";
     auto_timing_hf_proxy: string;
+    model_download_source: "modelscope" | "official";
+    model_proxy_enabled: boolean;
+    model_onboarding_complete: boolean;
     auto_timing_hf_etag_timeout?: number | null;
     auto_timing_hf_download_timeout?: number | null;
-    auto_timing_hf_max_workers?: number | null;
-
-    auto_timing_parser_lyrics_encoding: string;
-
-    auto_timing_aligner_backend: string;
-    auto_timing_aligner_min_gap?: number | null;
-    auto_timing_aligner_repetition: "none" | "few" | "full";
-
-    auto_timing_writer_by_tag: string;
-    auto_timing_writer_ass_karaoke_tag_type: "" | "k" | "K" | "kf" | "ko";
 
     recent_projects_limit: number;
-    project_auto_delete_days: number;
-    storage_projects_root: string;
-    storage_models_root: string;
-    storage_cache_root: string;
-    storage_runtime_root: string;
-    storage_work_root: string;
 
     audio_filename_regex: string;
     audio_filename_regex_enabled: boolean;
@@ -196,153 +155,9 @@ export type RuntimeSettings = {
     last_install_status?: string | null;
 };
 
-export type StorageModelItem = {
-    id: string;
-    label: string;
-    provider: string;
-    backend: string;
-    model_name: string;
-    relative_path: string;
-    bytes: number;
-    file_count: number;
-    updated_at?: string | null;
-    active: boolean;
-};
-
-export type StorageRuntimeItem = {
-    runtime_id: string;
-    profile: string;
-    status: string;
-    pyroller_version?: string | null;
-    python_version?: string | null;
-    relative_path: string;
-    bytes: number;
-    file_count: number;
-    updated_at?: string | null;
-    active: boolean;
-    removable: boolean;
-};
-
-export type StorageOtherItem = {
-    label: string;
-    relative_path: string;
-    bytes: number;
-    file_count: number;
-    updated_at?: string | null;
-    removable: boolean;
-};
-
-export type StorageCategory = {
-    id: string;
-    label: string;
-    bytes: number;
-    file_count: number;
-    path: string;
-    description: string;
-};
-
-export type StorageRoot = {
-    id: "projects" | "models" | "runtime" | "other";
-    label: string;
-    path: string;
-    default_path: string;
-    bytes: number;
-    file_count: number;
-    movable: boolean;
-    active: boolean;
-};
-
-export type StorageProject = {
-    project_id: string;
-    title: string;
-    artist: string;
-    album: string;
-    audio_name?: string | null;
-    updated_at?: string | null;
-    audio_bytes: number;
-    lyrics_output_bytes: number;
-    generated_bytes: number;
-    intermediate_bytes: number;
-    total_bytes: number;
-    file_count: number;
-    audio_file_count: number;
-    lyrics_output_file_count: number;
-    generated_file_count: number;
-    intermediate_file_count: number;
-    has_audio: boolean;
-    has_lyrics_output: boolean;
-    has_generated: boolean;
-    has_intermediate: boolean;
-    active: boolean;
-};
-
-export type StorageUsage = {
-    data_dir: string;
-    roots: StorageRoot[];
-    total_bytes: number;
-    file_count: number;
-    categories: StorageCategory[];
-    projects: StorageProject[];
-    models: StorageModelItem[];
-    runtimes: StorageRuntimeItem[];
-    other_items: StorageOtherItem[];
-};
-
-export type StorageCleanupTarget =
-    | "clean_models"
-    | "delete_model_items"
-    | "clean_runtime_envs"
-    | "delete_projects"
-    | "clear_intermediate"
-    | "clean_project_generated"
-    | "clean_external_cache"
-    | "delete_other_items"
-    | "delete_project_audio"
-    | "delete_project_lyrics_output"
-    | "safe";
-
-export type StorageCleanupEntry = {
-    id: string;
-    category: string;
-    label: string;
-    relative_path: string;
-    bytes: number;
-    file_count: number;
-    risk: "safe" | "caution" | "danger" | "blocked";
-    reason: string;
-    reason_message?: BackendMessage | null;
-    removable: boolean;
-};
-
-export type StorageCleanupPlan = {
-    plan_id: string;
-    targets: string[];
-    total_reclaimable_bytes: number;
-    entry_count: number;
-    entries: StorageCleanupEntry[];
-    warnings: string[];
-    warning_messages?: BackendMessage[];
-};
-
-export type StorageCleanupRunResult = {
-    plan_id: string;
-    deleted_bytes: number;
-    deleted_count: number;
-    skipped_count: number;
-    failed: { entry_id: string; relative_path: string; error: string; error_message?: BackendMessage | null }[];
-    usage?: StorageUsage | null;
-};
-
-export type StorageMigrateRootResult = {
-    root: StorageRoot;
-    old_path: string;
-    backup_path?: string | null;
-    moved_bytes: number;
-    file_count: number;
-    usage: StorageUsage;
-};
-
 export type AutoRollerRuntime = {
+    startup_preparation?: boolean;
+    preparation?: import("./runtimePreparation.js").Preparation;
     engine: string;
     mode: string;
     available: boolean;

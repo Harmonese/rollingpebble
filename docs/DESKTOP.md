@@ -30,7 +30,7 @@ Release build:
 - Build the frontend.
 - Build a platform-specific Python sidecar with PyInstaller.
 - Bundle that sidecar into the Tauri app.
-- Bundle a standalone macOS arm64 Python 3.12 runtime so end users do not need Python installed.
+- Bundle standalone macOS arm64 Python 3.12, FFmpeg and a hashed binary engine wheelhouse so runtime installation needs no compiler, Homebrew or network.
 
 ## Requirements
 
@@ -92,7 +92,7 @@ Build:
 pnpm desktop:build
 ```
 
-The macOS arm64 build hook uses `.venv/bin/python` to run the preparation script.
+The macOS arm64 build hook uses `desktop/build.mjs` to select a working Python 3.12+ with SSL (override with `ROLLINGPEBBLE_BUILD_PYTHON`).
 The script downloads the standalone Python runtime and creates
 `build/desktop-venv` from that interpreter for PyInstaller and app dependencies.
 The developer's Homebrew/system Python is not used as the sidecar interpreter.
@@ -106,20 +106,22 @@ Expected outputs include:
 - macOS: `.app` / `.dmg`
 
 The Tauri config bundles `desktop/bin/rollingpebble-backend*` into the app resources under `bin/`, where the desktop shell can discover it automatically.
-The build also downloads a pinned Python 3.12 runtime into `desktop/python-runtime/` and bundles it under `python-runtime/`. This generated directory is ignored by Git.
+The build also downloads pinned Python 3.12 into `desktop/python-runtime/` and bundles it under `python-runtime/`. `desktop/engine/` contains the wheelhouse, hashed requirements, FFmpeg and license notices. Both are generated and ignored by Git.
+
+`desktop/prepare_engine.py` builds py-roller 0.10.2 from the adjacent repository's commit `39dbbf8`, not from an installed development environment. Native neural dependencies must have compatible binary wheels. Source-only pure Python dependencies are built on the build machine. `desktop/engine-macos-arm64.lock` pins dependency versions/hashes. Changing dependencies requires an explicit lock update and another native audit. Demucs 4.1.0 is required for the upstream `--clip-mode none` command. `desktop/prepare_ffmpeg.py` builds FFmpeg 7.1 from a checksum-pinned source archive using Xcode on the build machine; its source, license and build flags accompany the executable.
 
 ## Notes
 
 The intended macOS arm64 user setup is to drag the app into `/Applications`,
-install the runtime in Settings, and download the selected model in Settings.
+let startup prepare components, then choose whether to download the three models.
+Settings retains individual download, verification and repair controls.
 The bundled interpreter is copied into the user data directory's
-`toolchains/python3.12`; dependencies are installed into `envs`, and models are
-stored separately. Setup needs network access but must not require Homebrew,
+`runtime/python`; dependencies are installed into `runtime/venv`, and models are
+stored separately. Model downloads need network access but runtime installation must not require Homebrew,
 a system Python, developer source checkouts, or preexisting model caches.
 Restricted networks may require a proxy configured in the app's model-download
 settings. The proxy is a network-access requirement, not a Python prerequisite.
-The runtime recipe constrains PyAV to `>=11,<19` for faster-whisper compatibility;
-this constraint applies to installation, repair, and package upgrades.
+The binary lock pins PyAV 16.1.0 and Torch/Torchaudio 2.8.0. Installation and repair use the same offline manifest. Vocals dependencies prepare automatically; Demucs weights are downloaded explicitly.
 
 The current macOS configuration uses ad-hoc signing. A successful
 `codesign --verify --deep --strict` check verifies bundle integrity, not Apple
@@ -130,8 +132,8 @@ Validate the actual release app with an empty user data directory and a PATH
 without developer tools. Confirm the install report uses the copied bundled
 Python, then complete model download and a real alignment through the app.
 Unit tests alone do not establish that first-run setup works.
-The bundled arm64 Python requires macOS 11 or newer, matching the app's declared
-minimum system version. Validate dependency installation on each supported
+The app declares macOS 14 or newer based on the complete binary dependency audit,
+not just the bundled interpreter. Validate dependency installation on each supported
 macOS version before release; a successful install on the build machine alone
 does not establish compatibility with older systems.
 
@@ -141,6 +143,8 @@ Before publishing desktop installers, test:
 - bundled frontend assets
 - local file dialogs
 - audio playback
-- Auto Timing runtime creation
+- automatic component preparation and repair
 - model download paths
 - macOS signing and notarization
+
+The standalone FFmpeg build disables GPL/nonfree components, optional external libraries and network protocols. Its LGPL license, complete corresponding source and build configuration are included under `engine/bin`; preserve these in distributions. It decodes local audio and emits PCM/FLAC for the engine. See [release gates](RELEASE.md) and [validation record](AUTO_TIMING_VALIDATION.md).

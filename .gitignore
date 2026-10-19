@@ -33,3 +33,6 @@ desktop/python-runtime/
 # Local UI verification artifacts
 output/
 .playwright-cli/
+
+/desktop/engine/
+/desktop/ffmpeg/

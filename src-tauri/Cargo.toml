@@ -1,6 +1,6 @@
 [package]
 name = "rollingpebble-desktop"
-version = "0.7.4"
+version = "0.8.0"
 description = "Desktop shell for Rolling Pebble"
 authors = ["Harmonese"]
 license = "MIT"
@@ -12,6 +12,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 url = "2"
+open = "5"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

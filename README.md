@@ -7,7 +7,7 @@
 [![PyPI](https://img.shields.io/pypi/v/rollingpebble.svg)](https://pypi.org/project/rollingpebble/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-3776AB.svg)](https://www.python.org/downloads/)
 
-Rolling Pebble is a local lyrics workstation for searching, editing, timing, organizing, and publishing LRC lyrics.
+Rolling Pebble is a local lyrics workstation for searching, editing, timing, translating, organizing, and publishing LRC lyrics.
 
 It provides a Tauri desktop app for macOS Apple Silicon and a browser interface backed by a local Python server. Your projects, audio, lyrics, runtime environments, and model caches stay on your machine. Auto Timing is powered by `py-roller` in an isolated runtime so large audio dependencies do not pollute the main app environment.
 
@@ -17,8 +17,10 @@ It provides a Tauri desktop app for macOS Apple Silicon and a browser interface 
 - **Edit** metadata and lyric text in a focused LRC editor.
 - **Synchronize** timestamps manually when you want frame-level control.
 - **Repeat lyrics** with numbered marks, playback-time insertion and undo.
-- **Auto-time (Experimental)** lyrics with `py-roller` using isolated CPU/CUDA runtime profiles.
-- **Review and clean up** projects, model caches, runtime environments, and app data.
+- **Auto-time (Experimental, English)** with py-roller 0.10.2, then review an independent editable preview before applying it.
+- **Translate** through a local or cloud OpenAI-compatible service, with synchronized bilingual LRC editors.
+- **Save and recover** projects automatically after their first save, including translations and audio changes.
+- **Manage storage** for projects, models, results and temporary data in one application directory.
 - **Publish** prepared lyrics through LRCLIB workflows.
 - **Use multiple languages** through the built-in i18n layer.
 
@@ -27,30 +29,30 @@ It provides a Tauri desktop app for macOS Apple Silicon and a browser interface 
 1. Open an audio file in a temporary workspace; importing does not create a project.
 2. Import lyrics from LRCLIB, a local file, or the editor.
 3. Clean up the lyric text and metadata.
-4. Use the Synchronizer for manual timing and export directly. Save Project keeps your audio and lyrics; Auto Timing also saves the workspace before processing.
-5. Review the generated LRC, export it, or publish it through LRCLIB.
+4. Use the Synchronizer for manual timing and export directly. Save Project establishes a project; later edits save automatically. Auto Timing also saves the workspace before processing.
+5. Review Auto Timing results in Auto Timing Review. Apply updates the workspace and follows normal autosave. Export LRC or publish through LRCLIB.
 
-The Project panel shows **Saved** or **Unsaved**. Replacing local audio preserves lyrics, timestamps and marks. Importing lyrics preserves existing metadata unless the imported file supplies replacements. Save Project updates the same project, uploading audio only when it changes.
+The Project panel shows **Unsaved**, **Saving**, **Saved**, or **Save failed**. Save Project or Ctrl/⌘+S saves immediately. Replacing local audio preserves lyrics, timestamps and marks. Importing lyrics preserves existing metadata unless the imported file supplies replacements. Existing projects save automatically, uploading audio only when it changes. A single recovery workspace preserves unfinished text, translations and pending audio without adding a project to the list; startup offers recovery after an interruption. Desktop exit waits for saves or an explicit discard.
 
 ## Install
 
 ### macOS Desktop (Apple Silicon)
 
-Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**. This checkout prepares version **0.7.4**.
+Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**. This checkout prepares version **0.8.0**.
 
-1. Open the app and go to **Settings -> Auto Timing**.
-2. Leave the runtime profile on **Auto**, then click **Create / Repair Runtime** and wait for success.
-3. Choose the transcriber model in the advanced settings and click **Pre-download Model**.
+1. Open the app; the unified startup screen prepares or checks bundled components.
+2. On first use, choose whether to download Whisper large-v3, CTC and Demucs. ModelScope is the default source; official downloads and HTTP(S) proxy settings are also available.
+3. Subsequent launches verify installed weights and offer targeted download or repair for missing or damaged models. Choose Later to enter the workspace without downloading.
 
-The app includes Python 3.12.15, but not py-roller, audio dependencies, or model caches. These are installed into your user data directory. Installation and downloads require network access; configure a model-download HTTP/SOCKS proxy in Settings when needed. Full processing may download a separate Demucs model on its first run.
+The app bundles Python 3.12.15, FFmpeg and hashed binary wheels for py-roller 0.10.2 and its dependencies. Runtime installation is offline and needs no compiler or Homebrew. Model weights are downloaded separately through startup setup or Settings. HTTP(S) proxies are supported; SOCKS proxies are not. Auto Timing defaults to offline operation.
 
-**Distribution limitation:** the DMG is ad-hoc signed and is not Apple-notarized. macOS Gatekeeper may block first launch. Do not disable system-wide security protections. This build targets Apple Silicon, not Intel Macs; the declared binary minimum is macOS 11, but dependency compatibility on older macOS releases has not been exhaustively validated.
+**Distribution limitation:** the DMG is ad-hoc signed and is not Apple-notarized. macOS Gatekeeper may block first launch. Do not disable system-wide security protections. This build targets Apple Silicon with macOS 14 or newer.
 
 ### Command Line
 
-The macOS arm64 desktop build includes standalone Python 3.12. It does not include `py-roller`, its audio dependencies, or model caches. Desktop users configure these from Settings; no separate Python or Homebrew installation is required. See [desktop packaging](docs/DESKTOP.md) for packaging and release-validation requirements.
+The Python distribution includes the backend and WebUI, but not the platform-specific engine wheelhouse, standalone Python or FFmpeg. Manual editing works independently. For the supported Auto Timing installation use the macOS arm64 app, or prepare the matching engine resources from a source checkout as described in [desktop packaging](docs/DESKTOP.md).
 
-For the command-line installation below, Rolling Pebble requires Python 3.10 or newer. Auto Timing additionally needs a Python 3.12 executable available on your system because the isolated `py-roller` runtime is built on Python 3.12.
+For the command-line installation below, Rolling Pebble requires Python 3.10 or newer. Auto Timing requires the matching bundled Python 3.12 and engine resources; it does not fall back to system Python.
 
 Recommended install:
 
@@ -80,27 +82,24 @@ http://127.0.0.1:6789
 
 ## Auto Timing
 
-Auto Timing uses `py-roller` for lyric alignment. Rolling Pebble does not install Torch, Demucs, faster-whisper, or other heavy audio dependencies into the main app environment. Instead, it creates a separate runtime under the app data directory.
+Auto Timing uses Protocol v2 and a fixed English line-level pipeline. Ordered follows complete input lyrics, including every repeat, and retains unresolved lines for manual timing. Unordered discovers sung occurrences, including repetitions absent from the input. CTC refines timing. New installations default to Ordered; existing settings retain Unordered. Results can still miss or misplace lines and require review. Heavy dependencies stay in a separate runtime under the app data directory.
 
 To set it up:
 
-1. Open **Settings -> Auto Timing -> Runtime**.
-2. Choose a runtime profile.
-3. Click **Create / Repair Runtime**.
-4. Installation runs a runtime check automatically; **Check** can run it again later.
+1. Launch the desktop app. The startup screen prepares or checks bundled components, then opens the workspace.
+2. Download the required models explicitly.
+3. If preparation fails, use **Repair**. Version and logs are available in the collapsed **Diagnostics** section.
 
-Then download the selected model from Settings before running Auto Timing. Environment installation and model downloads require network access. Runtime repairs keep model caches separate from the environment.
+Preparation is offline and shared between startup, Settings and Start. Failed startup checks offer Repair or Continue for manual editing. Closing Settings does not cancel it. Cancelling a pending Start cancels only the intent to run; changing the workspace or options while waiting also prevents automatic start.
 
-For command-line installations, if Python 3.12 is not detected automatically, set:
+Prepare the fixed models before starting. Original is the default audio source; Vocals is an explicit choice. CTC supports Auto/CPU/MPS; Whisper and Demucs run on CPU. Runtime readiness and model readiness are separate. No CUDA, language, Full/Quick or research-algorithm switches are exposed.
 
-```bash
-export LRC_ROLLER_RUNTIME_PYTHON=/path/to/python3.12
-```
+Auto Timing Review follows engine revisions until the first text or timing edit, then retains an independent autosaved draft. Use Latest discards edits after confirmation. Apply updates the workspace and triggers normal autosave for an existing project. Failed or cancelled runs with content can be applied as Partial after confirmation. Batch runs are serial and each result is reviewed separately.
 
 The current supported py-roller range is:
 
 ```text
-py-roller>=0.9.0,<0.10
+py-roller>=0.10.2,<0.11, protocol 2 (desktop pinned to 0.10.2)
 ```
 
 ## Storage and Privacy
@@ -111,9 +110,9 @@ Rolling Pebble is local-first. It stores data under the user data directory, for
 ~/.local/share/rollingpebble
 ```
 
-Inside the app, **Settings -> Storage & Cleanup** shows project data, model caches, runtime environments, and other app data. Model caches are stored separately from runtime environments so they can be reused across runtime repairs.
+Inside the app, **Settings -> Storage** manages the application location and shows Projects, Models, Results, Cache and Components. Model controls live in **Auto Timing** settings. Runtime components are managed automatically; repairing them preserves models and projects. A separate recovery area retains the current unfinished workspace and is protected from ordinary cache cleanup.
 
-Rolling Pebble only contacts external services when you use features that need them, such as LRCLIB lookup/publishing, supported online source import, or model downloads for Auto Timing.
+Rolling Pebble contacts external services for LRCLIB lookup/publishing, online imports, model downloads, and configured Translation requests. Translation sends lyric text and title/artist/album to your chosen service, never audio or file paths. API keys use the system credential store, with explicit session-only fallback when unavailable. Local model services can keep translation on your own machine.
 
 ## Documentation
 
@@ -121,4 +120,5 @@ Rolling Pebble only contacts external services when you use features that need t
 - [Storage and cleanup](docs/STORAGE.md): storage roots and the exact automatic-deletion behavior.
 - [Development](docs/DEVELOPMENT.md) and [architecture](docs/ARCHITECTURE.md).
 - [Desktop packaging](docs/DESKTOP.md) and [release checklist](docs/RELEASE.md).
+- [Protocol v2 migration](docs/AUTO_TIMING_V2.md) and [validation record](docs/AUTO_TIMING_VALIDATION.md).
 - [Documentation index](docs/README.md) and [changelog](CHANGELOG.md).

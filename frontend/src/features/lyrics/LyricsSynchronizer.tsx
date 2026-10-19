@@ -34,10 +34,16 @@ const SpaceButton: React.FC<{ sync: () => void; label: string }> = ({ sync, labe
 interface ISynchronizerProps {
     state: IState;
     dispatch: React.Dispatch<Action>;
+    readOnly?: boolean;
+    showTranslation?: boolean;
 }
 
-export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispatch }) => {
+export const LyricsSynchronizer: React.FC<ISynchronizerProps> = (
+    { state, dispatch, readOnly = false, showTranslation = true },
+) => {
     const audio = useAudio();
+    const locked = useRef(readOnly);
+    locked.current = readOnly;
     const self = useRef(Symbol(LyricsSynchronizer.name));
 
     const { selectIndex, currentIndex: highlightIndex, lyric } = state;
@@ -46,6 +52,7 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
     const keyBindings = useKeyBindings();
 
     useEffect(() => {
+        if (readOnly) return;
         dispatch({
             type: ActionType.info,
             payload: {
@@ -53,7 +60,7 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
                 value: "Rolling Pebble https://github.com/Harmonese/rollingpebble",
             },
         });
-    }, [dispatch, lang]);
+    }, [dispatch, lang, readOnly]);
 
     const [syncMode, setSyncMode] = useState(() =>
         readSessionText(SSK.syncMode) === SyncMode.highlight.toString() ? SyncMode.highlight : SyncMode.select
@@ -73,6 +80,7 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
     }[syncMode];
 
     useEffect(() => {
+        if (readOnly) return;
         const line = ul.current?.children[needScrollLine];
         if (line !== undefined) {
             line.scrollIntoView({
@@ -81,7 +89,7 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
                 inline: "center",
             });
         }
-    }, [needScrollLine]);
+    }, [needScrollLine, readOnly]);
 
     useEffect(() => {
         if (selectionRequest === handledSelectionRequest.current) return;
@@ -90,17 +98,19 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
     }, [selectionRequest, selectIndex]);
 
     useEffect(() => {
+        if (readOnly) return;
         dispatch({ type: ActionType.refresh, payload: audio.currentTime });
-    }, [lyric, dispatch, audio]);
+    }, [lyric, dispatch, audio, readOnly]);
 
     useEffect(() => {
+        if (readOnly) return;
         return currentTimePubSub.sub(self.current, (time) => {
             dispatch({ type: ActionType.refresh, payload: time });
         });
-    }, [dispatch]);
+    }, [dispatch, readOnly]);
 
     const sync = useCallback(() => {
-        if (!audio.duration) {
+        if (locked.current || !audio.duration) {
             return;
         }
 
@@ -108,11 +118,11 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
             type: ActionType.next,
             payload: audio.currentTime,
         });
-    }, [dispatch]);
+    }, [dispatch, readOnly]);
 
     const adjust = useCallback(
         (ev: KeyboardEvent | React.MouseEvent, offset: number, index: number) => {
-            if (!audio.duration) {
+            if (locked.current || !audio.duration) {
                 return;
             }
 
@@ -127,16 +137,18 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
                 payload: audio.step(ev, offset, selectTime),
             });
         },
-        [dispatch, lyric],
+        [dispatch, lyric, readOnly],
     );
 
     const insertMarked = useCallback((slot: number) => {
-        if (!audio.duration) return;
+        if (locked.current || !audio.duration) return;
         dispatch({ type: ActionType.insertMarkedLine, payload: { slot, time: audio.currentTime } });
-    }, [audio, dispatch]);
+    }, [audio, dispatch, readOnly]);
 
     useEffect(() => {
+        if (readOnly) return;
         function onKeydown(ev: KeyboardEvent): void {
+            if (locked.current) return;
             if (isKeyboardElement(ev.target)) {
                 return;
             }
@@ -225,7 +237,7 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
         return (): void => {
             document.removeEventListener("keydown", onKeydown);
         };
-    }, [adjust, dispatch, keyBindings, selectIndex, sync, insertMarked, lyric, audio]);
+    }, [adjust, dispatch, keyBindings, selectIndex, sync, insertMarked, lyric, audio, readOnly]);
 
     const onLineClick = useCallback(
         (ev: React.MouseEvent<HTMLUListElement & HTMLLIElement>) => {
@@ -246,7 +258,7 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
         (ev: React.MouseEvent<HTMLUListElement | HTMLLIElement>) => {
             ev.stopPropagation();
 
-            if (!audio.duration) {
+            if (locked.current || !audio.duration) {
                 return;
             }
 
@@ -258,13 +270,13 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
                 adjust(ev, 0, key);
             }
         },
-        [adjust],
+        [adjust, readOnly],
     );
 
     const LyricLineIter = useCallback(
         (line: Readonly<ILyric>, index: number, lines: readonly ILyric[]) => {
             const select = index === selectIndex;
-            const highlight = index === highlightIndex;
+            const highlight = !readOnly && index === highlightIndex;
             const markNumber = state.marks.findIndex((mark) => mark.text === line.text) + 1;
             const error = index > 0 && lines[index].time! <= lines[index - 1].time!;
 
@@ -289,39 +301,63 @@ export const LyricsSynchronizer: React.FC<ISynchronizerProps> = ({ state, dispat
                     index={index}
                     className={className}
                     line={line}
+                    showTranslation={showTranslation}
+                    staleLabel={lang.translation.stale}
                     select={select}
+                    readOnly={readOnly}
                     markNumber={markNumber}
                     markLabel={lang.ui.lyricMarks}
                     prefState={prefState}
                 />
             );
         },
-        [selectIndex, highlightIndex, prefState, state.marks, lang.ui.lyricMarks],
+        [
+            selectIndex,
+            highlightIndex,
+            prefState,
+            state.marks,
+            lang.ui.lyricMarks,
+            readOnly,
+            showTranslation,
+            lang.translation.stale,
+        ],
     );
 
-    const ulClassName = prefState.screenButton ? "lyric-list on-screen-button" : "lyric-list";
+    const ulClassName = !readOnly && prefState.screenButton ? "lyric-list on-screen-button" : "lyric-list";
 
     return (
         <>
             <ul ref={ul} className={ulClassName} onClickCapture={onLineClick} onDoubleClickCapture={onLineDoubleClick}>
                 {state.lyric.map(LyricLineIter)}
-                <li
-                    data-key={state.lyric.length}
-                    className={`line line-placeholder${selectIndex === state.lyric.length ? " select" : ""}`}
-                >
-                    {selectIndex === state.lyric.length && <PlaybackCursor fixed={prefState.fixed} />}
-                </li>
+                {!readOnly && (
+                    <li
+                        data-key={state.lyric.length}
+                        className={`line line-placeholder${selectIndex === state.lyric.length ? " select" : ""}`}
+                    >
+                        {selectIndex === state.lyric.length && <PlaybackCursor fixed={prefState.fixed} />}
+                    </li>
+                )}
             </ul>
-            <AsidePanel syncMode={syncMode} setSyncMode={setSyncMode} lrcDispatch={dispatch} prefState={prefState} />
-            {prefState.screenButton && <SpaceButton sync={sync} label={lang.ui.spaceKey} />}
+            {!readOnly && (
+                <AsidePanel
+                    syncMode={syncMode}
+                    setSyncMode={setSyncMode}
+                    lrcDispatch={dispatch}
+                    prefState={prefState}
+                />
+            )}
+            {!readOnly && prefState.screenButton && <SpaceButton sync={sync} label={lang.ui.spaceKey} />}
         </>
     );
 };
 
 interface ILyricLineProps {
+    showTranslation: boolean;
+    staleLabel: string;
     line: ILyric;
     index: number;
     select: boolean;
+    readOnly: boolean;
     markNumber: number;
     markLabel: string;
     className: string;
@@ -329,14 +365,14 @@ interface ILyricLineProps {
 }
 
 const LyricLine: React.FC<ILyricLineProps> = memo(
-    ({ line, index, select, markNumber, markLabel, className, prefState }) => {
+    ({ line, index, select, readOnly, markNumber, markLabel, className, prefState, showTranslation, staleLabel }) => {
         const lineTime = convertTimeToTag(line.time, prefState.fixed);
 
         const lineText = formatText(line.text, prefState.spaceStart, prefState.spaceEnd);
 
         return (
             <li key={index} data-key={index} className={className}>
-                {select && <PlaybackCursor fixed={prefState.fixed} />}
+                {select && !readOnly && <PlaybackCursor fixed={prefState.fixed} />}
                 {markNumber > 0 && (
                     <span
                         className="ui-button ui-button-primary lyric-mark-number line-mark-indicator"
@@ -347,14 +383,24 @@ const LyricLine: React.FC<ILyricLineProps> = memo(
                     </span>
                 )}
                 <time className="line-time">{lineTime}</time>
-                <span className="line-text">{lineText}</span>
+                <span className="line-text">
+                    {lineText}
+                    {showTranslation && line.translation && (
+                        <span className="line-translation">
+                            {line.translation}
+                            {line.source_text !== line.text && <small>· {staleLabel}</small>}
+                        </span>
+                    )}
+                </span>
             </li>
         );
     },
     (prev, next) => {
         return prev.line === next.line
+            && prev.showTranslation === next.showTranslation && prev.staleLabel === next.staleLabel
             && prev.index === next.index
             && prev.select === next.select
+            && prev.readOnly === next.readOnly
             && prev.markNumber === next.markNumber
             && prev.markLabel === next.markLabel
             && prev.className === next.className

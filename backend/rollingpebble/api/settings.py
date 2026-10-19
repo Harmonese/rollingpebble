@@ -67,11 +67,25 @@ def create_settings_router(services: AppServices) -> APIRouter:
 
     @router.post("/api/settings", response_model=RuntimeSettingsModel)
     def update_settings(request: RuntimeSettingsUpdateRequest) -> RuntimeSettingsModel:
-        return services.runtime.update_settings(request)
+        def update():
+            if not services.jobs.resource_lock.acquire(blocking=False):
+                raise RuntimeError("Auto Timing resources are busy")
+            try:
+                return services.runtime.update_settings(request)
+            finally:
+                services.jobs.resource_lock.release()
+        return service_call(update)
 
     @router.post("/api/settings/reset-defaults", response_model=RuntimeSettingsModel)
     def reset_settings_defaults() -> RuntimeSettingsModel:
-        return services.runtime.reset_settings_defaults()
+        def reset():
+            if not services.jobs.resource_lock.acquire(blocking=False):
+                raise RuntimeError("Auto Timing resources are busy")
+            try:
+                return services.runtime.reset_settings_defaults()
+            finally:
+                services.jobs.resource_lock.release()
+        return service_call(reset)
 
     @router.post("/api/settings/workspace-bg")
     async def upload_workspace_bg(bg: UploadFile = File(...)) -> dict[str, str]:

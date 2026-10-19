@@ -1,6 +1,7 @@
 import type { State as LrcState, TrimOptios } from "@lrc-maker/lrc-parser";
 import { parser } from "@lrc-maker/lrc-parser";
 import { useReducer } from "react";
+import { identify, reconcileLines, type TranslatedLine } from "./translationDocument.js";
 
 type InitArgs = Readonly<{
     text: string;
@@ -23,9 +24,17 @@ export const enum ActionType {
     undoMarkedLine,
     deleteLine,
     selectPlaying,
+    editLine,
+    translate,
+    restoreTranslation,
+    undoParse,
+    editPair,
 }
 
 export interface IState extends LrcState {
+    readonly lyric: readonly TranslatedLine[];
+    readonly targetLanguage?: string;
+    readonly parseUndo?: IState;
     readonly marks: readonly { id: number; text: string }[];
     readonly nextMarkId: number;
     readonly insertHistory: readonly { lyric: LrcState["lyric"]; selectIndex: number }[];
@@ -40,7 +49,15 @@ type Map$Type$Payload<T, U> = { [key in keyof T]: U extends key ? { type: key; p
 
 export type Action = Map$Type$Payload<
     {
-        [ActionType.parse]: { text: string; options: TrimOptios; preserveMarks?: boolean; preserveMetadata?: boolean };
+        [ActionType.parse]: {
+            text: string;
+            options: TrimOptios;
+            preserveMarks?: boolean;
+            preserveMetadata?: boolean;
+            metadataOrigin?: "lyrics";
+            preserveTranslation?: boolean;
+            undoable?: boolean;
+        };
         [ActionType.refresh]: number;
         [ActionType.next]: number;
         [ActionType.time]: number;
@@ -54,6 +71,11 @@ export type Action = Map$Type$Payload<
         [ActionType.undoMarkedLine]: undefined;
         [ActionType.deleteLine]: undefined;
         [ActionType.selectPlaying]: number;
+        [ActionType.editLine]: { id: string; field: "text" | "translation"; value: string; target?: string };
+        [ActionType.translate]: { lines: { id: string; text: string }[]; target: string };
+        [ActionType.restoreTranslation]: { lines: TranslatedLine[]; target: string };
+        [ActionType.undoParse]: undefined;
+        [ActionType.editPair]: { lines: TranslatedLine[]; target: string };
     },
     ActionType
 >;
@@ -79,7 +101,64 @@ const mergeObject = <T extends O, O>(target: T, obj: O): T => {
 };
 
 export const reducer = (state: IState, action: Action): IState => {
+    if (
+        state.parseUndo
+        && ![
+            ActionType.undoParse,
+            ActionType.select,
+            ActionType.refresh,
+            ActionType.getState,
+            ActionType.markLine,
+            ActionType.unmarkLine,
+            ActionType.selectPlaying,
+        ].includes(action.type)
+    ) {
+        state = { ...state, parseUndo: undefined };
+    }
     switch (action.type) {
+        case ActionType.editPair:
+            if (
+                action.payload.lines.length !== state.lyric.length
+                || action.payload.lines.some((line, i) => line.id !== state.lyric[i].id)
+            ) return state;
+            return reducer({
+                ...state,
+                lyric: action.payload.lines,
+                targetLanguage: action.payload.target,
+                insertHistory: [],
+                currentTime: Infinity,
+                nextTime: -Infinity,
+            }, { type: ActionType.refresh, payload: state.currentTime });
+        case ActionType.undoParse:
+            return state.parseUndo || state;
+        case ActionType.restoreTranslation:
+            return { ...state, lyric: action.payload.lines, targetLanguage: action.payload.target };
+        case ActionType.editLine:
+            return {
+                ...state,
+                targetLanguage: state.targetLanguage || action.payload.target,
+                insertHistory: [],
+                lyric: state.lyric.map(line =>
+                    line.id !== action.payload.id ? line : {
+                        ...line,
+                        [action.payload.field]: action.payload.value.replace(/[\r\n]+/g, " "),
+                        ...(action.payload.field === "translation" ? { source_text: line.text } : {}),
+                    }
+                ),
+            };
+        case ActionType.translate: {
+            const values = new Map(action.payload.lines.map(line => [line.id, line.text]));
+            return {
+                ...state,
+                targetLanguage: action.payload.target,
+                insertHistory: [],
+                lyric: state.lyric.map(line => ({
+                    ...line,
+                    ...(state.targetLanguage !== action.payload.target ? { translation: "", source_text: "" } : {}),
+                    ...(values.has(line.id!) ? { translation: values.get(line.id!), source_text: line.text } : {}),
+                })),
+            };
+        }
         case ActionType.parse: {
             const { text, options } = action.payload;
             const lrc = parser(text, options);
@@ -87,6 +166,11 @@ export const reducer = (state: IState, action: Action): IState => {
             return {
                 ...state,
                 ...lrc,
+                lyric: action.payload.preserveTranslation
+                    ? reconcileLines(state.lyric, lrc.lyric).lines
+                    : lrc.lyric.map(identify),
+                targetLanguage: action.payload.preserveTranslation ? state.targetLanguage : "",
+                parseUndo: action.payload.undoable ? state : undefined,
                 info: action.payload.preserveMetadata ? new Map([...state.info, ...lrc.info]) : lrc.info,
                 selectIndex,
                 marks: action.payload.preserveMarks ? state.marks : [],
@@ -121,7 +205,18 @@ export const reducer = (state: IState, action: Action): IState => {
             if (!text || !Number.isFinite(time) || time < 0) return state;
             const lyric = [...state.lyric];
             const selectIndex = state.selectIndex + 1;
-            lyric.splice(state.selectIndex, 0, { text, time });
+            const candidates = state.lyric.filter(line => line.text === text);
+            const translation = candidates.length && candidates.every(line =>
+                    line.translation
+                    && line.source_text === text && line.translation === candidates[0].translation
+                )
+                ? candidates[0].translation
+                : "";
+            lyric.splice(
+                state.selectIndex,
+                0,
+                identify({ text, time, translation, source_text: translation ? text : "" }),
+            );
             return {
                 ...state,
                 lyric,
@@ -224,7 +319,7 @@ export const reducer = (state: IState, action: Action): IState => {
             let lyric = state.lyric;
             if (lyric[index].time !== time) {
                 const newLyric = lyric.slice();
-                newLyric[index] = { text: lyric[index].text, time };
+                newLyric[index] = { ...lyric[index], time };
                 lyric = newLyric;
             }
 
@@ -258,7 +353,7 @@ export const reducer = (state: IState, action: Action): IState => {
             let lyric = state.lyric;
             if (lyric[selectIndex]?.time !== undefined) {
                 const newLyric = lyric.slice();
-                newLyric[selectIndex] = { text: lyric[selectIndex].text };
+                newLyric[selectIndex] = { ...lyric[selectIndex], time: undefined };
                 lyric = newLyric;
 
                 let { currentTime, nextTime } = state;
@@ -293,6 +388,8 @@ export const init = (lazyInit: () => InitArgs): IState => {
     const parsed = parser(text, options);
     return {
         ...parsed,
+        lyric: parsed.lyric.map(identify),
+        targetLanguage: "",
         marks: [],
         nextMarkId: 0,
         insertHistory: [],

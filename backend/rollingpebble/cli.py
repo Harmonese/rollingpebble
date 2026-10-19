@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
     dev.add_argument("--no-backend-reload", action="store_true", help="Disable uvicorn reload in dev mode")
 
     setup = subparsers.add_parser("setup", help="Install/check frontend and isolated Auto Timing runtime")
-    setup.add_argument("--profile", choices=("auto", "cpu", "cu124"), default="auto", help="py-roller install profile")
+    setup.add_argument("--profile", choices=("auto",), default="auto", help="Auto Timing runtime")
     setup.add_argument("--skip-frontend", action="store_true", help="Do not run pnpm install")
     setup.add_argument("--skip-roller", action="store_true", help="Do not create/repair the isolated py-roller runtime")
     setup.add_argument("--skip-doctor", action="store_true", help="Pass --skip-doctor to py-roller install")
@@ -53,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subparsers.add_parser("doctor", help="Show rollingpebble, frontend, pylrclib, and isolated py-roller runtime status")
     doctor.add_argument("--run-pyroller-doctor", action="store_true", help="Also execute py-roller doctor inside the isolated runtime")
-    doctor.add_argument("--profile", choices=("auto", "cpu", "cu124"), default=None, help="Runtime profile to inspect; defaults to saved settings")
+    doctor.add_argument("--profile", choices=("auto",), default=None, help="Runtime profile to inspect; defaults to saved settings")
     return parser
 
 
@@ -298,11 +298,6 @@ def main() -> None:
         from rollingpebble.runtime.installer import main as installer_main
 
         raise SystemExit(installer_main(raw_args[1:]))
-    if raw_args and raw_args[0] == "__runtime-dependencies":
-        from rollingpebble.runtime.dependencies import main as dependencies_main
-
-        raise SystemExit(dependencies_main(raw_args[1:]))
-
     parser = build_parser()
     if not raw_args:
         raw_args = ["serve"]

@@ -13,6 +13,7 @@ from fastapi import UploadFile
 from rollingpebble.models import ApplyLyricsRequest, MetaModel, ProjectModel, RuntimeSettingsModel, SaveEditorRequest, WorkspaceSaveRequest
 from rollingpebble.paths import StorageLayoutRef
 from rollingpebble.lyrics_utils import merge_lrc_metadata_header
+from rollingpebble.storage.transaction import SAVE_LOCK, JOURNAL, commit, recover
 from rollingpebble.storage.files import (
     PLAIN_NAME,
     PYROLLER_NAME,
@@ -32,6 +33,11 @@ from rollingpebble.storage.files import (
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _same_lrc(left: str, right: str) -> bool:
+    # Text-file reads normalize line endings; JSON preserves them.
+    return left.replace("\r\n", "\n").replace("\r", "\n") == right.replace("\r\n", "\n").replace("\r", "\n")
 
 class ProjectService:
     def __init__(self, projects_root: Path | None = None, *, layout_ref: StorageLayoutRef | None = None) -> None:
@@ -126,45 +132,57 @@ class ProjectService:
             return self.get(project_id)
 
     def get(self, project_id: str, *, touch: bool = False) -> ProjectModel:
+        with SAVE_LOCK:
+            return self._get(project_id, touch=touch)
+
+    def _get(self, project_id: str, *, touch: bool = False) -> ProjectModel:
+        # Validate the project path before accessing a journal.
+        from rollingpebble.storage.files import project_dir
+        recover(project_dir(self.projects_root, project_id))
         project = read_project(self.projects_root, project_id)
         project.plain_lyrics = read_text(self.projects_root, project_id, PLAIN_NAME)
         project.synced_lyrics = read_text(self.projects_root, project_id, SYNCED_NAME)
         if touch:
             project.last_opened_at = _utc_now_iso()
             write_project(self.projects_root, project)
+        # Reject unsafe restoration without erasing stored translations on a read.
+        if project.lyric_document and not _same_lrc(project.lyric_document.source_lrc, project.synced_lyrics):
+            project.lyric_document = None
         return project
 
     async def replace_workspace_audio(
         self, project_id: str, upload: UploadFile, snapshot: WorkspaceSaveRequest,
     ) -> ProjectModel:
         async with self._create_lock:
-            destination = self.project_folder(project_id)
-            # Prepare the complete replacement before touching the saved project.
-            with tempfile.TemporaryDirectory(prefix=".saving-", dir=self.projects_root) as temporary:
-                staging = ProjectService(Path(temporary))
-                staged_dir = staging.projects_root / project_id
-                shutil.copytree(destination, staged_dir, ignore=shutil.ignore_patterns("artifacts", "intermediate", PYROLLER_NAME))
-                project = staging.get(project_id)
-                old_audio = resolve_audio_path(staging.projects_root, project)
-                audio_path = await save_upload_file(staging.projects_root, project_id, upload)
-                versioned_audio = audio_path.with_name(f"audio-{uuid.uuid4().hex}{audio_path.suffix}")
-                audio_path.replace(versioned_audio)
-                audio_path = versioned_audio
-                project = staging.apply_lyrics(project_id, ApplyLyricsRequest(**snapshot.model_dump()))
+            return await self._replace_audio(project_id, upload, snapshot)
+
+    async def _replace_audio(
+        self, project_id: str, upload: UploadFile, snapshot: WorkspaceSaveRequest,
+    ) -> ProjectModel:
+        destination = self.project_folder(project_id)
+        # Publish a new audio file before atomically committing its reference.
+        with tempfile.TemporaryDirectory(prefix=".saving-", dir=self.projects_root) as temporary:
+            staging = ProjectService(Path(temporary))
+            audio_path = await save_upload_file(staging.projects_root, project_id, upload)
+            versioned_audio = destination / f"audio-{uuid.uuid4().hex}{audio_path.suffix}"
+            audio_path.replace(versioned_audio)
+            with SAVE_LOCK:
+                project = self.get(project_id)
+                old_audio = resolve_audio_path(self.projects_root, project)
                 project.audio_name = upload.filename
-                project.audio_ref = audio_ref_for_path(staging.projects_root, project_id, audio_path)
+                project.audio_ref = versioned_audio.name
                 project.audio_path = None
-                write_project(staging.projects_root, project)
-                if old_audio and old_audio != audio_path and old_audio.is_relative_to(staged_dir):
-                    old_audio.unlink(missing_ok=True)
-                backup = staging.projects_root / "previous"
-                destination.replace(backup)
+                obsolete = (old_audio.name,) if old_audio and old_audio.parent == destination else ()
                 try:
-                    staged_dir.replace(destination)
+                    self._save_snapshot(project, ApplyLyricsRequest(**snapshot.model_dump()), obsolete=obsolete)
                 except BaseException:
-                    backup.replace(destination)
+                    if not (destination / JOURNAL).exists():
+                        versioned_audio.unlink(missing_ok=True)
                     raise
-            return self.get(project_id)
+                for name in ("artifacts", "intermediate"):
+                    shutil.rmtree(destination / name, ignore_errors=True)
+                (destination / PYROLLER_NAME).unlink(missing_ok=True)
+        return self.get(project_id)
 
     def list_projects(self) -> list[ProjectModel]:
         projects: list[ProjectModel] = []
@@ -194,29 +212,40 @@ class ProjectService:
         return project
 
     def apply_lyrics(self, project_id: str, request: ApplyLyricsRequest) -> ProjectModel:
+        with SAVE_LOCK:
+            return self._save_snapshot(self.get(project_id), request)
+
+    def _save_snapshot(self, project: ProjectModel, request: ApplyLyricsRequest | SaveEditorRequest,
+                       *, obsolete: tuple[str, ...] = ()) -> ProjectModel:
         synced = request.synced_lyrics or ""
-        project = self._write_lyrics(project_id, synced, metadata=request.metadata)
-        # _write_lyrics calls plain_for_timing with empty plain since synced is the
-        # source of truth here. Re-derive plain including any explicit plain input.
-        if request.plain_lyrics:
-            composite_plain = plain_for_timing(request.plain_lyrics, synced)
-            if composite_plain != project.plain_lyrics:
-                write_text(self.projects_root, project_id, PLAIN_NAME, composite_plain)
-                project.plain_lyrics = composite_plain
-        project.source = request.source
-        project.lrclib_id = request.lrclib_id
-        write_project(self.projects_root, project)
-        return project
+        self._validate_document(request)
+        if request.metadata is not None:
+            project.metadata = request.metadata
+        project.synced_lyrics = synced
+        project.plain_lyrics = plain_for_timing(request.plain_lyrics or "", synced)
+        project.lyric_document = request.lyric_document
+        if request.metadata_sources is not None:
+            project.metadata_sources = request.metadata_sources
+        if isinstance(request, ApplyLyricsRequest):
+            project.source = request.source
+            project.lrclib_id = request.lrclib_id
+        from rollingpebble.storage.files import _project_for_storage
+        commit(self.projects_root / project.project_id, {
+            PLAIN_NAME: project.plain_lyrics, SYNCED_NAME: synced,
+            "project.json": _project_for_storage(self.projects_root, project).model_dump_json(indent=2),
+        }, remove=obsolete)
+        return self.get(project.project_id)
 
     def save_editor(self, project_id: str, request: SaveEditorRequest) -> ProjectModel:
-        synced = request.synced_lyrics or ""
-        project = self._write_lyrics(project_id, synced, metadata=request.metadata)
-        if request.plain_lyrics:
-            plain = plain_for_timing(request.plain_lyrics, synced)
-            if plain != project.plain_lyrics:
-                write_text(self.projects_root, project_id, PLAIN_NAME, plain)
-                project.plain_lyrics = plain
-        return project
+        with SAVE_LOCK:
+            return self._save_snapshot(self.get(project_id), request)
+
+    @staticmethod
+    def _validate_document(request):
+        document = request.lyric_document
+        if document and (not _same_lrc(document.source_lrc, request.synced_lyrics)
+                or len({line.id for line in document.lines}) != len(document.lines)):
+            raise ValueError("Lyric document does not match its source")
 
     def write_pyroller_result(self, project_id: str, synced: str) -> ProjectModel:
         project = self.get(project_id)
@@ -243,9 +272,10 @@ class ProjectService:
 
 
     def delete_project(self, project_id: str) -> None:
-        folder = self.project_folder(project_id)
-        if folder.exists():
-            shutil.rmtree(folder)
+        with SAVE_LOCK:
+            folder = self.project_folder(project_id)
+            if folder.exists():
+                shutil.rmtree(folder)
 
     def project_folder(self, project_id: str) -> Path:
         # Validate project first, then return the on-disk directory used by this project.

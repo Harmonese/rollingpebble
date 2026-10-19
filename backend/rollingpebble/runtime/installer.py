@@ -1,263 +1,158 @@
+"""Create a new engine generation from binary wheels, never compile on the desktop."""
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import platform
-import shutil
+import os
 import subprocess
-from datetime import datetime, timezone
+import shutil
 from pathlib import Path
-from typing import Any
 
+from rollingpebble.auto_timing.protocol import compatible
+from rollingpebble.auto_timing.store import atomic_json
+from rollingpebble.paths import ensure_storage_layout
 from rollingpebble.runtime.environment import build_runtime_env, runtime_python_path
-from rollingpebble.runtime.constants import (
-    PYROLLER_EVENT_PREFIX,
-)
-from rollingpebble.runtime.recipe import DEFAULT_RUNTIME_RECIPE
-from rollingpebble.runtime.python import select_runtime_python
-from rollingpebble.runtime.reports import json_from_log_lines, protocol_status_ok
+from rollingpebble.runtime.python import RuntimePython, prepare_bundled_runtime
+from rollingpebble.storage.app_settings import SettingsStore
 
 
-class JsonCommandError(RuntimeError):
-    def __init__(self, command: list[str], return_code: int, report: dict[str, Any] | None = None) -> None:
-        super().__init__(f"Command exited with code {return_code}: {' '.join(command)}")
-        self.command = command
-        self.return_code = return_code
-        self.report = report
+def engine_resources() -> Path | None:
+    root = os.environ.get("ROLLINGPEBBLE_APP_RESOURCES")
+    if root:
+        path = Path(root) / "engine"
+        return path if path.is_dir() else None
+    path = Path(__file__).resolve().parents[3] / "desktop" / "engine"
+    return path if path.is_dir() else None
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+def bundle_fingerprint() -> str:
+    resources = engine_resources()
+    if resources is None:
+        raise RuntimeError("Bundled engine wheels are missing")
+    digest = hashlib.sha256()
+    for name in ("manifest.json", "requirements.txt", "vocals.txt"):
+        digest.update((resources / name).read_bytes())
+    return digest.hexdigest()
 
 
-def _runtime_id(profile: str, python_tag: str) -> str:
-    return f"pyroller-{python_tag}-{profile}"
-
-
-def _venv_python(venv: Path) -> Path:
-    return runtime_python_path(venv)
-
-
-def _remove_incomplete_venv(venv: Path) -> None:
-    if not venv.exists() and not venv.is_symlink():
-        return
-    print(f"Removing incomplete virtual environment: {venv}", flush=True)
-    if venv.is_symlink() or venv.is_file():
-        venv.unlink()
-        return
-    shutil.rmtree(venv)
-
-
-def _run(command: list[str], *, env: dict[str, str] | None = None) -> None:
-    print(f"$ {' '.join(command)}", flush=True)
-    subprocess.run(command, check=True, env=env)
-
-
-def _run_json(command: list[str], *, env: dict[str, str] | None = None) -> dict[str, Any] | None:
-    """Run a command, relay its output, and return its final JSON report if any."""
-    print(f"$ {' '.join(command)}", flush=True)
-    process = subprocess.Popen(
-        command,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-        bufsize=1,
-        env=env,
-    )
-    assert process.stdout is not None
-    json_lines: list[str] = []
-    for raw_line in process.stdout:
-        line = raw_line.rstrip("\n")
-        print(line, flush=True)
-        stripped = line.strip()
-        if stripped.startswith(PYROLLER_EVENT_PREFIX):
-            continue
-        json_lines.append(line)
-    return_code = process.wait()
-    report = json_from_log_lines(json_lines)
-    if return_code != 0:
-        raise JsonCommandError(command, return_code, report)
-    return report
-
-
-def _pyroller_version(python: Path, env: dict[str, str]) -> str | None:
+def install_runtime(data_dir: Path, profile: str = "auto", skip_doctor: bool = False, *,
+                    vocals: bool = False, ensure: bool = False, repair: bool = False) -> None:
+    if profile != "auto":
+        raise ValueError("Runtime components are managed by the application")
+    layout = ensure_storage_layout(data_dir, SettingsStore(data_dir).read())
+    fingerprint = bundle_fingerprint()
+    bundled = prepare_bundled_runtime(data_dir)
+    if bundled is None:
+        raise RuntimeError("Bundled Python is missing. Reinstall the application.")
+    python = RuntimePython(str(bundled), 3, 12)
+    runtime_id = "managed"
+    root = layout.runtime_root
+    if root.is_symlink():
+        raise RuntimeError("Managed environment must not be a symbolic link")
+    venv = root / "venv"
+    root.mkdir(parents=True, exist_ok=True)
     try:
-        result = subprocess.run(
-            [str(python), "-c", "import importlib.metadata; print(importlib.metadata.version('py-roller'))"],
-            check=True,
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        return result.stdout.strip() or None
-    except Exception:
-        return None
-
-
-def _write_runtime_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def install_runtime(data_dir: Path, profile: str, skip_doctor: bool = False) -> None:
-    runtime_python = select_runtime_python(data_dir)
-    runtime_id = _runtime_id(profile, runtime_python.tag)
-    runtime_root = data_dir / "envs" / runtime_id
-    venv = runtime_root / ".venv"
-    runtime_json = runtime_root / "runtime.json"
-    runtime_root.mkdir(parents=True, exist_ok=True)
-
-    started_at = _now()
-    base_payload: dict[str, Any] = {
-        "runtime_id": runtime_id,
-        "profile": profile,
-        "python_version": f"{runtime_python.major}.{runtime_python.minor}",
-        "runtime_python_executable": runtime_python.executable,
-        "platform": f"{platform.system().lower()}-{platform.machine().lower()}",
-        "venv_path": str(venv),
-        "python_path": str(_venv_python(venv)),
-        "created_or_repaired_at": started_at,
-        "last_install_status": "running",
-        "last_doctor_status": "skipped" if skip_doctor else "pending",
-    }
-    _write_runtime_json(runtime_json, base_payload)
-
-    print(f"Creating / repairing isolated py-roller runtime: {runtime_id}", flush=True)
-    print(f"Runtime root: {runtime_root}", flush=True)
-    print(f"Profile: {profile}", flush=True)
-    print(f"Runtime Python: {runtime_python.executable}", flush=True)
-
-    install_report: dict[str, Any] | None = None
-    doctor_report: dict[str, Any] | None = None
-    source_label = ""
-    python = _venv_python(venv)
-    env: dict[str, str] | None = None
+        previous = json.loads((root / "runtime.json").read_text())
+        if not isinstance(previous, dict):
+            previous = {}
+    except (OSError, ValueError):
+        previous = {}
+    # A previous interrupted installation must not be adopted as a healthy environment.
+    interrupted = previous.get("last_install_status") == "running"
+    payload = dict(previous, runtime_id=runtime_id, profile="auto", last_install_status="running",
+                   preparation_phase="checking")
+    atomic_json(root / "runtime.json", payload)
     try:
-        if not python.exists():
-            _remove_incomplete_venv(venv)
-            _run([runtime_python.executable, "-m", "venv", str(venv)])
-        else:
-            print(f"Reusing existing virtual environment: {venv}", flush=True)
+        executable = runtime_python_path(venv)
+        if repair or interrupted:
+            payload["preparation_phase"] = "preparing"
+            atomic_json(root / "runtime.json", payload)
+            if venv.is_symlink():
+                raise RuntimeError("Managed environment must not be a symbolic link")
+            if venv.exists():
+                shutil.rmtree(venv)
+        if not executable.exists():
+            payload["preparation_phase"] = "preparing"
+            atomic_json(root / "runtime.json", payload)
+            subprocess.run([python.executable, "-m", "venv", str(venv)], check=True)
+        env = build_runtime_env(venv, layout)
+        resources = engine_resources()
+        if not resources or not (resources / "requirements.txt").is_file():
+            raise RuntimeError("Bundled engine wheels are missing. Build desktop/engine before installation.")
+        command = [str(executable), "-m", "pip", "install", "--no-index", "--no-cache-dir", "--only-binary=:all:",
+                   "--require-hashes", "--find-links", str(resources / "wheels"),
+                   "-r", str(resources / ("vocals.txt" if vocals else "requirements.txt"))]
+        def check_runtime():
+            checked = subprocess.run([str(executable), "-m", "pyroller", "doctor", "--json", "--cache-dir",
+                                     str(layout.engine_root),
+                                     "--audio-mode", "vocals" if vocals else "mix"],
+                                    capture_output=True, text=True, env=env, timeout=120)
+            try:
+                result = json.loads(checked.stdout)
+            except ValueError:
+                return None
+            if (checked.returncode in (0, 1) and result.get("runtime_ok")
+                    and compatible(result.get("engine_version"))
+                    and 2 in result.get("capabilities", {}).get("protocol_versions", [])):
+                return result
+            return None
 
-        env = build_runtime_env(venv, data_dir, include_dev=True)
-        env = DEFAULT_RUNTIME_RECIPE.constrained_env(env, runtime_root)
-        _run(DEFAULT_RUNTIME_RECIPE.bootstrap_command(python), env=env)
-
-        source = DEFAULT_RUNTIME_RECIPE.source_from_env()
-        if source:
-            source_path = Path(source).expanduser().resolve()
-            print(f"Installing py-roller from local editable source: {source_path}", flush=True)
-            source_label = DEFAULT_RUNTIME_RECIPE.source_label(source)
-        else:
-            source_label = DEFAULT_RUNTIME_RECIPE.pyroller_spec
-            print(f"Installing/upgrading py-roller runtime package: {source_label}", flush=True)
-
-        dependency_commands = DEFAULT_RUNTIME_RECIPE.dependency_install_commands(python, source=source)
-        for command in dependency_commands:
-            _run(command, env=env)
-
-        install_report = _run_json(
-            [
-                str(python),
-                "-m",
-                "pyroller.cli.main",
-                "install",
-                "--profile",
-                profile,
-                "--skip-doctor",
-                "--progress-format",
-                "jsonl",
-                "--output-format",
-                "json",
-            ],
-            env=env,
-        )
-        partial_version = _pyroller_version(python, env)
-        _write_runtime_json(
-            runtime_json,
-            {
-                **base_payload,
-                "python_path": str(python),
-                "pyroller_version": partial_version,
-                "pyroller_source": source_label,
-                "last_install_status": "ok" if protocol_status_ok(install_report, fallback=True) else "failed",
-                "last_doctor_status": "skipped" if skip_doctor else "pending",
-                "install_report": install_report,
-                "doctor_report": None,
-            },
-        )
-
-        if not skip_doctor:
-            doctor_report = _run_json([str(python), "-m", "pyroller.cli.main", "doctor", "--output-format", "json"], env=env)
-
-        version = _pyroller_version(python, env)
-        _write_runtime_json(
-            runtime_json,
-            {
-                **base_payload,
-                "python_path": str(python),
-                "pyroller_version": version,
-                "pyroller_source": source_label,
-                "created_or_repaired_at": _now(),
-                "last_install_status": "ok" if protocol_status_ok(install_report, fallback=True) else "failed",
-                "last_doctor_status": "skipped" if skip_doctor else ("ok" if protocol_status_ok(doctor_report, fallback=True) else "failed"),
-                "install_report": install_report,
-                "doctor_report": doctor_report,
-            },
-        )
-        print(f"Runtime ready: {runtime_id}", flush=True)
-    except JsonCommandError as exc:
-        if exc.report is not None:
-            if any(part == "install" for part in exc.command):
-                install_report = exc.report
-            if any(part == "doctor" for part in exc.command):
-                doctor_report = exc.report
-        version = _pyroller_version(python, env) if env is not None and python.exists() else None
-        _write_runtime_json(
-            runtime_json,
-            {
-                **base_payload,
-                "python_path": str(python),
-                "pyroller_version": version,
-                "pyroller_source": source_label or None,
-                "created_or_repaired_at": _now(),
-                "last_install_status": "ok" if protocol_status_ok(install_report) else "failed",
-                "last_doctor_status": "skipped" if skip_doctor else ("ok" if protocol_status_ok(doctor_report) else "failed"),
-                "last_install_error": str(exc),
-                "install_report": install_report,
-                "doctor_report": doctor_report,
-            },
-        )
+        required = "vocals" if vocals else "original"
+        reuse = (ensure and not repair and not interrupted
+                 and previous.get("bundle_fingerprint") in (None, fingerprint))
+        doctor = check_runtime() if reuse else None
+        if doctor and previous.get("bundle_fingerprint") is None:
+            # Adopt a legacy environment only if its actual package versions match the bundle.
+            script = "import importlib.metadata as m,json; print(json.dumps({d.metadata['Name'].lower().replace('_','-'):d.version for d in m.distributions()}))"
+            installed = subprocess.run([str(executable), "-c", script], capture_output=True, text=True, env=env, check=True)
+            versions = json.loads(installed.stdout)
+            for line in (resources / ("vocals.txt" if vocals else "requirements.txt")).read_text().splitlines():
+                name, version = line.split()[0].split("==")
+                if versions.get(name.lower().replace("_", "-")) != version:
+                    doctor = None
+                    break
+        if not doctor:
+            payload["preparation_phase"] = "preparing"
+            atomic_json(root / "runtime.json", payload)
+            subprocess.run(command, env=env, check=True)
+            payload["preparation_phase"] = "checking"
+            atomic_json(root / "runtime.json", payload)
+            doctor = check_runtime()
+        if not doctor:
+            raise RuntimeError("Engine runtime check failed")
+        subprocess.run([str(executable), "-m", "pip", "check"], env=env, check=True)
+        payload.update(pyroller_version=doctor.get("engine_version"), doctor_report=doctor,
+                       pyroller_source="bundled:py-roller==0.10.2", last_doctor_status="ok" if doctor.get("runtime_ok") else "failed")
+        if not doctor.get("runtime_ok") or not compatible(doctor.get("engine_version")):
+            raise RuntimeError("Engine runtime check failed")
+        payload["last_install_status"] = "ok"
+        payload["preparation_phase"] = "ready"
+        capabilities = {"original", required}
+        payload.update(bundle_fingerprint=fingerprint, prepared_capabilities=sorted(capabilities))
+        from rollingpebble.storage.transition import finish_layout_transition
+        finish_layout_transition(data_dir)
+    except BaseException as exc:
+        payload.update(last_install_status="failed", last_install_error=str(exc), preparation_phase="failed")
         raise
-    except Exception as exc:
-        version = _pyroller_version(python, env) if env is not None and python.exists() else None
-        _write_runtime_json(
-            runtime_json,
-            {
-                **base_payload,
-                "python_path": str(python),
-                "pyroller_version": version,
-                "pyroller_source": source_label or None,
-                "created_or_repaired_at": _now(),
-                "last_install_status": "failed",
-                "last_doctor_status": "skipped" if skip_doctor else "failed",
-                "last_install_error": f"{exc.__class__.__name__}: {exc}",
-                "install_report": install_report,
-                "doctor_report": doctor_report,
-            },
-        )
-        raise
+    finally:
+        atomic_json(root / "runtime.json", payload)
+        print(json.dumps(payload), flush=True)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Create or repair the isolated rollingpebble py-roller runtime.")
+def main(argv=None):
+    parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", required=True)
-    parser.add_argument("--profile", choices=("auto", "cpu", "cu124"), default="auto")
+    parser.add_argument("--profile", default="auto")
     parser.add_argument("--skip-doctor", action="store_true")
+    parser.add_argument("--vocals", action="store_true")
+    parser.add_argument("--ensure", action="store_true")
+    parser.add_argument("--repair", action="store_true")
     args = parser.parse_args(argv)
-    install_runtime(Path(args.data_dir).expanduser().resolve(), args.profile, skip_doctor=args.skip_doctor)
+    install_runtime(Path(args.data_dir), args.profile, args.skip_doctor, vocals=args.vocals,
+                    ensure=args.ensure, repair=args.repair)
     return 0
 
 
-if __name__ == "__main__":  # pragma: no cover
+if __name__ == "__main__":
     raise SystemExit(main())

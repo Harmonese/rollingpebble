@@ -1,106 +1,86 @@
 from __future__ import annotations
 
+import json
 import shutil
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
-from rollingpebble.models import (
-    StorageMigrateRootResponse,
-)
+from rollingpebble.auto_timing.store import atomic_json
 from rollingpebble.paths import StorageLayout
+from rollingpebble.runtime.installer import install_runtime
+from rollingpebble.storage.location import select_root
+from rollingpebble.storage.transition import transfer, rewrite_artifacts, tree_digest
 
 
-class StorageMigrationMixin:
-    def migrate_root(self, root_id: str, target_path: str) -> StorageMigrateRootResponse:
-        if root_id not in {"projects", "models", "cache", "work"}:
-            raise ValueError(f"Storage root cannot be moved: {root_id}")
-        if self._running_jobs():
-            raise RuntimeError("Storage roots cannot be moved while jobs are running.")
-
-        source = self._root_path(root_id).expanduser().resolve()
-        target = Path(target_path).expanduser().resolve()
-        if source == target:
-            raise ValueError("Target path is already the active storage location.")
-        if self._is_relative_to(target, source) or self._is_relative_to(source, target):
-            raise ValueError("Target path cannot be inside the current storage root or contain it.")
-        target_parent = target.parent
-        target_parent.mkdir(parents=True, exist_ok=True)
-        if target.exists() and any(target.iterdir()):
-            raise ValueError("Target directory must be empty.")
-
-        source.mkdir(parents=True, exist_ok=True)
-        moved_bytes, file_count = self._tree_stats(source)
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-        tmp = target_parent / f".{target.name}.rollingpebble-migrate-{stamp}-{uuid.uuid4().hex[:8]}"
-        backup = source.parent / f"{source.name}.backup-{stamp}"
-        try:
-            shutil.copytree(source, tmp, symlinks=True)
-            if target.exists():
-                target.rmdir()
-            tmp.rename(target)
-            if source.exists() and not source.is_symlink():
-                backup_candidate = backup
-                index = 1
-                while backup_candidate.exists():
-                    backup_candidate = source.parent / f"{source.name}.backup-{stamp}-{index}"
-                    index += 1
-                source.rename(backup_candidate)
-                backup = backup_candidate
-            else:
-                backup = None
-        except Exception:
-            if tmp.exists():
-                shutil.rmtree(tmp, ignore_errors=True)
-            raise
-
-        settings = self.settings_store.read()
-        setattr(settings, self._settings_field_for_root(root_id), str(target))
-        self.settings_store.write(settings)
-        new_layout = StorageLayout.from_data_dir(
-            self.data_dir,
-            projects_root=settings.storage_projects_root or None,
-            models_root=settings.storage_models_root or None,
-            cache_root=settings.storage_cache_root or None,
-            runtime_root=settings.storage_runtime_root or None,
-            work_root=settings.storage_work_root or None,
-        ).ensure()
-        self.update_layout(new_layout)
-        usage = self.usage()
-        root = next(item for item in usage.roots if item.id == root_id)
-        return StorageMigrateRootResponse(
-            root=root,
-            old_path=str(source),
-            backup_path=str(backup) if backup else None,
-            moved_bytes=moved_bytes,
-            file_count=file_count,
-            usage=usage,
-        )
+def relocate(service, target_path: str, apply):
+    source = service.layout.app_root.resolve()
+    target = Path(target_path).expanduser()
+    if not target.is_absolute() or target.is_symlink():
+        raise ValueError("Choose an absolute directory")
+    target = target.resolve()
+    if target.is_relative_to(source) or source.is_relative_to(target):
+        raise ValueError("Storage locations overlap")
+    journal = source / ".relocation.json"
+    expected = {"target": str(target), "phase": "copying"}
+    if journal.exists():
+        existing = json.loads(journal.read_text())
+        if existing["target"] != str(target):
+            raise ValueError("Finish the pending storage relocation first")
+        expected = existing
+    elif target.exists() and any(target.iterdir()):
+        raise ValueError("Target directory must be empty")
+    atomic_json(journal, expected)
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("projects", "engine", "results", "recovery"):
+        if name in expected.get("transferred", []):
+            continue
+        transfer(source / name, target / name)
+        expected.setdefault("transferred", []).append(name)
+        expected.setdefault("digests", {})[name] = tree_digest(source / name)
+        atomic_json(journal, expected)
+    for name in ("settings.json", "workspace-bg"):
+        if (source / name).exists():
+            shutil.copy2(source / name, target / name)
+    rewrite_artifacts(target / "results", source, target)
+    install_runtime(target, vocals="vocals" in service.runtime_manager._read_runtime_metadata("auto").get("prepared_capabilities", []),
+                    ensure=True)
+    for name, digest in expected["digests"].items():
+        if tree_digest(source / name) != digest:
+            raise ValueError("Source data changed during relocation")
+    atomic_json(journal, {**expected, "phase": "verified"})
+    # Selection is durable before services switch; a later cleanup failure can be resumed.
+    atomic_json(target / ".relocation-cleanup.json", {"source": str(source)})
+    select_root(target)
+    service.update_layout(StorageLayout.from_data_dir(target).ensure())
+    apply()
+    finish_relocation(target)
+    return service.usage()
 
 
-    def _root_path(self, root_id: str) -> Path:
-        if root_id == "app":
-            return self.layout.app_root
-        if root_id == "projects":
-            return self.layout.projects_root
-        if root_id == "models":
-            return self.layout.models_root
-        if root_id == "cache":
-            return self.layout.cache_root
-        if root_id == "runtime":
-            return self.layout.runtime_root
-        if root_id == "work":
-            return self.layout.work_root
-        raise ValueError(f"Unknown storage root: {root_id}")
-
-
-    def _settings_field_for_root(self, root_id: str) -> str:
-        return {
-            "projects": "storage_projects_root",
-            "models": "storage_models_root",
-            "cache": "storage_cache_root",
-            "runtime": "storage_runtime_root",
-            "work": "storage_work_root",
-        }[root_id]
+def finish_relocation(target):
+    marker = target / ".relocation-cleanup.json"
+    if not marker.exists():
+        return
+    source = Path(json.loads(marker.read_text())["source"])
+    journal = source / ".relocation.json"
+    if source.exists():
+        if not journal.exists() or json.loads(journal.read_text()).get("target") != str(target):
+            raise ValueError("Relocation cleanup identity mismatch")
+        # Unknown files are preserved rather than swept into a recursive root removal.
+        saved = json.loads(journal.read_text())
+        for name in ("projects", "engine", "results", "recovery"):
+            remaining = tree_digest(source / name)
+            if any(saved["digests"].get(name, {}).get(path) != digest for path, digest in remaining.items()):
+                raise ValueError("Source data changed during relocation")
+        for name in ("projects", "engine", "results", "recovery", "runtime", "cache"):
+            path = source / name
+            if path.is_symlink():
+                raise ValueError("Refusing symbolic link cleanup")
+            if path.exists():
+                shutil.rmtree(path)
+        for name in ("settings.json", "workspace-bg", ".DS_Store", ".relocation.json"):
+            (source / name).unlink(missing_ok=True)
+        if not any(source.iterdir()):
+            source.rmdir()
+    marker.unlink()
 
 

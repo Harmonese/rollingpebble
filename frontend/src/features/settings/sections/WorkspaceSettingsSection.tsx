@@ -1,6 +1,11 @@
 import type React from "react";
-import { themeColor as themeColors, ThemeMode, type PreferenceAction as PrefAction, type PreferenceState as PrefState } from "../../../shared/preferences.js";
 import type { Language } from "../../../languages/index.js";
+import {
+    type PreferenceAction as PrefAction,
+    type PreferenceState as PrefState,
+    themeColor as themeColors,
+    ThemeMode,
+} from "../../../shared/preferences.js";
 import { ActionRow, CheckRow, FormGrid } from "../../../ui/index.js";
 import { ColorPicker } from "../ColorPicker.js";
 
@@ -16,7 +21,21 @@ export const WorkspaceSettingsSection: React.FC<{
     onBgUpload: (ev: React.ChangeEvent<HTMLInputElement>) => void;
     resetBg: () => void;
     resetDisplayPrefs: () => void;
-}> = ({ title, t, prefState, prefDispatch, hexInput, setHexInput, busy, bgInputRef, onBgUpload, resetBg, resetDisplayPrefs }) => (
+}> = (
+    {
+        title,
+        t,
+        prefState,
+        prefDispatch,
+        hexInput,
+        setHexInput,
+        busy,
+        bgInputRef,
+        onBgUpload,
+        resetBg,
+        resetDisplayPrefs,
+    },
+) => (
     <section className="settings-section">
         <h3>{title}</h3>
         <FormGrid columns={2}>
@@ -35,7 +54,8 @@ export const WorkspaceSettingsSection: React.FC<{
                 {t.general.themeMode}
                 <select
                     value={prefState.themeMode}
-                    onChange={(ev) => prefDispatch({ type: "themeMode", payload: Number(ev.target.value) as ThemeMode })}
+                    onChange={(ev) =>
+                        prefDispatch({ type: "themeMode", payload: Number(ev.target.value) as ThemeMode })}
                 >
                     <option value={ThemeMode.auto}>{t.general.themeModeAuto}</option>
                     <option value={ThemeMode.light}>{t.general.themeModeLight}</option>

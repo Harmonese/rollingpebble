@@ -1,18 +1,52 @@
 from __future__ import annotations
 
 import mimetypes
+import uuid
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse
 
 from rollingpebble.api.context import AppServices, async_service_call, open_folder, service_call, text_detail
 from rollingpebble.models import ApplyLyricsRequest, ProjectModel, SaveEditorRequest, WorkspaceSaveRequest, AudioMetadataRequest, MetaModel
 from rollingpebble.storage.files import resolve_audio_path
 from rollingpebble import job_kinds
+from rollingpebble.services.workspace_recovery import WorkspaceRecovery, RecoveryRecord
 
 
 def create_projects_router(services: AppServices) -> APIRouter:
     router = APIRouter()
+    recovery = WorkspaceRecovery(services.projects)
+
+    def check_recovery_origin(request: Request):
+        if request.headers.get("sec-fetch-site") == "cross-site":
+            raise HTTPException(403)
+        origin = request.headers.get("origin")
+        allowed = {str(request.base_url).rstrip("/"), "http://localhost:5173", "http://127.0.0.1:5173"}
+        if origin and origin not in allowed:
+            raise HTTPException(403)
+        if request.method != "GET" and request.headers.get("x-rollingpebble-client") != "workspace":
+            raise HTTPException(403)
+
+    @router.get("/api/workspace/recovery")
+    def read_recovery(request: Request):
+        check_recovery_origin(request)
+        return service_call(recovery.read)
+
+    @router.put("/api/workspace/recovery")
+    def write_recovery(request: Request, record: str = Form(...), audio: UploadFile | None = File(None)):
+        check_recovery_origin(request)
+        return service_call(lambda: recovery.write(RecoveryRecord.model_validate_json(record), audio))
+
+    @router.delete("/api/workspace/recovery")
+    def clear_recovery(request: Request):
+        check_recovery_origin(request)
+        recovery.clear()
+        return {"ok": True}
+
+    @router.get("/api/workspace/recovery/audio/{key}")
+    def recovery_audio(request: Request, key: uuid.UUID):
+        check_recovery_origin(request)
+        return FileResponse(service_call(lambda: recovery.audio(key)))
 
     @router.post("/api/projects", response_model=ProjectModel)
     async def create_project(audio: UploadFile = File(...)) -> ProjectModel:
@@ -75,7 +109,14 @@ def create_projects_router(services: AppServices) -> APIRouter:
 
     @router.delete("/api/projects/{project_id}")
     def delete_project(project_id: str) -> dict[str, str]:
-        service_call(lambda: services.projects.delete_project(project_id))
+        def remove():
+            if not services.jobs.resource_lock.acquire(blocking=False):
+                raise RuntimeError("Auto Timing resources are busy")
+            try:
+                services.projects.delete_project(project_id)
+            finally:
+                services.jobs.resource_lock.release()
+        service_call(remove)
         return {"deleted": project_id}
 
     return router

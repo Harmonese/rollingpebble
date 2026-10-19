@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import os
 from pathlib import Path
 
 from fastapi import UploadFile
@@ -8,6 +9,7 @@ from fastapi import UploadFile
 from rollingpebble.lyrics_utils import clean_plain_lyrics, is_lrc_metadata_line, normalize_newlines, strip_leading_timestamps
 
 from rollingpebble.models import ProjectModel
+from rollingpebble.storage.transaction import atomic_text
 
 PROJECT_JSON = "project.json"
 AUDIO_NAME = "audio"
@@ -93,7 +95,7 @@ def write_project(projects_root: Path, project: ProjectModel) -> None:
     root = project_dir(projects_root, project.project_id)
     root.mkdir(parents=True, exist_ok=True)
     stored = _project_for_storage(projects_root, project)
-    (root / PROJECT_JSON).write_text(stored.model_dump_json(indent=2), encoding="utf-8")
+    atomic_text(root / PROJECT_JSON, stored.model_dump_json(indent=2))
 
 
 def write_text(projects_root: Path, project_id: str, filename: str, text: str) -> Path:
@@ -122,6 +124,8 @@ async def save_upload_file(projects_root: Path, project_id: str, upload: UploadF
             if not chunk:
                 break
             out.write(chunk)
+        out.flush()
+        os.fsync(out.fileno())
     return destination
 
 

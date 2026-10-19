@@ -1,10 +1,16 @@
-import { convertTimeToTag, formatText, stringify, type IFormatOptions, type ILyric, type State as LrcEngineState } from "@lrc-maker/lrc-parser";
+import {
+    convertTimeToTag,
+    formatText,
+    type IFormatOptions,
+    type State as LrcEngineState,
+    stringify,
+} from "@lrc-maker/lrc-parser";
 import type { Action as LrcEngineAction } from "./useLyricsEngine.js";
 import { ActionType, type IState as LrcRuntimeState, useLrc } from "./useLyricsEngine.js";
 
 export type LyricsDocumentState = LrcRuntimeState;
 export type LyricsDocumentEngineState = LrcEngineState;
-export type LyricsDocumentLine = ILyric;
+export type LyricsDocumentLine = import("./translationDocument.js").TranslatedLine;
 export type LyricsDocumentAction = LrcEngineAction;
 export { ActionType as LyricsDocumentActionType };
 
@@ -59,4 +65,18 @@ export function lyricsDocumentSyncedText(
         return stringify(engineState, formatOptions);
     }
     return stringify({ ...engineState, info: new Map() } as LrcEngineState, formatOptions);
+}
+
+export function lyricsDocumentExport(
+    state: LyricsDocumentState,
+    mode: "original" | "translation" | "bilingual",
+    prefState: unknown,
+    metadata: boolean,
+) {
+    const lyric = state.lyric.flatMap(line =>
+        mode === "original" ? [line] : mode === "translation"
+            ? line.translation ? [{ ...line, text: line.translation }] : []
+            : [line, ...(line.translation ? [{ ...line, text: line.translation }] : [])]
+    );
+    return lyricsDocumentSyncedText({ ...state, lyric }, prefState, metadata);
 }

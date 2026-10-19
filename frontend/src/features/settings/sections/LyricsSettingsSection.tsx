@@ -1,6 +1,6 @@
 import type React from "react";
-import type { PreferenceAction as PrefAction, PreferenceState as PrefState } from "../../../shared/preferences.js";
 import type { Language } from "../../../languages/index.js";
+import type { PreferenceAction as PrefAction, PreferenceState as PrefState } from "../../../shared/preferences.js";
 import { CheckRow, FormGrid, SectionTitle } from "../../../ui/index.js";
 import { SpaceStepper } from "./SpaceStepper.js";
 

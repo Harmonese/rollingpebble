@@ -1,139 +1,257 @@
-# rollingpebble architecture
+# Architecture
 
-## Goal
+## Translation
 
-A local web application for lyrics lookup, automatic timing, manual editing, and LRCLIB publishing. The main workflow uses user-facing names such as **Lyrics Import** and **Auto Timing**. Technical engine names are reserved for Settings, command previews, logs, and diagnostics.
+Normal workspace lines carry stable IDs, optional translated text and source snapshots.
+Version 1 `lyric_document` accompanies the original LRC in project saves and temporary
+server-backed workspace recovery. Mismatched source LRC invalidates restoration rather than binding by
+position. Source comparison ignores only CRLF/CR/LF differences; rejected restoration
+does not erase the stored document merely by opening a project. Timing changes preserve identities; conservative text reconciliation keeps
+unique matches, asks before ambiguous losses and supports one-operation restoration.
+The bilingual Editor uses two continuous CodeMirror 6 documents with one logical line per
+stable lyric ID. Both show LRC timestamps; only the source can change timing. Transaction
+filters reject structural changes and protect translated timestamps. Same-size multi-line
+edits commit atomically through `editPair`, with shared local undo/redo; external document
+updates clear that history. Invalid source timestamps remain editable but block saving,
+navigation and export through the shared editor-draft guard.
+Natural wrapped heights are measured for all lines (including offscreen lines); line
+decorations add visual height without changing text or clipboard content. Both virtual
+height maps use the same heights, with synchronized scrolling and a preserved line anchor
+on resize. UI styles are scoped to the bilingual editor, using existing buttons and icons.
+Auto Timing Review remains separate. Translation updates ordinary dirty state without
+creating a persistent project.
 
-## Runtime
+`translation.py` owns independent session-only async tasks and versioned default translation instructions.
+Connection preferences persist an editable `prompt`; GET also returns `default_prompt` for reset.
+Each job captures its prompt at creation. Noneditable ID/JSON output rules are appended separately,
+and strict result validation still applies. Legacy settings without a prompt use the default.
+The `/api/translation` router checks application origin and write headers. Connections
+use `/chat/completions`, isolated proxy settings, finite timeouts, no redirects and no
+transcript logging. Keyring stores secrets per base URL, with explicit memory-only fallback.
+Results require an exact ID set; one format repair is allowed. Requests are idempotent,
+only one is active, and cancellation waits for HTTP shutdown. Frontend identity guards
+exclude timing changes but invalidate results after source/translation/workspace changes.
+No engine resource lock or permanent task directory is used.
 
-- Backend: FastAPI on `127.0.0.1:6789` by default.
-- Frontend: React/Vite, based on `lrc-maker`, served by Vite in development or by FastAPI from built static assets in production.
-- Data directory: `~/.local/share/rollingpebble` by default, or `LRC_ROLLER_DATA_DIR` / `--data-dir`.
-- Auto Timing runtime: an isolated per-profile virtual environment under the data directory, not the user's global `py-roller` installation.
+## Composition
 
-## Frontend asset resolution
+Tauri starts a local FastAPI sidecar on a random loopback port and opens its WebUI.
+React/Vite implements the workspace. The Python package also serves the same
+frontend without Tauri. macOS arm64 is the maintained desktop target.
 
-`create_app()` resolves static frontend assets in this order:
+`main.create_app()` composes ProjectService, RuntimeService, StorageService,
+JobManager and AutoTimingService through `api/context.AppServices`. Routers handle
+HTTP; services own persistence and process behavior. A shared StorageLayoutRef
+coordinates configurable roots.
 
-1. `LRC_ROLLER_FRONTEND_DIST` / explicit settings.
-2. Bundled wheel assets at `rollingpebble/frontend_dist`.
-3. Source-checkout assets at `frontend/dist`.
+Frontend assets resolve from an explicit path, packaged `frontend_dist`, then
+the source checkout's `frontend/dist`. Python distributions include frontend
+assets; desktop engine binaries are separate platform resources.
 
-This keeps source development (`pnpm build && rollingpebble`) and packaged releases compatible. Release packaging should copy `frontend/dist` to `backend/rollingpebble/frontend_dist` before building the Python distribution.
+## Workspace
 
-## Backend shape
+`app/projects/useProjectWorkspace` owns temporary audio, saved project identity,
+dirty state and save coordination. New Project resets transient state and draft identity after the save/discard guard. Audio replacement preserves lyrics while updating audio-owned metadata; manual and explicit lyric metadata (including empty values) are protected. Optional per-field metadata_sources persist this ownership; legacy nonempty fields are protected. Local and NetEase audio use the same transient import flow. Lyrics imports merge explicit metadata. Only Save
+Project and starting single-project Auto Timing create persistent projects.
 
-`rollingpebble.main.create_app()` is the composition root. It creates the shared service instances, wires storage-layout updates between services, includes domain routers from `rollingpebble.api`, and finally mounts the frontend SPA fallback when built assets are available.
+First saves use `PUT /api/projects/drafts/{draft_id}` with a stable UUID and staged
+publication. A lost response can be retried without creating another project.
+Subsequent saves upload audio only when changed. Project switching uses
+`ui/ConfirmDialog`; business flows never use browser-native confirmation.
 
-API handlers live in domain router modules:
+After the first project save, the workspace coordinator saves after 1 second of
+inactivity, with a 10-second ceiling during continuous valid edits. Manual saves,
+Ctrl/Command+S, transitions and desktop exit flush editor input and pending saves.
+Responses acknowledge only their captured signature; failures suspend automatic
+retries. Invalid editor input is retained in recovery, not committed to the project.
+Project saves use a durable redo journal under the project directory. Readers finish
+an interrupted transaction before loading LRC and structured translations together.
+New audio is published before committing its reference; superseded audio is removed
+after the transaction succeeds.
 
-- `api/health.py`
-- `api/projects.py`
-- `api/lyrics_sources.py`
-- `api/roller.py`
-- `api/jobs.py`
-- `api/settings.py`
-- `api/runtime.py`
-- `api/upload.py`
-- `api/storage.py`
+`GET/PUT/DELETE /api/workspace/recovery` manages one versioned record under `recovery/`
+alongside projects. PUT accepts a record and optional pending audio; audio keys are
+UUIDs managed by the backend. The record includes project/draft identity, the lyric
+snapshot, dirty state and unfinished editor text. It is not a project or cache.
+Saved audio is reused; a pending audio copy is released after project persistence.
+Desktop startup does not use origin-scoped localStorage for workspace recovery.
+The native shell negotiates close/quit through two restricted commands available
+only to the main window at its current loopback origin; the backend remains alive
+until saving completes or the user explicitly discards.
 
-The router layer translates HTTP concerns into service calls. Business rules stay in `services/`, shared job-kind strings live in `job_kinds.py`, and storage roots are coordinated through a single `StorageLayoutRef`.
+The normal lyric reducer owns selection, timestamp edits, mark snapshots and
+bounded insertion/deletion undo. Preview creates a separate reducer instance.
+Only the visible editor is mounted, so keyboard handlers cannot edit both
+documents. Player state is shared, but preview editing is disabled when its
+source project/audio no longer matches.
 
-Long-running work is split into focused job modules:
+## Protocol v2
 
-- `jobs.py` exposes the public `JobManager` API.
-- `jobs_store.py` owns in-memory job retention and lookup.
-- `jobs_runner.py` owns subprocess lifecycle, cancellation, callbacks, and completion state.
-- `jobs_progress.py` parses py-roller protocol v1 JSONL events.
-
-Runtime management lives under `rollingpebble.runtime`:
-
-- `runtime/manager.py` inspects runtimes and builds runtime commands.
-- `runtime/service.py` exposes the runtime facade used by API routers.
-- `runtime/settings.py` owns runtime settings read/update/reset behavior.
-- `runtime/jobs.py` owns runtime job policy and subprocess submission.
-- `runtime/results.py` owns doctor/install/upgrade/cache result persistence.
-- `runtime/installer.py`, `runtime/dependencies.py`, `runtime/recipe.py`, `runtime/python.py`, `runtime/environment.py`, and `runtime/constants.py` hold the isolated-runtime implementation details.
-
-Runtime code is imported directly from `rollingpebble.runtime`; older root-level `runtime_*` and `services/runtime_*` compatibility shims have been removed.
-
-Storage is also split behind a stable `StorageService` facade:
-
-- `services/storage_service.py` wires storage state and exposes the existing public API.
-- `services/storage_usage.py` computes usage summaries and browsable project/model/runtime/other items.
-- `services/storage_migration.py` moves configured storage roots and updates persisted settings.
-- `services/storage_cleanup.py` builds cleanup plans, validates deletion boundaries, and applies deletions.
-- `services/storage_shared.py` holds storage cleanup constants and cached-plan metadata.
-
-The API layer receives an `AppServices` object from `api/context.py`. It is intentionally a composition boundary for already-built application services; routers do not create services themselves.
-
-## Integration choices
-
-### pylrclib
-
-`pylrclib` is imported directly. The backend uses:
-
-- `pylrclib.api.ApiClient`
-- `pylrclib.models.TrackMeta`
-- `pylrclib.models.LyricsBundle`
-- `pylrclib.workflows.up.build_upload_plan`
-
-This keeps search/get/upload-plan/upload structured and avoids parsing CLI output. Requests use an `rollingpebble/<version>` User-Agent so LRCLIB traffic can be traced during diagnostics.
-
-### Auto Timing engine
-
-The user-facing feature is **Auto Timing**. The technical engine is `py-roller`.
-
-`py-roller` is invoked through the isolated runtime Python as a subprocess worker, for example:
-
-```bash
-/path/to/runtime/.venv/bin/python -m pyroller.cli.main run --request request.json --progress-format jsonl --output-format json
-```
-
-The command runs outside the FastAPI request path. Rolling Pebble talks to the engine through py-roller protocol v1 JSON request files, final JSON reports, and `PYROLLER_EVENT` JSONL progress events. Logs, structured progress, final reports, and cancel state are captured into an in-memory job object and exposed through `/api/jobs/{job_id}`. Runtime installation and doctor jobs are protected against concurrent install/check requests to avoid corrupting the isolated virtual environment.
-
-## API summary
-
-- Health: `GET /api/health`
-- Projects: `PUT /api/projects/drafts/{draft_id}` (workspace save), `POST /api/audio/metadata` (text-only metadata rules), `POST /api/projects` (legacy audio creation), `GET /api/projects`, `GET /api/projects/{project_id}`, `GET /api/projects/{project_id}/audio`, `POST /api/projects/{project_id}/open-folder`, `POST /api/projects/{project_id}/lyrics`, `POST /api/projects/{project_id}/editor`, `DELETE /api/projects/{project_id}`
-- Lyrics sources: `POST /api/lrclib/search`, `POST /api/lrclib/get`, `POST /api/lrclib/id`, `POST /api/netease/search`, `POST /api/netease/resolve`, `GET /api/netease/lyrics/{song_id}`, `GET /api/netease/audio/{song_id}`
-- Auto Timing: `POST /api/projects/{project_id}/roll/preview`, `POST /api/projects/{project_id}/roll`, `POST /api/batch/preview`, `POST /api/batch/roll`
-- Jobs: `GET /api/jobs/{job_id}`, `POST /api/jobs/{job_id}/cancel`, `POST /api/jobs/{job_id}/open-folder`
-- Settings: `GET /api/settings`, `POST /api/settings`, `POST /api/settings/reset-defaults`, workspace background endpoints, and `POST /api/local/select-path`
-- Runtime: `GET /api/runtime/auto-roller`, `POST /api/runtime/auto-roller/doctor`, `POST /api/runtime/auto-roller/install`, `POST /api/runtime/auto-roller/upgrade`, `POST /api/runtime/auto-roller/cache-model`
-- Upload: `POST /api/projects/{project_id}/upload/plan`, `POST /api/projects/{project_id}/upload/run`
-- Storage: usage, root migration, open-folder, and cleanup preview/run endpoints under `/api/storage`
-
-## Desktop composition
-
-The Tauri shell chooses a loopback port, starts the Python backend and opens its URL in a native WebView. Production packaging supplies a PyInstaller sidecar and a standalone Python used to create isolated runtime environments. See [Desktop packaging](DESKTOP.md) for the supported platform and resource lifecycle.
-
-## Workspace persistence
-
-`app/projects/useProjectWorkspace` owns temporary audio, saved project identity, lyrics, source metadata, dirty state and save coordination. Audio import reads tags in the frontend and applies filename rules through a metadata-only request; it does not upload the audio. Lyrics imports change the editor and source information. Save Project and single-project Auto Timing share the persistence operation.
-
-`PUT /api/projects/drafts/{draft_id}` accepts optional audio and a JSON snapshot in multipart form data. It publishes a complete staged directory and uses a UUID draft identity to avoid duplicates after a lost response. Existing projects update through the lyrics endpoint without re-uploading audio. A first-time save does not re-import returned text into the editor. Task results are applied to the visible editor only when its workspace identity and content still match the task's origin.
-
-`ui/ConfirmDialog` provides asynchronous decisions using the existing Modal, Button and DialogActionRow components. Modal focus and keyboard handling belong to the topmost modal; business actions do not use browser-native confirm dialogs. Project-list and storage deletion notify the workspace and project list through a shared event.
-
-Audio import preserves the current lyric document and project association. A session audio revision participates in dirty-state and job-result matching. Existing projects save pending audio through `PUT /api/projects/{project_id}/audio` with the workspace snapshot; replacement is staged before publication and removes the superseded project-local audio. Ordinary lyric saves do not upload audio again. Existing text metadata is retained, empty fields are filled from audio tags, and duration follows playback metadata.
-
-Draft persistence identity is separate from playback/workspace revision and survives audio changes. A failed initial save probes the stable project identity before retrying. Lyrics imports merge explicit metadata tags over existing tags; project loading replaces the entire document. Online audio URLs are playback previews, not persisted project audio.
-
-## Frontend layout
+The desktop pins py-roller 0.10.2, source commit `39dbbf8`. The compatibility
+gate accepts `>=0.10.2,<0.11` with protocol 2. There is no v1 fallback.
 
 ```text
-left:  Project + Lyrics Import
-center: lrc-maker Synchronizer / Editor
-right: Auto Timing + Upload
-settings: Auto Timing Runtime / diagnostics / install profile
+runtime-python -m pyroller run --request /absolute/run/request.json
 ```
 
-The center keeps lrc-maker's line-based editor, waveform/audio footer, shortcut system, and manual synchronization flow.
+`auto_timing/contracts.py` validates public options. `protocol.py` owns request
+input normalization and strict JSONL envelope validation. It checks version,
+engine identity, request identity, sequence, revision and line/time fields.
+Repeated events are ignored. Snapshots replace the entire revision; occurrence
+IDs are not stable across revisions. Unknown stages/events remain diagnostics.
 
-## Runtime commands
+Success requires a completed event, exit code zero, a final snapshot, valid
+artifact paths inside the output directory, matching alignment identity and
+times, and an LRC consistent with the final alignment. Empty success is legal.
+A startup failure with an engine-generated request ID is diagnostic only.
+Malformed JSON or conflicting terminal states cannot become success.
 
-- `rollingpebble dev`: start backend and Vite frontend for development. CLI host/port/data-dir are forwarded to the uvicorn child process through environment variables.
-- `rollingpebble serve`: start the local server, serving built frontend assets when available.
-- `rollingpebble setup --profile auto`: run frontend install and create/repair the isolated `py-roller` runtime.
-- `rollingpebble doctor`: inspect package, frontend, pylrclib, and isolated runtime status.
+Ordered snapshots contain timed lines and unaligned lines keyed by the submitted
+input_line_index. Both arrays are validated and replaced together. The review
+merges them in input order, retaining unresolved rows without timestamps; drafts
+keep independent host IDs. Unordered preserves the occurrence-discovery workflow.
+Requests always send alignment_mode. Existing settings and old runs without the
+field are interpreted as unordered, while new installations default to ordered.
+
+The host uses no private py-roller algorithm modules or research configuration.
+Whisper finds sung occurrences; CTC refines their times. English is the supported
+input language. The host never represents scores as accuracy or verification.
+
+## Execution and Persistence
+
+`auto_timing/service.py` freezes plain input and an audio digest, creates a
+task-specific hard link (or cross-device copy), and starts a process group.
+The engine creates its own output directory. stdout JSONL and stderr are read
+concurrently; full streams are persisted while status requests remain compact.
+Audio snapshots are released after exit, including cancellation/failure.
+
+Cancellation transitions to Cancelling and sends termination, escalating after
+eight seconds. The global resource lock stays held until the process exits.
+Inference, model operations, runtime installation and storage migration/cleanup
+share that lock. Queue workers run one child at a time; a failed child does not
+stop later children.
+
+`auto_timing/store.py` writes records/drafts atomically under
+`results/<project>/<run>/`. Draft writes require the expected version.
+On restart active records become Interrupted; known orphan engine processes are
+matched by their unique request path and terminated on macOS before releasing
+temporary audio. Queues never resume silently. Engine evidence lock directories
+are never automatically removed.
+
+Run records retain configuration, input identity, latest snapshot, errors,
+artifact locations and application history. Batch parents retain child IDs.
+Result deletion is explicit and updates the parent's child list.
+
+## Preview and Apply
+
+`useTimingPreview` follows engine revisions until the first content/time edit.
+The first edit freezes a host-owned draft with stable internal row IDs. Selection
+and marks do not freeze it. Draft saves serialize with optimistic versions; a
+lost response is recoverable only when the stored payload matches our attempt.
+
+Use Latest confirms discarding edits. Apply is available only after termination:
+completed results apply normally; failed/cancelled/interrupted results require
+Partial confirmation. Empty results and changed workspace lyrics also require
+confirmation. Project, audio identity and workspace revision are rechecked after
+asynchronous operations and before replacement.
+
+Apply imports only text/timing into the current workspace, preserves metadata
+and audio, resets marks/undo and marks the workspace dirty. The ordinary workspace
+autosave coordinator persists this change for an existing project.
+Opening a batch result first uses the normal project-switch save flow.
+
+## API
+
+| Route | Purpose |
+| --- | --- |
+| POST /api/auto-timing/preflight | Input, runtime and model checks |
+| POST /api/auto-timing/runs | Start a saved input version |
+| GET /api/auto-timing/runs | Compact history, optionally filtered by project |
+| GET /api/auto-timing/runs/{id} | State, progress and latest snapshot |
+| POST /api/auto-timing/runs/{id}/cancel | Cancel and wait asynchronously |
+| GET/PUT /api/auto-timing/runs/{id}/draft | Versioned editable preview |
+| GET /api/auto-timing/runs/{id}/binding | Current project/audio match |
+| POST /api/auto-timing/runs/{id}/applied | Record application, without saving lyrics |
+| GET /api/auto-timing/runs/{id}/diagnostics | Bounded stderr tail and result path |
+| GET /api/auto-timing/runs/{id}/lrc | Completed engine LRC |
+| DELETE /api/auto-timing/runs/{id} | Explicit result/draft removal |
+| POST /api/auto-timing/batches | Create serial queue |
+| GET /api/auto-timing/batches/{id} | Parent and child summaries |
+| POST .../batches/{id}/cancel, retry, resume | Cancel, retry failures, continue interrupted items |
+| GET/POST /api/auto-timing/models | Host integrity status; verify/download/repair/remove selected models |
+| POST /api/runtime/auto-roller/ensure | Automatic component check/preparation and repair |
+| GET /api/storage/usage | Five exclusive storage categories |
+| POST /api/storage/cache/clear | Clear known temporary and inference cache |
+| POST /api/storage/relocate | Verify and switch the entire data root |
+
+Old roll/batch-preview endpoints return 410. Removed storage and runtime management routes are not registered. Runtime maintenance
+still uses `/api/runtime/auto-roller` and `/api/jobs`. Project, lookup, upload
+and storage APIs retain their existing responsibilities. LRCLIB uses pylrclib's
+structured Python API.
+
+## Runtime and Distribution
+
+The managed environment lives in `runtime/venv`; successful layout migration removes old owned environments.
+`runtime/preparation.py` coordinates idempotent preparation for desktop startup, Settings and Start.
+`POST /api/runtime/auto-roller/ensure` accepts only original/vocals capability and repair intent;
+the status response includes preparation state, capabilities and job ID. Concurrent requests
+share a task, with Vocals escalation after the base process exits. Other resource owners cause
+a busy response. Old install/upgrade/doctor/vocals-install writes return 410.
+
+The desktop's React StartupGate reuses the existing startup illustration and animation,
+requests the saved audio capability, and mounts the workspace after readiness. Failure permits
+repair or continuing to manual editing. The runtime response advertises startup_preparation
+only when app resources are configured; unbundled WebUI users are not forced into installation.
+Each backend session checks the first requested capability; a frontend reload reuses that check. Persisted bundle fingerprints detect
+updates; compatible matching installations are reused, explicit repair recreates the managed
+venv, and interrupted installations are rebuilt on next preparation. Preparation never downloads
+models or falls back to system Python. App shutdown cancels and waits for the preparation process.
+Start retains a cancellable workspace/options identity and revalidates it after preparation;
+repair does not resume a failed start intent.
+
+`runtime/installer.py` installs only hashed wheels from bundled resources,
+offline. Runtime health uses doctor.runtime_ok independently of model readiness.
+Model downloads are explicit. One `StartupGate` owns runtime readiness, model checks,
+issue prompts and downloads, keeping the illustration mounted across phases. Environment
+failures can bypass model checks and enter manual editing directly. Fresh installations
+offer all three models; every later startup reports missing, corrupt and failed checks
+using the backend `startup_issues` list, shared with Settings. Declining/closing skips only
+the current launch. The onboarding flag controls the initial prompt form, independently
+of preference reset; existing settings without this field count as upgrades.
+
+`auto_timing/model_catalog.py` pins required files, sizes, SHA-256, official revisions and
+ModelScope upload commits. The host downloads these files directly without an additional
+SDK. `model_service.py` owns installation receipts, session integrity, transactional
+replacement and model status. Every backend session hashes installed managed files fully;
+subsequent inference checks reuse only unchanged file signatures. Explicit model paths
+remain under engine compatibility checks. Single/batch preflight rejects unchecked managed
+models and always forces engine offline mode, including old configurations with offline=false.
+
+Model operations use cancellable host workers in JobManager, the existing job API and the
+shared resource lock. Terminal cancellation is published only after the worker has exited
+its file/network operations. Downloads snapshot source/proxy preferences and explicitly
+disable inherited proxies when direct. Validated Range responses permit resume, bounded
+retries retain partials, and full hashes gate publication. Staging lives in cache/model-downloads;
+the installed model stays usable until the entire replacement passes. A sibling .previous
+directory recovers interrupted publication. Receipts under engine/models distinguish
+intentional deletion from unexpected loss, but neither suppresses startup reminders.
+No persistent hash result substitutes for startup hashing. Phase-local `completed/total`
+measure aggregate bytes; `bytes_downloaded/bytes_total` measure the current model.
+Checking, downloading and final verification reset their own counters. New staged files
+are fully hashed once during visible final verification before publication. Cached session
+checks do not claim to read bytes again. Poll recovery observes the same job; cancellation
+waits for worker exit. External paths use the public engine model inventory and suppress
+managed-copy prompts. Network timeouts are 1–30 seconds; old larger preferences clamp to 30.
+
+One `StorageLayout` derives projects, engine, runtime, results and cache from the
+selected application root. `services/storage_inventory.py` supplies exclusive
+five-category accounting. Auto Timing settings owns all model operations;
+Storage owns root relocation, cache cleanup and project/result management.
+The location pointer is outside preferences. One-time layout transactions remove
+old owned data after runtime verification; ordinary reads have no cleanup side effects.
+
+`desktop/prepare_engine.py` builds the pinned source wheel on the build machine,
+resolves target dependencies into a hashed wheelhouse, extracts FFmpeg and
+audits native binaries. `build_resources.py` builds a fresh PyInstaller sidecar
+using standalone Python. No end-user source compilation is permitted.
+See [desktop packaging](DESKTOP.md) and [validation](AUTO_TIMING_VALIDATION.md).

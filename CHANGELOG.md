@@ -6,6 +6,40 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-19
+
+### Added
+
+- Translation through local or cloud OpenAI-compatible services: whole-song translation, single-line retranslation, editable translation instructions, strict line-ID output validation and cancellable requests. Credentials use the system keychain with explicit session-only fallback; translation has independent proxy settings.
+- Two continuous LRC editors with timestamps, aligned wrapped lines, synchronized scrolling and per-column copy/download. Translations share the original timeline, persist with stable line identities, and appear beneath original lyrics in the Synchronizer. Ambiguous restructuring requires confirmation; changed source text marks translations for review.
+- Project autosave after the first save, Ctrl/Command+S, save status and explicit failure retry. A single server-backed recovery workspace retains pending audio, translations and unfinished editor text across restarts. Desktop close/quit waits for saves or an explicit discard.
+- New Project and Replace Audio actions. Audio-owned metadata follows replacement audio while manual and imported fields, including deliberately empty values, remain protected.
+- Independent Auto Timing Review with persistent editable drafts, Use Latest, Partial Apply, LRC export and result history. Host-managed serial batches support failed-item retries and explicit continuation after interruption.
+- Pinned ModelScope and official model sources, HTTP(S) proxy settings, resumable downloads, real byte progress and targeted repair. Startup verifies installed models with full offline SHA-256 and reports missing, damaged or unreadable models.
+
+### Changed
+
+- Replaced protocol v1 with py-roller 0.10.2 / Protocol v2. Auto Timing remains Experimental and English-only, with Original/Vocals and CTC Auto/CPU/MPS. New installations default to Ordered; existing settings retain Unordered. Ordered results preserve unresolved lyrics for manual timing.
+- Auto Timing results no longer overwrite project lyrics automatically. Apply updates the workspace through normal autosave; review drafts remain independent. Audio changes make old reviews read-only without discarding them.
+- Bundled Python 3.12.15, FFmpeg and hashed engine dependency wheels for macOS arm64. Component preparation is offline and automatic, with no end-user compiler or Homebrew requirement. Model weights remain explicit downloads.
+- Unified startup environment/model stages and progress. Settings exposes model operations and collapsed diagnostics instead of manual runtime management. Missing models are reported on later launches even after deletion or skipping setup.
+- Consolidated storage into one application root for projects, recovery, engine, runtime, results and cache. Storage uses shared settings controls; model operations belong to Auto Timing. Successful layout migration removes obsolete application-owned directories. Automatic project expiry and permanent relocation backups were removed.
+- Refined timing progress, compact result lists, metadata alignment and Translation controls using existing UI styles. Model download timeouts are consistently limited to 1–30 seconds.
+
+### Fixed
+
+- Preserved saved translations across LRC line-ending differences; loading inconsistent source data no longer erases the stored translation document.
+- Made project commits recoverable so interrupted saves cannot expose mixed LRC, translation and metadata versions. Save responses acknowledge only their captured snapshot; newer edits remain pending.
+- Protected task results, draft saves and workspace transitions against stale responses, audio replacement and concurrent edits. Cancellation retains resource ownership until workers actually stop.
+- Validated protocol identity, sequence, revisions, terminal state, exit code and output boundaries before accepting engine results; checked final alignment against LRC.
+- Fixed review sizing, duplicated backgrounds and empty-running presentation. Read-only review retains the normal Synchronizer/Editor layout and cannot manipulate replacement audio.
+- Routed external HTTP(S) links to the default browser in the desktop app, including Open Wiki, song pages and About links.
+
+### Distribution Notes
+
+- Desktop artifacts target macOS arm64, macOS 14 or newer. They use ad-hoc signing and are not Apple-notarized. Other desktop platforms remain unvalidated.
+- Python distributions include the backend and WebUI, not the platform-specific engine wheelhouse, standalone interpreter or model weights.
+
 ## [0.7.4] - 2026-10-10
 
 ### Added

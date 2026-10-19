@@ -126,7 +126,7 @@ def test_replace_audio_failure_keeps_saved_workspace(tmp_path: Path, monkeypatch
     original = asyncio.run(service.save_workspace(str(uuid.uuid4()), UploadFile(io.BytesIO(b"old"), filename="song.wav"), snapshot))
     def fail(*args, **kwargs):
         raise OSError("disk full")
-    monkeypatch.setattr(ProjectService, "apply_lyrics", fail)
+    monkeypatch.setattr(ProjectService, "_save_snapshot", fail)
     with pytest.raises(OSError, match="disk full"):
         asyncio.run(service.replace_workspace_audio(original.project_id, UploadFile(io.BytesIO(b"new"), filename="song.wav"), snapshot))
     assert service.get(original.project_id).synced_lyrics == snapshot.synced_lyrics
@@ -151,3 +151,32 @@ def test_audio_replacement_waits_for_running_jobs(tmp_path: Path, monkeypatch: p
     response = client.put("/api/projects/example/audio", data={"snapshot": "{}"}, files={"audio": ("song.wav", b"new")})
     assert response.status_code == 409
     assert client.get("/api/projects").json() == []
+
+
+def test_metadata_sources_survive_save_replace_and_reload(tmp_path: Path) -> None:
+    client = TestClient(create_app(Settings(data_dir=tmp_path)))
+    snapshot = {
+        "metadata": {"track": "First", "artist": "", "album": "From lyrics"},
+        "metadata_sources": {"track": "audio", "artist": "manual", "album": "lyrics"},
+        "synced_lyrics": "[00:01.00]Keep",
+    }
+    def save_new(name: str):
+        return client.put(f"/api/projects/drafts/{uuid.uuid4()}",
+                          data={"snapshot": json.dumps(snapshot)}, files={"audio": (name, b"audio")}).json()
+    first = save_new("first.wav")
+    second = save_new("second.wav")
+    assert first["project_id"] != second["project_id"]
+    snapshot["metadata"]["track"] = "Replacement"
+    response = client.put(f'/api/projects/{first["project_id"]}/audio',
+                          data={"snapshot": json.dumps(snapshot)}, files={"audio": ("replace.wav", b"new")})
+    assert response.status_code == 200, response.text
+    reopened = client.get(f'/api/projects/{first["project_id"]}').json()
+    assert reopened["metadata_sources"] == snapshot["metadata_sources"]
+    assert reopened["metadata"]["artist"] == ""
+    assert reopened["metadata"]["track"] == "Replacement"
+    assert reopened["synced_lyrics"] == snapshot["synced_lyrics"]
+    assert client.get(f'/api/projects/{second["project_id"]}').json()["metadata"]["track"] == "First"
+    # Older API callers do not erase saved provenance when they omit the new field.
+    response = client.post(f'/api/projects/{first["project_id"]}/lyrics', json={"synced_lyrics": "Edited"})
+    assert response.json()["metadata_sources"] == snapshot["metadata_sources"]
+    assert len(client.get("/api/projects").json()) == 2

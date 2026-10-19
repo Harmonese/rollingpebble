@@ -1,68 +1,52 @@
-from __future__ import annotations
-
 from fastapi import APIRouter
-
-from rollingpebble.api.context import AppServices, open_folder, service_call
-from rollingpebble.models import (
-    StorageCleanupPlanResponse,
-    StorageCleanupPreviewRequest,
-    StorageCleanupRunRequest,
-    StorageCleanupRunResponse,
-    StorageMigrateRootRequest,
-    StorageMigrateRootResponse,
-    StorageOpenModelRequest,
-    StorageOpenOtherRequest,
-    StorageOpenRuntimeRequest,
-    StorageUsageResponse,
-)
+from pydantic import BaseModel, ConfigDict
+from rollingpebble.api.context import open_folder, service_call
+from rollingpebble.models import StorageUsageResponse
+from rollingpebble.services.storage_migration import relocate
 
 
-def create_storage_router(services: AppServices) -> APIRouter:
+class RelocateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    path: str
+
+
+def create_storage_router(services):
     router = APIRouter()
 
-    @router.post("/api/storage/projects/open-folder")
-    def open_projects_folder() -> dict[str, str]:
-        folder = services.storage.layout.projects_root
-        folder.mkdir(parents=True, exist_ok=True)
-        return open_folder(folder)
-
-    @router.post("/api/storage/open-folder")
-    def open_storage_folder() -> dict[str, str]:
-        folder = services.storage.layout.app_root
-        folder.mkdir(parents=True, exist_ok=True)
-        return open_folder(folder)
+    def exclusive(action):
+        if not services.jobs.resource_lock.acquire(blocking=False):
+            raise RuntimeError("Auto Timing resources are busy")
+        try:
+            return action()
+        finally:
+            services.jobs.resource_lock.release()
 
     @router.get("/api/storage/usage", response_model=StorageUsageResponse)
-    def storage_usage() -> StorageUsageResponse:
+    def usage():
         return services.storage.usage()
 
-    @router.post("/api/storage/migrate-root", response_model=StorageMigrateRootResponse)
-    def storage_migrate_root(request: StorageMigrateRootRequest) -> StorageMigrateRootResponse:
-        def migrate() -> StorageMigrateRootResponse:
-            result = services.storage.migrate_root(request.root_id, request.target_path)
-            services.apply_storage_layout()
-            return result
+    @router.post("/api/storage/open-folder")
+    def open_root():
+        return service_call(lambda: open_folder(services.storage.data_dir))
 
-        return service_call(migrate)
+    @router.post("/api/storage/cache/clear", response_model=StorageUsageResponse)
+    def clear():
+        return service_call(lambda: exclusive(services.storage.clear_cache))
 
-    @router.post("/api/storage/models/open-folder")
-    def open_model_folder(request: StorageOpenModelRequest) -> dict[str, str]:
-        return service_call(lambda: open_folder(services.storage.model_item_path(request.model_id)))
-
-    @router.post("/api/storage/runtimes/open-folder")
-    def open_runtime_folder(request: StorageOpenRuntimeRequest) -> dict[str, str]:
-        return service_call(lambda: open_folder(services.storage.runtime_item_path(request.runtime_id)))
-
-    @router.post("/api/storage/other/open-folder")
-    def open_other_folder(request: StorageOpenOtherRequest) -> dict[str, str]:
-        return service_call(lambda: open_folder(services.storage.other_item_open_path(request.relative_path)))
-
-    @router.post("/api/storage/cleanup/preview", response_model=StorageCleanupPlanResponse)
-    def storage_cleanup_preview(request: StorageCleanupPreviewRequest) -> StorageCleanupPlanResponse:
-        return service_call(lambda: services.storage.preview(request))
-
-    @router.post("/api/storage/cleanup/run", response_model=StorageCleanupRunResponse)
-    def storage_cleanup_run(request: StorageCleanupRunRequest) -> StorageCleanupRunResponse:
-        return service_call(lambda: services.storage.run(request), not_found=(FileNotFoundError, KeyError))
+    @router.post("/api/storage/relocate", response_model=StorageUsageResponse)
+    def move(request: RelocateRequest):
+        def perform():
+            services.storage.relocating = True
+            services.storage.migration = {"status": "moving", "target": request.path}
+            try:
+                relocate(services.storage, request.path, services.apply_storage_layout)
+                services.storage.migration = {"status": "idle"}
+                return services.storage.usage()
+            except Exception:
+                services.storage.migration = {"status": "failed", "target": request.path}
+                raise
+            finally:
+                services.storage.relocating = False
+        return service_call(lambda: exclusive(perform))
 
     return router

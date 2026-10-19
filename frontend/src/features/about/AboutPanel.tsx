@@ -66,6 +66,8 @@ export const AboutPanel: React.FC<{ open: boolean; onClose: () => void }> = ({ o
             <section className="about-section">
                 <h3>{a.coreHotkeys}</h3>
                 <dl className="about-hotkeys">
+                    <dt>Ctrl / ⌘ + S</dt>
+                    <dd>{lang.ui.saveProject}</dd>
                     <dt>Space</dt>
                     <dd>{a.hotkeySpace}</dd>
                     <dt>Delete / Backspace</dt>

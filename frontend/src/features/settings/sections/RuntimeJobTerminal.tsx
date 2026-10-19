@@ -204,9 +204,7 @@ export const RuntimeJobTerminal: React.FC<{
                 <b>{tr.exitCode}</b>
                 <span>{job.return_code ?? tr.na}</span>
             </KeyValueList>
-            {successMessage && (
-                <MessageText type="success">{successMessage}</MessageText>
-            )}
+            {successMessage && <MessageText type="success">{successMessage}</MessageText>}
             {job.status === "failed" && (
                 <MessageText type="error">
                     {job.error_message

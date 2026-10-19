@@ -18,6 +18,7 @@ export const ProjectSummary: React.FC<{
     draftMetadata?: ProjectModel["metadata"];
     draftSource?: string;
     saved: boolean;
+    status?: string;
     labels: {
         id: string;
         audio: string;
@@ -33,7 +34,7 @@ export const ProjectSummary: React.FC<{
         sourceLocalFile: string;
         sourceAutoTiming: string;
     };
-}> = ({ project, draftAudioName, draftMetadata, draftSource, saved, labels }) => {
+}> = ({ project, draftAudioName, draftMetadata, draftSource, saved, status, labels }) => {
     if (!project && !draftAudioName && !draftMetadata) return null;
     const metadata = draftMetadata || project?.metadata || { track: "", artist: "", album: "", duration: 0 };
     const source = draftSource || project?.source || "manual";
@@ -52,7 +53,7 @@ export const ProjectSummary: React.FC<{
             <b>{labels.lyricsSource}</b>
             <span>{formatLyricsSource(source, labels)}</span>
             <b>{labels.projectStatus}</b>
-            <span>{saved ? labels.saved : labels.unsaved}</span>
+            <span role="status">{status || (saved ? labels.saved : labels.unsaved)}</span>
         </KeyValueList>
     );
 };

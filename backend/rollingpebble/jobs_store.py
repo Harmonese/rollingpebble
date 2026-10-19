@@ -15,6 +15,7 @@ class ManagedJob:
     thread: threading.Thread | None = None
     process: subprocess.Popen[str] | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
+    cancel_event: threading.Event | None = None
 
 
 class JobStore:
@@ -43,7 +44,7 @@ class JobStore:
         removable: list[tuple[str, str]] = []
         for job_id, managed in self._jobs.items():
             status = managed.model.status
-            if status not in {JobStatus.queued, JobStatus.running}:
+            if status not in {JobStatus.queued, JobStatus.running, JobStatus.cancelling}:
                 removable.append((managed.model.updated_at or managed.model.started_at or "", job_id))
         removable.sort()
         for _, job_id in removable[:overflow]:
