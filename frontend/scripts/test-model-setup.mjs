@@ -18,7 +18,7 @@ let slots,
     pendingDownload,
     pendingCheck,
     releaseCancel;
-let bundled, pollFailure, cancelFailure;
+let bundled, pollFailure, cancelFailure, locale = "en-US";
 const react = {
     useState(initial) {
         const index = cursor++;
@@ -31,7 +31,7 @@ const react = {
         return slots[cursor++] ??= { current: value };
     },
     useContext() {
-        return { lang };
+        return { lang, prefState: { lang: locale } };
     },
     useEffect(fn, deps) {
         const index = cursor++, previous = slots[index];
@@ -97,7 +97,13 @@ new Function("require", "exports", compiled)(name => {
     if (name.includes("api/request")) return { backendMessageText: e => String(e) };
     if (name.includes("format")) return { formatBytes: value => String(value) };
     if (name.includes("ui/index")) {
-        return { Button: "Button", Modal: "Modal", MessageText: "Message", DialogActionRow: "Actions" };
+        return {
+            CheckRow: "CheckRow",
+            Button: "Button",
+            Modal: "Modal",
+            MessageText: "Message",
+            DialogActionRow: "Actions",
+        };
     }
     return {};
 }, exports);
@@ -112,12 +118,13 @@ function reset({ upgrade = false, broken = false } = {}) {
     failSave = false;
     pendingDownload = false;
     pendingCheck = false;
+    locale = "en-US";
     bundled = true;
     pollFailure = false;
     cancelFailure = false;
     report = {
         onboarding_complete: upgrade,
-        models: ["whisper", "ctc", "demucs"].map(kind => ({
+        models: ["whisper", "ctc", "demucs", "ctc-zh", "ctc-mul"].map(kind => ({
             kind,
             status: broken ? kind === "demucs" ? "corrupt" : "ready" : "missing",
             repair_needed: broken && kind === "demucs",
@@ -125,7 +132,9 @@ function reset({ upgrade = false, broken = false } = {}) {
         })),
     };
     report.external_models = [];
-    report.startup_issues = report.models.filter(model => model.status !== "ready").map(model => ({
+    report.startup_issues = report.models.filter(model =>
+        ["whisper", "ctc", "demucs"].includes(model.kind) && model.status !== "ready"
+    ).map(model => ({
         kind: model.kind,
         origin: "managed",
         status: model.status,
@@ -263,4 +272,33 @@ await settle();
 assert.equal(render().props.children, "workspace");
 console.log(
     "Model setup: missing reminders, targeted repair, save failure, query recovery and cancel/skip waiting passed.",
+);
+
+// Language preparation changes download selection, never the alignment default.
+reset();
+locale = "zh-CN";
+render();
+await settle();
+await click(lang.timingV2.download);
+function findChecks(tree) {
+    if (Array.isArray(tree)) return tree.flatMap(findChecks);
+    if (!tree?.props) return [];
+    return [...(tree.type === "CheckRow" ? [tree] : []), ...findChecks(tree.props.children)];
+}
+let checks = findChecks(render());
+assert.deepEqual(checks.map(row => row.props.checked), [false, true, false]);
+checks[2].props.onChange(true);
+await click(lang.timingV2.download);
+assert.deepEqual(operations[1].kinds, ["whisper", "ctc-zh", "demucs", "ctc-mul"]);
+assert.deepEqual(writes[0].model_prepared_kinds, operations[1].kinds);
+assert.ok(!("auto_timing_v2_options" in writes[0]));
+reset();
+render();
+await settle();
+await click(lang.timingV2.download);
+checks = findChecks(render());
+checks[0].props.onChange(false);
+assert.ok(find(render(), "Button", lang.timingV2.download).props.disabled, "at least one CTC profile is required");
+console.log(
+    "Language onboarding: Chinese default, multiple CTCs, persisted preparation selection and empty-selection guard passed.",
 );

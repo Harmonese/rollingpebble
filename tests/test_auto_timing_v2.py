@@ -26,7 +26,7 @@ from rollingpebble.storage.files import write_project
 
 
 def event(sequence, kind, **fields):
-    return json.dumps(dict(protocol_version=2, engine="py-roller", engine_version="0.10.2",
+    return json.dumps(dict(protocol_version=2, engine="py-roller", engine_version="0.10.3",
                            request_id="test", sequence=sequence, type=kind, **fields))
 
 
@@ -45,7 +45,7 @@ def finish_fixture(tmp_path, lines=None):
         path = tmp_path / name
         path.write_text("", encoding="utf-8")
         artifacts[name] = str(path.resolve())
-    alignment = dict(protocol_version=2, engine="py-roller", engine_version="0.10.2", request_id="test",
+    alignment = dict(protocol_version=2, engine="py-roller", engine_version="0.10.3", request_id="test",
                      status="complete", duration=20, lines=lines)
     Path(artifacts["alignment"]).write_text(json.dumps(alignment), encoding="utf-8")
     Path(artifacts["lrc"]).write_text("".join(f'[00:00.00] {row["text"]}\n' for row in lines), encoding="utf-8")
@@ -53,7 +53,7 @@ def finish_fixture(tmp_path, lines=None):
     return stream, artifacts
 
 
-@pytest.mark.parametrize("version,expected", [("0.9.9", False), ("0.10.0", False), ("0.10.1", False), ("0.10.2", True), ("0.10.22", True), ("0.11.0", False)])
+@pytest.mark.parametrize("version,expected", [("0.9.9", False), ("0.10.0", False), ("0.10.1", False), ("0.10.2", False), ("0.10.3", True), ("0.10.32", True), ("0.11.0", False)])
 def test_version_gate(version, expected):
     assert compatible(version) is expected
 
@@ -126,15 +126,14 @@ def test_artifacts_are_validated(tmp_path, mutation):
         stream.finish(0, tmp_path)
 
 
-def test_inventory_copy_and_english_guard():
+def test_inventory_copy_preserves_unicode():
     text = "[ti:Song]\n[Verse]\n[00:01.00]Come on\nCome on"
     assert plain_inventory(text) == "Come on\nCome on\n"
-    with pytest.raises(ValueError, match="English"):
-        plain_inventory("Hello\n你好")
+    assert plain_inventory("Hello\n你好") == "Hello\n你好\n"
     with pytest.raises(ValueError):
         Options(cpu_threads=True)
     with pytest.raises(ValueError):
-        Options(language="en")
+        Options(language="unknown")
 
 
 def make_record(store, status="running"):
@@ -176,11 +175,20 @@ def service_fixture(tmp_path):
     manager = RuntimeManager(layout)
     manager.python_path("auto").parent.mkdir(parents=True, exist_ok=True)
     manager.python_path("auto").write_text("")
-    manager.update_metadata("auto", {"pyroller_version": "0.10.2", "doctor_report": {
+    manager.update_metadata("auto", {"pyroller_version": "0.10.3", "doctor_report": {
         "protocol_version": 2, "type": "doctor", "runtime_ok": True, "ready": False,
     }})
-    runtime = SimpleNamespace(manager=manager, get_settings=lambda: SimpleNamespace(auto_roller_profile="auto"))
+    runtime = SimpleNamespace(manager=manager, models=SimpleNamespace(require_many=lambda options: None), get_settings=lambda: SimpleNamespace(auto_roller_profile="auto"))
     service = AutoTimingService(projects=projects, runtime=runtime, jobs=JobManager(work_root=layout.work_root))
+    def checked(request, **kwargs):
+        import hashlib
+        from rollingpebble.auto_timing.languages import engine_options
+        _, text, identity = service._input(request)
+        options, _, _ = service._context(request)
+        language = request.options.language if request.options.language != "auto" else "en"
+        return {"audio_identity": identity, "lyrics_hash": hashlib.sha256(text.encode()).hexdigest(),
+                "language": language, "engine_options": engine_options(options, language)}
+    service.preflight = checked
     return service, layout
 
 
@@ -229,7 +237,6 @@ def test_stderr_drained_and_missing_terminal_fails(tmp_path):
 
 def test_cancel_keeps_resource_until_exit(tmp_path, monkeypatch):
     service, _ = service_fixture(tmp_path)
-    monkeypatch.setattr(service, "preflight", lambda request: None)
     original = service._record
     def slow(request, **kwargs):
         record, env = original(request, **kwargs)
@@ -256,7 +263,6 @@ def test_batch_serial_failure_continues(tmp_path, monkeypatch):
         write_project(layout.projects_root, ProjectModel(project_id=pid, audio_name="audio.wav", audio_ref="audio.wav"))
         (layout.projects_root / pid / "audio.wav").write_bytes(b"audio")
         (layout.projects_root / pid / "plain.txt").write_text("Come on")
-    monkeypatch.setattr(service, "preflight", lambda request: None)
     order = []
     executing = threading.Lock()
     def execute(record, env):
@@ -309,7 +315,6 @@ def test_runtime_job_start_failure_releases_lock(tmp_path, monkeypatch, failure)
 
 def test_input_disk_failure_retains_failure_record_and_releases_lock(tmp_path, monkeypatch):
     service, _ = service_fixture(tmp_path)
-    monkeypatch.setattr(service, "preflight", lambda request: None)
     original = Path.write_text
     def fail(path, *args, **kwargs):
         if path.name == "lyrics.txt":
@@ -329,7 +334,6 @@ def test_batch_cancel_stops_pending_and_holds_resources(tmp_path, monkeypatch):
     write_project(layout.projects_root, ProjectModel(project_id="p2", audio_name="audio.wav", audio_ref="audio.wav"))
     (layout.projects_root / "p2" / "audio.wav").write_bytes(b"audio")
     (layout.projects_root / "p2" / "plain.txt").write_text("Come on")
-    monkeypatch.setattr(service, "preflight", lambda request: None)
     entered, release = threading.Event(), threading.Event()
     order = []
     def execute(record, env):
@@ -390,13 +394,7 @@ def test_doctor_missing_models_does_not_fail_runtime_job(tmp_path):
 
 def test_rejected_batch_keeps_parent_and_releases_snapshots(tmp_path, monkeypatch):
     service, _ = service_fixture(tmp_path)
-    monkeypatch.setattr(service, "preflight", lambda request: None)
     with pytest.raises(FileNotFoundError):
         service.batch(BatchRequest(project_ids=["p1", "missing"]))
     assert not service.jobs.resource_lock.locked()
-    parent = next(r for r in service.store.list() if r["kind"] == "batch")
-    assert parent["status"] == "failed"
-    assert len(parent["children"]) == 1
-    child = service.store.get(parent["children"][0])
-    assert child["status"] == "cancelled"
-    assert not (service.store.folder(child["id"]) / "audio.snapshot").exists()
+    assert not service.store.list()

@@ -13,7 +13,7 @@ CLI `--data-dir` and `LRC_ROLLER_DATA_DIR` remain explicit overrides.
 | `settings.json` | Current preferences |
 | `projects/` | Saved audio, lyrics, translations and metadata |
 | `recovery/` | One current workspace snapshot, unfinished editor text and pending audio |
-| `engine/models/` | Current Whisper, CTC and Demucs weights |
+| `engine/models/` | Shared Whisper/Demucs and English, Mandarin, multilingual CTC weights |
 | `engine/ctc/`, `engine/whisper/`, `engine/separation/` | Reusable inference cache |
 | `runtime/python/`, `runtime/venv/` | Managed interpreter and one environment |
 | `results/<project>/<run>/` | Requests, results, logs and editable drafts |
@@ -31,7 +31,7 @@ are released after process exit; retained results do not retain another audio co
 
 Auto Timing owns model download/removal, defaults, network options and diagnostics.
 Model integrity receipts live under `engine/models/.installations.json`; they track installation
-and intentional deletion, not persisted successful hash checks. Resumable download files live
+and intentional deletion, not persisted successful hash checks. Preferences retain selected preparation kinds: selected missing models keep startup reminders, while unselected language models do not. Installed models are checked regardless of preparation selection. Resumable download files live
 under `cache/model-downloads` and can be removed by cache cleanup when no task is active.
 Storage shows Location and five usage rows: Projects, Models, Results, Cache,
 Components. Models links to Auto Timing. Projects and Results open management

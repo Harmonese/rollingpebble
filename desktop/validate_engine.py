@@ -18,7 +18,7 @@ from rollingpebble.services.project_service import ProjectService
 from rollingpebble.storage.files import write_project
 
 
-def validate(root, audio, lyrics):
+def validate(root, audio, lyrics, language="auto"):
     layout = StorageLayout.from_data_dir(root).ensure()
     jobs = JobManager(work_root=layout.work_root)
     projects = ProjectService(layout.projects_root)
@@ -36,7 +36,7 @@ def validate(root, audio, lyrics):
     before = {p.name: p.read_bytes() for p in folder.iterdir()}
     results = []
     for mode, cancel in (("mix", True), ("mix", False), ("vocals", False)):
-        run = service.start(RunRequest(project_id=pid, options=Options(audio_mode=mode, ctc_device="cpu")))
+        run = service.start(RunRequest(project_id=pid, options=Options(audio_mode=mode, ctc_device="cpu", language=language)))
         start = time.monotonic()
         while jobs.resource_lock.locked():
             if cancel and time.monotonic() - start > 3:
@@ -64,5 +64,6 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir", type=Path, required=True)
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--lyrics", type=Path, required=True)
+    parser.add_argument("--language", choices=["auto", "en", "zh", "zh-en", "mul"], default="auto")
     args = parser.parse_args()
-    validate(args.data_dir.resolve(), args.audio.resolve(), args.lyrics.resolve())
+    validate(args.data_dir.resolve(), args.audio.resolve(), args.lyrics.resolve(), args.language)

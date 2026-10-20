@@ -231,7 +231,7 @@ def test_installer_reuses_or_rebuilds_without_models(tmp_path, monkeypatch, repa
     }))
     resources = tmp_path / "resources"
     resources.mkdir()
-    (resources / "requirements.txt").write_text("py-roller==0.10.2\n")
+    (resources / "requirements.txt").write_text("py-roller==0.10.3\n")
     monkeypatch.setattr(installer, "engine_resources", lambda: resources)
     monkeypatch.setattr(installer, "bundle_fingerprint", lambda: "bundle")
     monkeypatch.setattr(installer, "prepare_bundled_runtime", lambda path: tmp_path / "bundled-python")
@@ -243,7 +243,7 @@ def test_installer_reuses_or_rebuilds_without_models(tmp_path, monkeypatch, repa
         if "venv" in command:
             executable.parent.mkdir(parents=True)
             executable.touch()
-        report = {"runtime_ok": True, "ready": False, "engine_version": "0.10.2",
+        report = {"runtime_ok": True, "ready": False, "engine_version": "0.10.3",
                   "capabilities": {"protocol_versions": [2]}}
         return SimpleNamespace(returncode=1 if "doctor" in command else 0, stdout=json.dumps(report))
     monkeypatch.setattr(installer.subprocess, "run", run)
@@ -257,4 +257,15 @@ def test_installer_reuses_or_rebuilds_without_models(tmp_path, monkeypatch, repa
     metadata = json.loads((root / "runtime.json").read_text())
     assert metadata["last_install_status"] == "ok"
     assert metadata["doctor_report"]["ready"] is False
-    assert metadata["prepared_capabilities"] == ["original"]
+    assert metadata["prepared_capabilities"] == ["multilingual", "original"]
+
+
+def test_multilingual_failure_does_not_disable_base(preparation):
+    service, jobs = preparation
+    service.ensure(EnsureRequest(multilingual=True))
+    finish(service, jobs)
+    assert service.snapshot()['status'] == 'failed'
+    assert service.snapshot()['error'] == 'runtime.multilingual_failed'
+    assert service.ensure(EnsureRequest())['status'] == 'ready'
+    assert service.ensure(EnsureRequest(multilingual=True))['status'] == 'failed'
+    assert len(jobs.jobs) == 1

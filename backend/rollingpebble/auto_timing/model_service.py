@@ -5,6 +5,7 @@ import shutil
 import threading
 
 from rollingpebble.auto_timing.model_catalog import CATALOG
+from rollingpebble.auto_timing.languages import MODEL_PATH_KEYS, required_models
 from rollingpebble.auto_timing.model_download import (
     ModelCancelled, check_cancel, download_file, download_opener, file_digest,
 )
@@ -14,6 +15,7 @@ from rollingpebble.messages import AppError
 from rollingpebble.models import JobProgressModel
 
 ACTIVE = {"queued", "running", "cancelling"}
+CTC_KINDS = {"ctc", "ctc-zh", "ctc-mul"}
 
 
 class ModelService:
@@ -87,6 +89,7 @@ class ModelService:
             records = self._records()
             settings = self.runtime.get_settings()
             explicit = settings.auto_timing_v2_options
+            prepared = set(settings.model_prepared_kinds)
             rows = []
             issues = []
             for kind, spec in self.catalog.items():
@@ -116,7 +119,7 @@ class ModelService:
                     repair_needed=status in {"corrupt", "failed"},
                     error=state.get("error"), failure_phase=state.get("failure_phase"),
                     job_id=job.job_id if running and kind in self.operation[1] else None))
-                if not explicit.get(kind + "_model") and status in {"missing", "corrupt", "failed", "unverified"}:
+                if (kind in prepared or status != "missing") and not explicit.get(MODEL_PATH_KEYS.get(kind, "")) and status in {"missing", "corrupt", "failed", "unverified"}:
                     reason = ("unexpected_loss" if installed else records.get(kind, {}).get("state", "not_installed")) if status == "missing" else state.get("failure_phase", status)
                     action = "download" if status == "missing" else "verify" if status in {"failed", "unverified"} else "repair"
                     if status == "failed" and reason == "downloading":
@@ -124,8 +127,8 @@ class ModelService:
                     issues.append(dict(kind=kind, origin="managed", status=status, reason=reason,
                                        action=action))
             external_rows = []
-            for kind in ("whisper", "ctc"):
-                path = explicit.get(kind + "_model")
+            for kind in MODEL_PATH_KEYS:
+                path = explicit.get(MODEL_PATH_KEYS.get(kind, ""))
                 if not path:
                     continue
                 try:
@@ -140,17 +143,25 @@ class ModelService:
                 if status != "available":
                     issues.append(dict(kind=kind, origin="external", status=status, reason="external_path",
                                        action="verify" if status == "unverified" else "configure"))
+            has_ctc = any(row["kind"] in CTC_KINDS and row["status"] == "ready" for row in rows) or any(
+                row["kind"] in CTC_KINDS and row["status"] == "available" for row in external_rows)
+            if has_ctc:
+                issues = [issue for issue in issues if not (
+                    issue["origin"] == "managed" and issue["kind"] in CTC_KINDS and issue["status"] == "missing")]
             return {"models": rows, "job": job, "explicit": explicit, "external_models": external_rows,
-                    "startup_issues": issues, "onboarding_complete": settings.model_onboarding_complete}
+                    "startup_issues": issues, "onboarding_complete": settings.model_onboarding_complete, "prepared_kinds": settings.model_prepared_kinds}
 
     def require(self, options):
+        self.require_many([options])
+
+    def require_many(self, options_list):
         with self.lock:
-            required = [k for k in ("whisper", "ctc") if not options.get(k + "_model")]
-            if options["audio_mode"] == "vocals":
-                required.append("demucs")
+            required = list(dict.fromkeys(k for options in options_list for k in required_models(options)))
             states = {r["kind"]: r for r in self.snapshot()["models"]}
-            if any(states[k]["status"] != "ready" for k in required):
-                raise AppError("models.not_verified", "Verify or download Auto Timing models in Settings.")
+            missing = [k for k in required if states[k]["status"] != "ready"]
+            if missing:
+                raise AppError("models.not_verified", "Verify or download Auto Timing models in Settings.",
+                               params={"models": ",".join(missing), "language": ",".join(dict.fromkeys(options["language"] for options in options_list))})
 
     def start(self, request):
         with self.lock:
@@ -160,13 +171,18 @@ class ModelService:
             requested = request.kinds or ([request.kind] if request.kind else list(self.catalog))
             kinds = tuple(k for k in self.catalog if k in requested)
             if request.startup:
-                kinds = tuple(k for k in self.catalog if not snapshot["explicit"].get(k + "_model"))
+                kinds = tuple(k for k in self.catalog
+                              if not snapshot["explicit"].get(MODEL_PATH_KEYS.get(k, "")) or self._target(k).exists())
             key = (request.action, kinds, request.startup)
             if snapshot["job"] and snapshot["job"].status in ACTIVE:
                 if self.operation == key:
                     return snapshot["job"]
                 raise RuntimeError("Auto Timing resources are busy")
             settings = self.runtime.get_settings()
+            if request.action in {"download", "repair"}:
+                from rollingpebble.models import RuntimeSettingsUpdateRequest
+                prepared = list(dict.fromkeys([*settings.model_prepared_kinds, *kinds]))
+                settings = self.runtime.update_settings(RuntimeSettingsUpdateRequest(model_prepared_kinds=prepared))
             proxy = settings.auto_timing_hf_proxy if settings.model_proxy_enabled else ""
             opener = download_opener(proxy) if request.action in {"download", "repair"} else None
             source = settings.model_download_source
@@ -228,8 +244,8 @@ class ModelService:
                 pending.append(kind)
         phase("checking", kinds, sizes, verify)
         if request.startup:
-            for kind in ("whisper", "ctc"):
-                path = explicit.get(kind + "_model")
+            for kind in MODEL_PATH_KEYS:
+                path = explicit.get(MODEL_PATH_KEYS.get(kind, ""))
                 if path:
                     check_cancel(cancel)
                     progress(JobProgressModel(stage="checking_external", detail={"kind": kind}))

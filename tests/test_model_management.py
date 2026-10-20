@@ -95,15 +95,15 @@ def test_download_verify_reuse_restart_and_missing(service):
     models, opener = service
     assert set(statuses(models).values()) == {"missing"}
     assert run(models, "download").status == "succeeded"
-    assert len(opener.requests) == 3
+    assert len(opener.requests) == len(CATALOG)
     assert set(statuses(models).values()) == {"ready"}
     assert run(models, "download").status == "succeeded"
-    assert len(opener.requests) == 3
-    models.require(Options(audio_mode="vocals").model_dump())
+    assert len(opener.requests) == len(CATALOG)
+    models.require(Options(language="en", audio_mode="vocals").model_dump())
     restarted = ModelService(models.runtime, models.jobs, models.catalog)
     assert set(statuses(restarted).values()) == {"unverified"}
     with pytest.raises(AppError):
-        restarted.require(Options().model_dump())
+        restarted.require(Options(language="en").model_dump())
     first = run(restarted, "verify", startup=True)
     assert first.status == "succeeded"
     assert run(restarted, "verify", startup=True).job_id != first.job_id
@@ -111,9 +111,9 @@ def test_download_verify_reuse_restart_and_missing(service):
     assert statuses(restarted)["demucs"] == "missing"
     run(restarted, "verify", ["demucs"])
     assert statuses(restarted)["demucs"] == "missing"
-    restarted.require(Options().model_dump())
+    restarted.require(Options(language="en").model_dump())
     with pytest.raises(AppError):
-        restarted.require(Options(audio_mode="vocals").model_dump())
+        restarted.require(Options(language="en", audio_mode="vocals").model_dump())
 
 
 def test_individual_repair_preserves_others_and_delete(service):
@@ -125,7 +125,7 @@ def test_individual_repair_preserves_others_and_delete(service):
     run(models, "verify")
     assert statuses(models)["whisper"] == "corrupt"
     assert run(models, "repair", ["whisper"]).status == "succeeded"
-    assert len(opener.requests) == 4
+    assert len(opener.requests) == len(CATALOG) + 1
     assert untouched.stat().st_ino == old_stat.st_ino
     assert run(models, "remove", ["whisper"]).status == "succeeded"
     assert statuses(models)["whisper"] == "missing"
@@ -179,11 +179,11 @@ def test_external_paths_do_not_require_fixed_weights(service, tmp_path):
     external.mkdir()
     sentinel = external / "model"
     sentinel.write_bytes(b"leave alone")
-    models.require(Options(whisper_model=str(external), ctc_model=str(external)).model_dump())
+    models.require(Options(language="en", whisper_model=str(external), ctc_model=str(external)).model_dump())
     run(models, "remove")
     assert sentinel.read_bytes() == b"leave alone"
     with pytest.raises(AppError):
-        models.require(Options(offline=False).model_dump())
+        models.require(Options(language="en", offline=False).model_dump())
 
 
 def test_stat_changes_and_manifest_invalidate(service):
@@ -278,9 +278,9 @@ def test_full_hash_is_computed_each_process(service, monkeypatch):
     monkeypatch.setattr(model_service, "file_digest", track)
     restarted = ModelService(models.runtime, models.jobs, models.catalog)
     run(restarted, "verify", startup=True)
-    assert len(hashed) == 3
+    assert len(hashed) == len(CATALOG)
     run(restarted, "verify", startup=True)
-    assert len(hashed) == 3
+    assert len(hashed) == len(CATALOG)
 
 
 def test_single_and_batch_cannot_bypass_unverified_models(service, monkeypatch):
@@ -289,7 +289,8 @@ def test_single_and_batch_cannot_bypass_unverified_models(service, monkeypatch):
     models.runtime.models = models
     service = AutoTimingService(projects=None, runtime=models.runtime, jobs=models.jobs)
     monkeypatch.setattr(service, "_input", lambda request: (None, "hello", "audio"))
-    monkeypatch.setattr(service, "_context", lambda request: (request.options.model_dump(), [], {}))
+    monkeypatch.setattr(service, "_context", lambda request: (request.options.model_dump(), ["python"], {}))
+    monkeypatch.setattr("rollingpebble.auto_timing.service.resolve_language", lambda *args: "en")
     for method, request in ((service.start, RunRequest(project_id="p", options=Options(offline=False))),
                             (service.batch, BatchRequest(project_ids=["p"], options=Options(offline=False)))):
         with pytest.raises(AppError, match="Verify or download"):
@@ -395,10 +396,10 @@ def test_phase_bytes_and_single_publication_hash(service, monkeypatch):
     request = ModelAction(action="download")
     models._work(request, tuple(models.catalog), {}, "modelscope", opener, 30,
                  threading.Event(), progress.append)
-    assert len(hashed) == 3, "each new file is hashed once, with visible verification progress"
+    assert len(hashed) == len(CATALOG), "each new file is hashed once, with visible verification progress"
     for stage in ("downloading", "verifying_download"):
         events = [p for p in progress if p.stage == stage]
-        assert events[-1].completed == events[-1].total == 3 * len(PAYLOAD)
+        assert events[-1].completed == events[-1].total == len(CATALOG) * len(PAYLOAD)
         assert all(p.bytes_total == len(PAYLOAD) and p.completed <= p.total for p in events)
         assert [p.completed for p in events] == sorted(p.completed for p in events)
 
@@ -444,3 +445,97 @@ def test_legacy_timeout_normalized(tmp_path):
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         RuntimeSettingsUpdateRequest(auto_timing_hf_download_timeout=31)
+
+
+def test_new_language_models_only_remind_when_selected_or_installed(service):
+    models, _ = service
+    assert {i['kind'] for i in models.snapshot()['startup_issues']} == {'whisper', 'ctc', 'demucs'}
+    run(models, 'download', ['whisper', 'ctc-zh'])
+    assert 'ctc-zh' in models.runtime.get_settings().model_prepared_kinds
+    models.require({'language': 'zh', 'audio_mode': 'mix'})
+    models.require({'language': 'zh-en', 'audio_mode': 'mix'})
+    with pytest.raises(AppError):
+        models.require({'language': 'mul', 'audio_mode': 'mix'})
+    run(models, 'remove', ['ctc-zh'])
+    restarted = ModelService(models.runtime, models.jobs, models.catalog)
+    run(restarted, 'verify', startup=True)
+    issues = {i['kind']: i for i in restarted.snapshot()['startup_issues']}
+    assert issues['ctc-zh']['reason'] == 'deleted'
+    assert 'ctc-mul' not in issues
+
+
+def test_unselected_installed_model_is_checked_and_reports_corruption(service):
+    models, _ = service
+    # A managed model already on disk is verified even if not in the preparation selection.
+    target = models._target('ctc-mul')
+    target.mkdir(parents=True)
+    (target / 'weight.bin').write_bytes(b'x' * len(PAYLOAD))
+    result = run(models, 'verify', startup=True)
+    assert result.status == 'succeeded'
+    issue = next(i for i in models.snapshot()['startup_issues'] if i['kind'] == 'ctc-mul')
+    assert issue['status'] == 'corrupt'
+
+
+@pytest.mark.parametrize('kind', ['ctc', 'ctc-zh', 'ctc-mul'])
+def test_one_verified_ctc_suppresses_other_missing_ctc_reminders(service, kind):
+    models, _ = service
+    run(models, 'download', ['whisper', 'demucs', kind])
+    models.runtime.update_settings(RuntimeSettingsUpdateRequest(
+        model_prepared_kinds=['whisper', 'ctc', 'ctc-zh', 'ctc-mul', 'demucs']))
+    restarted = ModelService(models.runtime, models.jobs, models.catalog)
+    run(restarted, 'verify', startup=True)
+    assert restarted.snapshot()['startup_issues'] == []
+    missing_kind = next(k for k in ['ctc', 'ctc-zh', 'ctc-mul'] if k != kind)
+    language = {'ctc': 'en', 'ctc-zh': 'zh', 'ctc-mul': 'mul'}[missing_kind]
+    with pytest.raises(AppError):
+        restarted.require({'language': language, 'audio_mode': 'mix'})
+    run(restarted, 'remove', [kind])
+    assert {i['kind'] for i in restarted.snapshot()['startup_issues']} == {'ctc', 'ctc-zh', 'ctc-mul'}
+
+
+def test_available_ctc_does_not_hide_corruption_or_shared_model_reminders(service):
+    models, _ = service
+    run(models, 'download', ['ctc-zh'])
+    target = models._target('ctc-mul')
+    target.mkdir(parents=True)
+    (target / 'weight.bin').write_bytes(b'x' * len(PAYLOAD))
+    run(models, 'verify', startup=True)
+    issues = {i['kind']: i['status'] for i in models.snapshot()['startup_issues']}
+    assert issues == {'whisper': 'missing', 'demucs': 'missing', 'ctc-mul': 'corrupt'}
+
+
+def test_verified_external_ctc_suppresses_missing_managed_ctcs(service, tmp_path, monkeypatch):
+    models, _ = service
+    external = tmp_path / 'external-ctc'
+    external.mkdir()
+    (external / 'model.bin').write_bytes(b'external')
+    preferences = models.runtime.get_settings()
+    preferences.auto_timing_v2_options = {'ctc_zh_model': str(external)}
+    preferences.model_prepared_kinds = ['whisper', 'ctc', 'ctc-zh', 'ctc-mul', 'demucs']
+    models.runtime.settings.write(preferences)
+    monkeypatch.setattr('rollingpebble.auto_timing.model_service.inspect_external', lambda *args: True)
+    run(models, 'verify', startup=True)
+    assert {i['kind'] for i in models.snapshot()['startup_issues']} == {'whisper', 'demucs'}
+    (external / 'model.bin').unlink()
+    assert 'ctc' in {i['kind'] for i in models.snapshot()['startup_issues']}
+
+
+def test_batch_missing_models_are_aggregated(service):
+    models, _ = service
+    run(models, 'download', ['whisper'])
+    with pytest.raises(AppError) as error:
+        models.require_many([{'language': 'en', 'audio_mode': 'mix'},
+                             {'language': 'zh', 'audio_mode': 'mix'},
+                             {'language': 'mul', 'audio_mode': 'vocals'}])
+    assert error.value.message.params['models'] == 'ctc,ctc-zh,ctc-mul,demucs'
+
+
+def test_missing_unselected_managed_copy_does_not_request_download(service):
+    models, _ = service
+    target = models._target('ctc-mul')
+    target.mkdir(parents=True)
+    (target / 'weight.bin').write_bytes(PAYLOAD)
+    run(models, 'verify', startup=True)
+    assert statuses(models)['ctc-mul'] == 'ready'
+    (target / 'weight.bin').unlink()
+    assert 'ctc-mul' not in {i['kind'] for i in models.snapshot()['startup_issues']}

@@ -633,11 +633,11 @@
         "title": "Rolling Pebble",
         "tagline": "App local para importar, temporizar, editar e publicar letras sincronizadas.",
         "whatItDoes": "O que faz",
-        "whatItDoesText": "Rolling Pebble combines lyrics import, automatic timing (Experimental, English), manual correction, export, and LRCLIB publishing in a local WebUI. Audio processing and Auto Timing (Experimental, English) run locally.",
+        "whatItDoesText": "Rolling Pebble combines lyrics import, automatic timing (Experimental), manual correction, export, and LRCLIB publishing in a local WebUI. Audio processing and Auto Timing (Experimental) run locally.",
         "features": "Recursos",
         "feature1": "Import lyrics from LRCLIB or local .lrc / .txt files.",
         "feature2": "Create a single-song project from a local audio file.",
-        "feature3": "Generate synced lyrics with Auto Timing (Experimental, English) and correct them manually.",
+        "feature3": "Generate synced lyrics with Auto Timing (Experimental) and correct them manually.",
         "feature4": "Publish synced lyrics to LRCLIB.",
         "author": "Author",
         "authorText": "Rolling Pebble is created and maintained by Harmonese, an Electronic duo from China.",
@@ -645,7 +645,7 @@
         "authorGithub": "GitHub",
         "authorMusic": "Bandcamp",
         "credits": "Créditos",
-        "creditsText": "The synchronizer and editor experience is based on magic-akari/lrc-maker. Auto Timing (Experimental, English) is powered by Harmonese/py-roller, and LRCLIB integration is powered by Harmonese/pylrclib.",
+        "creditsText": "The synchronizer and editor experience is based on magic-akari/lrc-maker. Auto Timing (Experimental) is powered by Harmonese/py-roller, and LRCLIB integration is powered by Harmonese/pylrclib.",
         "coreHotkeys": "Atalhos",
         "hotkeySpace": "Insert timestamp",
         "hotkeyDelete": "Remove timestamp",
@@ -713,8 +713,7 @@
         "timing.install": "Install Auto Timing in Settings.",
         "timing.models": "Prepare models in Settings.",
         "timing.check_failed": "Runtime check failed. See Settings diagnostics.",
-        "timing.english": "Auto Timing supports English lyrics only.",
-        "timing.no_lyrics": "No English lyrics to time.",
+        "timing.no_lyrics": "No lyric lines to time.",
         "timing.changed": "The project changed. Retry Auto Timing.",
         "timing.proxy": "Vocals requires an HTTP(S) proxy.",
         "timing.mps": "MPS is unavailable on this device.",
@@ -820,7 +819,9 @@
         "runtime.legacy_path_ignored": "Legacy PATH py-roller is ignored; Rolling Pebble uses an isolated runtime.",
         "runtime.prepare_failed": "Auto Timing could not be prepared.",
         "runtime.resources_busy": "Auto Timing is busy. Try again after the current task finishes.",
-        "runtime.preparing": "Preparing…"
+        "runtime.preparing": "Preparing…",
+        "timing.language": "Could not resolve the lyric language. Check the language setting.",
+        "runtime.multilingual_failed": "Multilingual pronunciation components are unavailable. Repair in Settings."
     },
     "timingV2": {
         "alignmentMode": "Alignment Mode",
@@ -905,7 +906,12 @@
         "continueApp": "Continue",
         "checking": "Checking…",
         "results": "Task Results",
-        "componentsUnavailable": "Components unavailable"
+        "componentsUnavailable": "Components unavailable",
+        "language": "Language",
+        "languageHint": "Auto uses lyric text. Mandarin excludes Cantonese. Mandarin, mixed and multilingual alignment are experimental.",
+        "ctcEnglish": "CTC · English",
+        "ctcMandarin": "CTC · Mandarin",
+        "ctcMultilingual": "CTC · Multilingual"
     },
     "storageV3": {
         "location": "Location",
@@ -924,5 +930,12 @@
         "confirmCache": "Clear cache?",
         "modelFailed": "Model operation failed.",
         "defaults": "Defaults"
+    },
+    "autoTimingLanguages": {
+        "auto": "Auto",
+        "en": "English",
+        "zh": "Mandarin",
+        "zh-en": "Mandarin / English",
+        "mul": "Multilingual"
     }
 }

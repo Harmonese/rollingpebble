@@ -21,6 +21,7 @@ export function AutoTimingSettingsSection({ title, lang, at, loaded }: {
                 <RuntimePreparation
                     lang={lang}
                     vocals={at.options.audio_mode === "vocals"}
+                    multilingual={at.options.language === "mul"}
                     onReady={setReady}
                 />
             )}

@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 
 
-def validate(app: Path, root: Path, models: Path, audio: Path, lyrics: Path):
+def validate(app: Path, root: Path, models: Path, audio: Path, lyrics: Path, language="auto"):
     if root.exists():
         raise ValueError("Use a new isolated directory")
     root.mkdir(parents=True)
@@ -99,7 +99,7 @@ def validate(app: Path, root: Path, models: Path, audio: Path, lyrics: Path):
                 results["runs"] = []
                 for mode, should_cancel in (("mix", True), ("mix", False), ("vocals", False)):
                     started = time.monotonic()
-                    run = call("POST", "/api/auto-timing/runs", json={"project_id": pid, "options": {"audio_mode": mode, "ctc_device": "cpu"}})
+                    run = call("POST", "/api/auto-timing/runs", json={"project_id": pid, "options": {"audio_mode": mode, "ctc_device": "cpu", "language": language}})
                     while run["status"] in {"running", "queued", "cancelling"}:
                         if should_cancel and time.monotonic() - started > 5:
                             call("POST", f'/api/auto-timing/runs/{run["id"]}/cancel')
@@ -139,5 +139,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     for name in ("app", "data-dir", "models", "audio", "lyrics"):
         parser.add_argument(f"--{name}", type=Path, required=True)
+    parser.add_argument("--language", choices=["auto", "en", "zh", "zh-en", "mul"], default="auto")
     args = parser.parse_args()
-    validate(args.app.resolve(), args.data_dir.resolve(), args.models.resolve(), args.audio.resolve(), args.lyrics.resolve())
+    validate(args.app.resolve(), args.data_dir.resolve(), args.models.resolve(), args.audio.resolve(), args.lyrics.resolve(), args.language)

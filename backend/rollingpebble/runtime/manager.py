@@ -148,7 +148,7 @@ class RuntimeManager:
             detail = "Auto Timing preparation is incomplete"
         elif not compatible(version):
             status = "unhealthy"
-            detail = "Protocol v2 requires py-roller >=0.10.2,<0.11"
+            detail = "Protocol v2 requires py-roller >=0.10.3,<0.11"
         elif doctor_report is not None and not protocol_status_ok(doctor_report):
             status = "unhealthy"
             detail = "Runtime exists, but the last doctor check reported problems."

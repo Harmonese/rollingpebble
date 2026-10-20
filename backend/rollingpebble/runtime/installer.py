@@ -83,10 +83,10 @@ def install_runtime(data_dir: Path, profile: str = "auto", skip_doctor: bool = F
         command = [str(executable), "-m", "pip", "install", "--no-index", "--no-cache-dir", "--only-binary=:all:",
                    "--require-hashes", "--find-links", str(resources / "wheels"),
                    "-r", str(resources / ("vocals.txt" if vocals else "requirements.txt"))]
-        def check_runtime():
+        def check_runtime(language="en", audio_mode=None):
             checked = subprocess.run([str(executable), "-m", "pyroller", "doctor", "--json", "--cache-dir",
                                      str(layout.engine_root),
-                                     "--audio-mode", "vocals" if vocals else "mix"],
+                                     "--audio-mode", audio_mode or ("vocals" if vocals else "mix"), "--language", language],
                                     capture_output=True, text=True, env=env, timeout=120)
             try:
                 result = json.loads(checked.stdout)
@@ -98,7 +98,6 @@ def install_runtime(data_dir: Path, profile: str = "auto", skip_doctor: bool = F
                 return result
             return None
 
-        required = "vocals" if vocals else "original"
         reuse = (ensure and not repair and not interrupted
                  and previous.get("bundle_fingerprint") in (None, fingerprint))
         doctor = check_runtime() if reuse else None
@@ -115,20 +114,36 @@ def install_runtime(data_dir: Path, profile: str = "auto", skip_doctor: bool = F
         if not doctor:
             payload["preparation_phase"] = "preparing"
             atomic_json(root / "runtime.json", payload)
-            subprocess.run(command, env=env, check=True)
+            try:
+                subprocess.run(command, env=env, check=True)
+            except subprocess.CalledProcessError:
+                if not vocals or check_runtime(audio_mode="mix") is None:
+                    raise
             payload["preparation_phase"] = "checking"
             atomic_json(root / "runtime.json", payload)
             doctor = check_runtime()
+        vocals_ready = bool(doctor) and vocals
+        if not doctor and vocals:
+            doctor = check_runtime(audio_mode="mix")
         if not doctor:
             raise RuntimeError("Engine runtime check failed")
         subprocess.run([str(executable), "-m", "pip", "check"], env=env, check=True)
         payload.update(pyroller_version=doctor.get("engine_version"), doctor_report=doctor,
-                       pyroller_source="bundled:py-roller==0.10.2", last_doctor_status="ok" if doctor.get("runtime_ok") else "failed")
+                       pyroller_source="bundled:py-roller==0.10.3", last_doctor_status="ok" if doctor.get("runtime_ok") else "failed")
         if not doctor.get("runtime_ok") or not compatible(doctor.get("engine_version")):
             raise RuntimeError("Engine runtime check failed")
         payload["last_install_status"] = "ok"
         payload["preparation_phase"] = "ready"
-        capabilities = {"original", required}
+        capabilities = {"original"}
+        if vocals_ready:
+            capabilities.add("vocals")
+        try:
+            multilingual = check_runtime("mul", audio_mode="mix")
+        except (OSError, subprocess.TimeoutExpired):
+            multilingual = None
+        if multilingual:
+            capabilities.add("multilingual")
+        payload["multilingual_ready"] = bool(multilingual)
         payload.update(bundle_fingerprint=fingerprint, prepared_capabilities=sorted(capabilities))
         from rollingpebble.storage.transition import finish_layout_transition
         finish_layout_transition(data_dir)

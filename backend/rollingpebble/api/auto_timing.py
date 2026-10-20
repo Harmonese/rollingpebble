@@ -22,6 +22,17 @@ def create_auto_timing_router(services):
     def start(request: RunRequest):
         return service_call(lambda: service.start(request))
 
+    @router.post("/runs/{run_id}/retry")
+    def retry_run(run_id: str, request: RunRequest):
+        def retry():
+            old = service.store.get(run_id)
+            if old["status"] in ACTIVE or old["kind"] != "run" or old["project_id"] != request.project_id:
+                raise ValueError("Run cannot be retried in this workspace")
+            request.options = old["options"]
+            request.options = RunRequest(project_id=request.project_id, options=request.options).options
+            return service.start(request, language=old["language"])
+        return service_call(retry)
+
     @router.get("/runs")
     def history(project_id: str | None = None):
         return [{k: v for k, v in r.items() if k not in {"snapshot", "progress"}} for r in service.store.list(project_id)]
@@ -115,7 +126,9 @@ def create_auto_timing_router(services):
                 raise ValueError("Queue is still active")
             ids = [r["project_id"] for rid in parent["children"]
                    if (r := service.store.get(rid))["status"] == "failed"]
-            return service.batch(BatchRequest(project_ids=ids, options=parent["options"]))
+            return service.batch(BatchRequest(project_ids=ids, options=parent["options"]),
+                                 languages={r["project_id"]: r["language"] for rid in parent["children"]
+                                            if (r := service.store.get(rid))["project_id"] in ids})
         return service_call(retry_failed)
 
     @router.post("/batches/{batch_id}/resume")
@@ -126,7 +139,9 @@ def create_auto_timing_router(services):
                 raise ValueError("Queue is still active")
             ids = [r["project_id"] for rid in parent["children"]
                    if (r := service.store.get(rid))["status"] in {"interrupted", "cancelled"}]
-            return service.batch(BatchRequest(project_ids=ids, options=parent["options"]))
+            return service.batch(BatchRequest(project_ids=ids, options=parent["options"]),
+                                 languages={r["project_id"]: r["language"] for rid in parent["children"]
+                                            if (r := service.store.get(rid))["project_id"] in ids})
         return service_call(resume_pending)
 
     @router.get("/models")

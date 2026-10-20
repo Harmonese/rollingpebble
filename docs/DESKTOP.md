@@ -108,12 +108,12 @@ Expected outputs include:
 The Tauri config bundles `desktop/bin/rollingpebble-backend*` into the app resources under `bin/`, where the desktop shell can discover it automatically.
 The build also downloads pinned Python 3.12 into `desktop/python-runtime/` and bundles it under `python-runtime/`. `desktop/engine/` contains the wheelhouse, hashed requirements, FFmpeg and license notices. Both are generated and ignored by Git.
 
-`desktop/prepare_engine.py` builds py-roller 0.10.2 from the adjacent repository's commit `39dbbf8`, not from an installed development environment. Native neural dependencies must have compatible binary wheels. Source-only pure Python dependencies are built on the build machine. `desktop/engine-macos-arm64.lock` pins dependency versions/hashes. Changing dependencies requires an explicit lock update and another native audit. Demucs 4.1.0 is required for the upstream `--clip-mode none` command. `desktop/prepare_ffmpeg.py` builds FFmpeg 7.1 from a checksum-pinned source archive using Xcode on the build machine; its source, license and build flags accompany the executable.
+`desktop/prepare_engine.py` builds py-roller 0.10.3 from the adjacent repository's commit `6d3ded2`, not from an installed development environment. Native neural dependencies must have compatible binary wheels. Source-only pure Python dependencies are built on the build machine. `desktop/engine-macos-arm64.lock` pins dependency versions/hashes. Changing dependencies requires an explicit lock update and another native audit. Demucs 4.1.0 is required for the upstream `--clip-mode none` command. `desktop/prepare_ffmpeg.py` builds FFmpeg 7.1 from a checksum-pinned source archive using Xcode on the build machine; its source, license and build flags accompany the executable.
 
 ## Notes
 
 The intended macOS arm64 user setup is to drag the app into `/Applications`,
-let startup prepare components, then choose whether to download the three models.
+let startup prepare components, then choose whether to download shared models and the selected language CTCs.
 Settings retains individual download, verification and repair controls.
 The bundled interpreter is copied into the user data directory's
 `runtime/python`; dependencies are installed into `runtime/venv`, and models are
@@ -148,3 +148,5 @@ Before publishing desktop installers, test:
 - macOS signing and notarization
 
 The standalone FFmpeg build disables GPL/nonfree components, optional external libraries and network protocols. Its LGPL license, complete corresponding source and build configuration are included under `engine/bin`; preserve these in distributions. It decodes local audio and emits PCM/FLAC for the engine. See [release gates](RELEASE.md) and [validation record](AUTO_TIMING_VALIDATION.md).
+
+`desktop/prepare_espeak.py` builds pinned eSpeak NG 1.52.0 and pronunciation data for mul. The engine bundle includes its GPL and data notices, source archive and build flags separately from FFmpeg. The build increases `N_PATH_HOME` to 4096 to support long application/resource paths. It has no Homebrew dynamic-library dependency; packaging validation must exercise phonemization after relocating the components with PATH restricted to system tools.

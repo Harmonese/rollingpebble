@@ -1,10 +1,18 @@
 import { useContext } from "react";
 import type { AutoTimingHook } from "../../domain/auto-timing/useAutoTimingState.js";
+import type { TimingLanguage } from "../../shared/api/timingV2.js";
 import { appContext } from "../../shared/appContext.js";
 import { CheckRow, FormGrid } from "../../ui/index.js";
 
-export const AutoTimingFields: React.FC<{ at: AutoTimingHook; settingsMode?: boolean; advanced?: React.ReactNode }> = (
-    { at, settingsMode = false, advanced },
+export const AutoTimingFields: React.FC<
+    {
+        at: AutoTimingHook;
+        settingsMode?: boolean;
+        advanced?: React.ReactNode;
+        onLanguageChange?: (language: TimingLanguage) => void;
+    }
+> = (
+    { at, settingsMode = false, advanced, onLanguageChange },
 ) => {
     const { lang } = useContext(appContext);
     const t = lang.timingV2;
@@ -71,7 +79,25 @@ export const AutoTimingFields: React.FC<{ at: AutoTimingHook; settingsMode?: boo
     );
     return (
         <>
-            <FormGrid columns={settingsMode ? 2 : 1}>{audio}{mode}</FormGrid>
+            <FormGrid columns={settingsMode ? 2 : 1}>
+                {audio}
+                {mode}
+                <label title={t.languageHint}>
+                    {t.language}
+                    <select
+                        value={options.language}
+                        onChange={e => {
+                            const language = e.target.value as TimingLanguage;
+                            setOptions({ ...options, language });
+                            onLanguageChange?.(language);
+                        }}
+                    >
+                        {Object.entries(lang.autoTimingLanguages).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                        ))}
+                    </select>
+                </label>
+            </FormGrid>
             {settingsMode && defaults}
             <details>
                 <summary>{t.advanced}</summary>
@@ -85,10 +111,24 @@ export const AutoTimingFields: React.FC<{ at: AutoTimingHook; settingsMode?: boo
                         />
                     </label>
                     <label>
-                        {t.ctcPath}
+                        {t.ctcEnglish}
                         <input
                             value={options.ctc_model || ""}
                             onChange={e => setOptions({ ...options, ctc_model: e.target.value || null })}
+                        />
+                    </label>
+                    <label>
+                        {t.ctcMandarin}
+                        <input
+                            value={options.ctc_zh_model || ""}
+                            onChange={e => setOptions({ ...options, ctc_zh_model: e.target.value || null })}
+                        />
+                    </label>
+                    <label>
+                        {t.ctcMultilingual}
+                        <input
+                            value={options.ctc_mul_model || ""}
+                            onChange={e => setOptions({ ...options, ctc_mul_model: e.target.value || null })}
                         />
                     </label>
                 </FormGrid>

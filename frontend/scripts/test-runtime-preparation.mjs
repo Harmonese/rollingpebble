@@ -119,7 +119,8 @@ function buttons(tree, output = []) {
     }
     return output;
 }
-for (const scenario of ["start", "cancel", "workspace-change"]) {
+for (const scenario of ["start", "cancel", "workspace-change", "language-change"]) {
+    options.language = "auto";
     slots = [];
     cursor = 0;
     preparationCalls = 0;
@@ -149,6 +150,10 @@ for (const scenario of ["start", "cancel", "workspace-change"]) {
     if (scenario === "cancel") render().find(button => button.props.children === "Cancel").props.onClick();
     if (scenario === "workspace-change") {
         props.workspaceSignature = "changed";
+        render();
+    }
+    if (scenario === "language-change") {
+        options.language = "zh";
         render();
     }
     resolvePreparation();

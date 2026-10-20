@@ -72,7 +72,7 @@ def test_settings_defaults_and_history(tmp_path):
     assert store.read().auto_timing_v2_options["alignment_mode"] == "ordered"
     store.path.write_text('{"auto_timing_v2_options":{"cpu_threads":8}}')
     old = store.read()
-    assert old.auto_timing_v2_options == {"cpu_threads": 8, "alignment_mode": "unordered"}
+    assert old.auto_timing_v2_options == {"cpu_threads": 8, "alignment_mode": "unordered", "language": "auto"}
     store.write(old)
     assert store.read().auto_timing_v2_options["alignment_mode"] == "unordered"
     assert store.reset_defaults().auto_timing_v2_options["alignment_mode"] == "ordered"

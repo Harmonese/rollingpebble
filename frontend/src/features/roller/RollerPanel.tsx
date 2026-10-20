@@ -1,6 +1,7 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useAutoTimingState } from "../../domain/auto-timing/useAutoTimingState.js";
 import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
+import { modelName } from "../../shared/api/models.js";
 import { listProjects } from "../../shared/api/projects.js";
 import { BackendApiError, backendMessageText } from "../../shared/api/request.js";
 import { waitForRuntime } from "../../shared/api/runtimePreparation.js";
@@ -11,8 +12,10 @@ import {
     getBatch,
     getTiming,
     isRunActive,
+    rememberTimingLanguage,
     resumeBatch,
     retryBatch,
+    retryTiming,
     startBatch,
     startTiming,
     TIMING_DELETED_EVENT,
@@ -57,6 +60,7 @@ export const RollerPanel: React.FC<{
     const [repairNeeded, setRepairNeeded] = useState(true);
     const intent = useRef(0);
     const actionLock = useRef(false);
+    const languageSaves = useRef<Promise<unknown>>(Promise.resolve());
     const identity = JSON.stringify([
         props.workspaceId,
         props.workspaceSignature,
@@ -81,6 +85,8 @@ export const RollerPanel: React.FC<{
                 vocals,
                 () => intent.current === token && latestIdentity.current === expected,
                 repair,
+                undefined,
+                at.options.language === "mul",
             );
         } catch (error) {
             setError(backendMessageText(error, lang.backendMessages));
@@ -92,6 +98,7 @@ export const RollerPanel: React.FC<{
         }
     };
     const [error, setError] = useState("");
+    const [needsSettings, setNeedsSettings] = useState(false);
     const [diagnostics, setDiagnostics] = useState("");
     const [clock, setClock] = useState(Date.now());
     useEffect(() => {
@@ -112,6 +119,11 @@ export const RollerPanel: React.FC<{
         window.addEventListener(TIMING_DELETED_EVENT, deleted);
         return () => window.removeEventListener(TIMING_DELETED_EVENT, deleted);
     }, []);
+    const sameOptions = run
+        && Object.keys(at.options).every(key =>
+            (at.options[key as keyof typeof at.options] ?? null)
+                === (run.options?.[key as keyof typeof at.options] ?? null)
+        );
     const active = isRunActive(run) || isRunActive(batch);
     useSettingsUpdated(async () => {
         at.loadFromSettings(await settings());
@@ -164,10 +176,19 @@ export const RollerPanel: React.FC<{
         actionLock.current = true;
         setBusy(true);
         setError("");
+        setNeedsSettings(false);
         try {
             await action();
         } catch (e) {
-            setError(backendMessageText(e, lang.backendMessages));
+            const message = e instanceof BackendApiError ? e.backendMessage : null;
+            const missing = typeof message?.params?.models === "string" ? message.params.models.split(",") : [];
+            setError(
+                backendMessageText(e, lang.backendMessages)
+                    + (missing.length ? ` · ${missing.map(kind => modelName(kind, lang)).join(" / ")}` : ""),
+            );
+            setNeedsSettings(
+                message?.code === "models.not_verified" || message?.code === "runtime.multilingual_failed",
+            );
         } finally {
             actionLock.current = false;
             setBusy(false);
@@ -177,7 +198,7 @@ export const RollerPanel: React.FC<{
         <Panel
             title={
                 <>
-                    {lang.ui.autoTiming} <StatusPill>Experimental</StatusPill> <StatusPill>English</StatusPill>
+                    {lang.ui.autoTiming} <StatusPill>Experimental</StatusPill>
                 </>
             }
         >
@@ -206,7 +227,13 @@ export const RollerPanel: React.FC<{
                     onDeselectAll={() => setSelected(new Set())}
                 />
             )}
-            <AutoTimingFields at={at} />
+            <AutoTimingFields
+                at={at}
+                onLanguageChange={language => {
+                    languageSaves.current = languageSaves.current.then(() => rememberTimingLanguage(language))
+                        .catch(e => setError(backendMessageText(e, lang.backendMessages)));
+                }}
+            />
             {mode === "single" && run && <TimingProgress run={run} lang={lang} clock={clock} />}
             {mode === "batch" && batch && (
                 <TimingProgress run={batch.runs?.find(isRunActive) || batch} lang={lang} clock={clock} />
@@ -224,19 +251,22 @@ export const RollerPanel: React.FC<{
                                 return;
                             }
                             const saved = await props.saveWorkspace();
-                            const next = await startTiming({
+                            const input = {
                                 project_id: saved.project_id,
                                 options: at.options,
                                 expected_lyrics: saved.plain_lyrics,
                                 expected_audio_ref: saved.audio_ref || undefined,
                                 workspace_id: props.workspaceId,
                                 lyrics_version: props.workspaceSignature,
-                            });
+                            };
+                            const next = run && sameOptions && run.project_id === saved.project_id
+                                ? await retryTiming(run.id, input)
+                                : await startTiming(input);
                             setRun(next);
                             props.onRun(next);
                         })}
                 >
-                    {mode === "single" && run && !active ? t.retry : t.start}
+                    {mode === "single" && run && sameOptions && !active ? t.retry : t.start}
                 </Button>
                 <Button
                     tone="danger"
@@ -312,6 +342,11 @@ export const RollerPanel: React.FC<{
                     />
                 ))}
             {error && <p role="alert">{error}</p>}
+            {needsSettings && (
+                <Button onClick={() => window.dispatchEvent(new Event("rollingpebble:auto-timing-settings"))}>
+                    {lang.ui.settings}
+                </Button>
+            )}
             <details>
                 <summary>{t.history}</summary>
                 {history.filter(item =>

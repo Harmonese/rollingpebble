@@ -19,6 +19,7 @@ export const TimingProgress: React.FC<{ run: TimingRun; lang: Language; clock: n
         <section className="studio-progress-card">
             <div className="studio-progress-head" role="status">
                 <b>{stage}</b>
+                {run.language && <span title={t.languageHint}>{lang.autoTimingLanguages[run.language]}</span>}
                 {active && progress && <span>{t[run.status]}</span>}
             </div>
             {active && (

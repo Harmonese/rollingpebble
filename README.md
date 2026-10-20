@@ -17,12 +17,14 @@ It provides a Tauri desktop app for macOS Apple Silicon and a browser interface 
 - **Edit** metadata and lyric text in a focused LRC editor.
 - **Synchronize** timestamps manually when you want frame-level control.
 - **Repeat lyrics** with numbered marks, playback-time insertion and undo.
-- **Auto-time (Experimental, English)** with py-roller 0.10.2, then review an independent editable preview before applying it.
+- **Auto-time (Experimental)** with py-roller 0.10.3, then review an independent editable preview before applying it.
 - **Translate** through a local or cloud OpenAI-compatible service, with synchronized bilingual LRC editors.
 - **Save and recover** projects automatically after their first save, including translations and audio changes.
 - **Manage storage** for projects, models, results and temporary data in one application directory.
 - **Publish** prepared lyrics through LRCLIB workflows.
 - **Use multiple languages** through the built-in i18n layer.
+
+Version 0.9.0 adds Mandarin and multilingual Auto Timing through py-roller 0.10.3, with separate CTC downloads and bundled offline pronunciation components. Existing users can keep their English models and add languages in Settings. NetEase lyric results now include an Open button for the song page.
 
 ## Typical Workflow
 
@@ -38,13 +40,13 @@ The Project panel shows **Unsaved**, **Saving**, **Saved**, or **Save failed**. 
 
 ### macOS Desktop (Apple Silicon)
 
-Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**. This checkout prepares version **0.8.0**.
+Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**. This checkout prepares version **0.9.0**.
 
 1. Open the app; the unified startup screen prepares or checks bundled components.
-2. On first use, choose whether to download Whisper large-v3, CTC and Demucs. ModelScope is the default source; official downloads and HTTP(S) proxy settings are also available.
-3. Subsequent launches verify installed weights and offer targeted download or repair for missing or damaged models. Choose Later to enter the workspace without downloading.
+2. On first use, choose English, Mandarin and/or multilingual models; Whisper large-v3 and Demucs are shared. ModelScope is the default source; official downloads and HTTP(S) proxy settings are also available.
+3. Subsequent launches verify installed weights and offer targeted download or repair for selected missing models or damaged installed models. Choose Later to enter the workspace without downloading.
 
-The app bundles Python 3.12.15, FFmpeg and hashed binary wheels for py-roller 0.10.2 and its dependencies. Runtime installation is offline and needs no compiler or Homebrew. Model weights are downloaded separately through startup setup or Settings. HTTP(S) proxies are supported; SOCKS proxies are not. Auto Timing defaults to offline operation.
+The app bundles Python 3.12.15, FFmpeg and hashed binary wheels for py-roller 0.10.3 and its dependencies. Runtime installation is offline and needs no compiler or Homebrew. Model weights are downloaded separately through startup setup or Settings. HTTP(S) proxies are supported; SOCKS proxies are not. Auto Timing defaults to offline operation.
 
 **Distribution limitation:** the DMG is ad-hoc signed and is not Apple-notarized. macOS Gatekeeper may block first launch. Do not disable system-wide security protections. This build targets Apple Silicon with macOS 14 or newer.
 
@@ -82,25 +84,29 @@ http://127.0.0.1:6789
 
 ## Auto Timing
 
-Auto Timing uses Protocol v2 and a fixed English line-level pipeline. Ordered follows complete input lyrics, including every repeat, and retains unresolved lines for manual timing. Unordered discovers sung occurrences, including repetitions absent from the input. CTC refines timing. New installations default to Ordered; existing settings retain Unordered. Results can still miss or misplace lines and require review. Heavy dependencies stay in a separate runtime under the app data directory.
+Auto Timing uses Protocol v2 for line-level alignment. Language defaults to Auto for new and upgraded installations; it selects English, Mandarin, mixed Mandarin/English or the general multilingual phoneme backend from lyric text. Mandarin does not imply Cantonese; Mandarin, mixed and multilingual singing alignment remain experimental. Ordered follows complete input lyrics, including every repeat, and retains unresolved lines for manual timing. Unordered discovers sung occurrences, including repetitions absent from the input. CTC refines timing. New installations default to Ordered; existing settings retain Unordered. Results can still miss or misplace lines and require review. Heavy dependencies stay in a separate runtime under the app data directory.
 
 To set it up:
 
-1. Launch the desktop app. The startup screen prepares or checks bundled components, then opens the workspace.
+1. Launch the desktop app. The unified startup screen prepares or checks bundled components, then verifies installed models and offers setup or repair before opening the workspace.
 2. Download the required models explicitly.
 3. If preparation fails, use **Repair**. Version and logs are available in the collapsed **Diagnostics** section.
 
 Preparation is offline and shared between startup, Settings and Start. Failed startup checks offer Repair or Continue for manual editing. Closing Settings does not cancel it. Cancelling a pending Start cancels only the intent to run; changing the workspace or options while waiting also prevents automatic start.
 
-Prepare the fixed models before starting. Original is the default audio source; Vocals is an explicit choice. CTC supports Auto/CPU/MPS; Whisper and Demucs run on CPU. Runtime readiness and model readiness are separate. No CUDA, language, Full/Quick or research-algorithm switches are exposed.
+Prepare the fixed models before starting. Original is the default audio source; Vocals is an explicit choice. CTC supports Auto/CPU/MPS; Whisper and Demucs run on CPU. Runtime readiness and model readiness are separate. English, Mandarin and multilingual CTC models are managed separately. The eSpeak pronunciation library and data are bundled for multilingual alignment. No CUDA, Full/Quick or research-algorithm switches are exposed.
 
 Auto Timing Review follows engine revisions until the first text or timing edit, then retains an independent autosaved draft. Use Latest discards edits after confirmation. Apply updates the workspace and triggers normal autosave for an existing project. Failed or cancelled runs with content can be applied as Partial after confirmation. Batch runs are serial and each result is reviewed separately.
 
 The current supported py-roller range is:
 
 ```text
-py-roller>=0.10.2,<0.11, protocol 2 (desktop pinned to 0.10.2)
+py-roller>=0.10.3,<0.11, protocol 2 (desktop pinned to 0.10.3)
 ```
+
+## Translation
+
+Configure a local or cloud OpenAI-compatible connection in Settings, then use the Editor translation tool for whole-song translation, single-line retranslation and manual correction. The English default prompt emphasizes concise lyric phrasing, imagery, wordplay and semantic accuracy; it does not change with the interface language. Saved prompts are preserved across upgrades. Use Reset Prompt and save the connection to adopt the new default. Line-ID mapping and JSON output rules are enforced separately by the application.
 
 ## Storage and Privacy
 

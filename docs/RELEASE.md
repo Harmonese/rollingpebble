@@ -1,6 +1,6 @@
 # Release Checklist
 
-Read the release version from `pyproject.toml`; current examples use `0.8.0`. Run commands from the repository root.
+Read the release version from `pyproject.toml`; current examples use `0.9.0`. Run commands from the repository root.
 
 Publishing a GitHub Release triggers `.github/workflows/python-publish.yml` and
 publishes Python distributions to PyPI through trusted publishing. Pushing the
@@ -8,7 +8,7 @@ commit/tag alone does not publish a GitHub Release or upload the DMG.
 
 ## Current Preparation
 
-Version 0.8.0 includes Protocol v2 Auto Timing, model management, Translation, project autosave and workspace recovery. The validation archive records earlier development builds; use freshly built 0.8.0 artifacts for release. Commit/tag pushes do not publish packages.
+Version 0.9.0 adds py-roller 0.10.3 multilingual alignment, Mandarin and phoneme CTC models, bundled eSpeak NG, NetEase song links and a refined translation prompt. Existing projects, translations and shared model weights remain reusable. The validation archive records earlier development builds; use freshly built 0.9.0 artifacts for release. Commit/tag pushes do not publish packages.
 
 ## Version and Checks
 
@@ -37,8 +37,8 @@ Build on Apple Silicon with the tools described in [DESKTOP.md](DESKTOP.md):
 ```bash
 pnpm desktop:build
 codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Rolling Pebble.app"
-hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.8.0_aarch64.dmg"
-shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.8.0_aarch64.dmg"
+hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.0_aarch64.dmg"
+shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.0_aarch64.dmg"
 ```
 
 The build hook rebuilds the sidecar with standalone Python, includes app version
@@ -74,8 +74,8 @@ cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
 
 Expected files:
 
-- `dist/rollingpebble-0.8.0-py3-none-any.whl`
-- `dist/rollingpebble-0.8.0.tar.gz`
+- `dist/rollingpebble-0.9.0-py3-none-any.whl`
+- `dist/rollingpebble-0.9.0.tar.gz`
 
 Verify these include the WebUI and current metadata, but not standalone Python,
 virtual environments, or models. CLI/PyPI users need the bundled Python 3.12 and matching engine resources prepared from source for Auto
@@ -86,20 +86,21 @@ Timing; the Python package alone does not include an engine wheelhouse. The work
 After checks and artifact verification:
 
 ```bash
-git tag -a v0.8.0 -m "Release v0.8.0"
-git push --atomic origin main v0.8.0
+git tag -a v0.9.0 -m "Release v0.9.0"
+git push --atomic origin main v0.9.0
 ```
 
-Manually publish the GitHub Release for `v0.8.0`, attach
-`Rolling Pebble_0.8.0_aarch64.dmg` and its SHA-256 checksum, and use the v0.8.0
+Manually publish the GitHub Release for `v0.9.0`, attach
+`Rolling Pebble_0.9.0_aarch64.dmg` and its SHA-256 checksum, and use the v0.9.0
 changelog as release notes after maintainer acceptance. Mention that Python, FFmpeg and binary dependencies are bundled, model weights are prepared separately in Settings, and Vocals needs Demucs. Then verify the PyPI
 publishing workflow completes. Do not publish a Release merely to test CI.
 
 ## Remaining Public Distribution Gates
 
-- Maintainer acceptance of first-use component preparation, cancellation while waiting, failure/repair, and Vocals dependency preparation. This UI simplification is checked with mocked installation tests; real inference is left to the maintainer.
+- Maintainer acceptance of language-based model preparation, mixed-language batches, cancellation and per-model repair. Real inference is left to the maintainer; small-file download tests do not establish real-song alignment quality.
 - Maintainer acceptance of Preview editing, keyboard focus, Apply, batch review and narrow/wide window layout. Automated browser testing is intentionally omitted.
 - Validate on the actual minimum supported macOS version; the current machine's success and Mach-O audit are not an OS matrix.
 - Preserve the bundled FFmpeg LGPL license, corresponding source archive and build parameters; verify their hashes against the engine manifest.
+- Preserve eSpeak NG GPL notices, corresponding source, pronunciation data and build parameters. Check relocated long Unicode paths with `desktop/validate_pronunciation.py` without Homebrew on PATH.
 - Developer ID signing/notarization, if required for the intended distribution.
 - Obtain explicit GitHub Release/PyPI publication instructions after artifact acceptance.

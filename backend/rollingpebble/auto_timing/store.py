@@ -96,6 +96,9 @@ class RunStore:
     @staticmethod
     def normalize(record):
         record.setdefault("options", {}).setdefault("alignment_mode", "unordered")
+        record["options"].setdefault("language", "en")
+        if record.get("kind") == "run":
+            record.setdefault("language", "en")
         return record
 
     def get(self, run_id):

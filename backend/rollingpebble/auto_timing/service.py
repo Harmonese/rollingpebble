@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 
 from rollingpebble.auto_timing.contracts import RunRequest
+from rollingpebble.auto_timing.languages import engine_options, required_models, resolve_language
 from rollingpebble.auto_timing.protocol import EventStream, compatible, plain_inventory
 from rollingpebble.auto_timing.store import ACTIVE, RunStore, now
 from rollingpebble.storage.files import resolve_audio_path
@@ -63,12 +64,24 @@ class AutoTimingService:
             raise ValueError("Project audio changed")
         return audio, text, identity
 
-    def preflight(self, request):
-        _, text, identity = self._input(request)
-        options, command, env = self._context(request)
+    def preflight(self, request, *, language=None, check_models=True, prepared=None):
+        if prepared is None:
+            _, text, identity = self._input(request)
+            options, command, env = self._context(request)
+            language = resolve_language(command[0], text, language or options["language"], env)
+            options = engine_options(options, language)
+            prepared = {"audio_identity": identity, "lyrics_hash": hashlib.sha256(text.encode()).hexdigest(),
+                        "requested_language": request.options.language, "language": language,
+                        "required_models": required_models(options), "engine_options": options}
+        else:
+            options = prepared["engine_options"]
+            language = prepared["language"]
+            _, command, env = self._context(request)
+        if not check_models:
+            return prepared
         self.runtime.models.require(options)
         args = [*command, "doctor", "--json", "--cache-dir", options["cache_dir"],
-                "--audio-mode", options["audio_mode"]]
+                "--audio-mode", options["audio_mode"], "--language", language]
         for key in ("whisper_model", "ctc_model"):
             if options.get(key):
                 args += ["--" + key.replace("_", "-"), options[key]]
@@ -79,6 +92,10 @@ class AutoTimingService:
             if hasattr(self.runtime, "preparation"):
                 self.runtime.preparation.invalidate()
             raise ValueError("Runtime check failed; inspect Settings diagnostics") from exc
+        if language == "mul" and any(check.get("name") in {"phonemizer", "langid", "espeak-ng"}
+                                     and not check.get("ok") for check in report.get("checks", [])):
+            from rollingpebble.messages import AppError
+            raise AppError("runtime.multilingual_failed", "Auto Timing multilingual components are unavailable")
         if not report.get("runtime_ok") or not compatible(report.get("engine_version")) or 2 not in report.get("capabilities", {}).get("protocol_versions", []):
             if hasattr(self.runtime, "preparation"):
                 self.runtime.preparation.invalidate()
@@ -90,17 +107,20 @@ class AutoTimingService:
                                     capture_output=True, env=env, timeout=30)
             if device.returncode:
                 raise ValueError("MPS is not available on this device")
-        return {"ready": True, "audio_identity": identity, "lyrics_hash": hashlib.sha256(text.encode()).hexdigest(),
-                "doctor": report}
+        return {**prepared, "ready": True, "doctor": report}
+
 
     def _record(self, request, batch_id=None, checked=None):
         audio, text, identity = self._input(request)
         if checked and (checked["audio_identity"] != identity or checked["lyrics_hash"] != hashlib.sha256(text.encode()).hexdigest()):
             raise ValueError("Project changed during preflight")
-        options, command, env = self._context(request)
+        checked = checked or self.preflight(request)
+        _, command, env = self._context(request)
+        options = checked["engine_options"]
         run_id = uuid.uuid4().hex
         record = dict(id=run_id, kind="run", project_id=request.project_id, status="queued",
                       created_at=now(), updated_at=now(), options=request.options.model_dump(),
+                      language=checked["language"], requested_language=request.options.language,
                       workspace_id=request.workspace_id, lyrics_version=request.lyrics_version,
                       audio_identity=identity, lyrics_hash=hashlib.sha256(text.encode()).hexdigest(),
                       snapshot=None, progress=None, error=None, batch_id=batch_id, applied=[])
@@ -125,12 +145,12 @@ class AutoTimingService:
             raise
         return record, env
 
-    def start(self, request):
+    def start(self, request, *, language=None):
         if not self.jobs.resource_lock.acquire(blocking=False):
             raise RuntimeError("Auto Timing resources are busy")
         record = None
         try:
-            checked = self.preflight(request)
+            checked = self.preflight(request, language=language) if language else self.preflight(request)
             record, env = self._record(request, checked=checked)
             def run():
                 try:
@@ -152,7 +172,7 @@ class AutoTimingService:
         run_id = record["id"]
         folder = self.store.folder(run_id)
         stream = EventStream(run_id, record["options"].get("alignment_mode", "unordered"),
-                             (folder / "lyrics.txt").read_text(encoding="utf-8").splitlines())
+                             (folder / "lyrics.txt").read_text(encoding="utf-8").splitlines(), record.get("language", "en"))
         process = None
         errors = []
         reader = None
@@ -255,21 +275,34 @@ class AutoTimingService:
                 self._stop(process)
             return record
 
-    def batch(self, request):
+    def batch(self, request, *, languages=None):
         if not self.jobs.resource_lock.acquire(blocking=False):
             raise RuntimeError("Auto Timing resources are busy")
         children = []
         parent_id = uuid.uuid4().hex
         parent = None
         try:
-            self.preflight(RunRequest(project_id=request.project_ids[0], options=request.options))
+            plans = {}
+            for pid in dict.fromkeys(request.project_ids):
+                child = RunRequest(project_id=pid, options=request.options)
+                plans[pid] = self.preflight(child, check_models=False,
+                    **({"language": languages[pid]} if languages and pid in languages else {}))
+            self.runtime.models.require_many([plan["engine_options"] for plan in plans.values()])
+            checked_inputs = {}
+            inspected = set()
+            for pid, plan in plans.items():
+                key = json.dumps(plan["engine_options"], sort_keys=True)
+                if key not in inspected:
+                    self.preflight(RunRequest(project_id=pid, options=request.options), prepared=plan)
+                    inspected.add(key)
+                checked_inputs[pid] = plan
             parent = dict(id=parent_id, kind="batch", project_id=None, status="queued", created_at=now(),
                           updated_at=now(), children=[], options=request.options.model_dump())
             self.store.create(parent)
             # Freeze every input at queue creation, never silently read future edits.
             for pid in dict.fromkeys(request.project_ids):
                 child_request = RunRequest(project_id=pid, options=request.options)
-                record, env = self._record(child_request, parent_id)
+                record, env = self._record(child_request, parent_id, checked=checked_inputs[pid])
                 children.append((record, env))
             parent = self.store.update(parent_id, children=[r["id"] for r, _ in children])
             def run():

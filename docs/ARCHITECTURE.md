@@ -23,6 +23,7 @@ creating a persistent project.
 
 `translation.py` owns independent session-only async tasks and versioned default translation instructions.
 Connection preferences persist an editable `prompt`; GET also returns `default_prompt` for reset.
+The version 3 English default adds lyrical phrasing and semantic review instructions; saved prompts are not overwritten on upgrade and are independent of UI locale.
 Each job captures its prompt at creation. Noneditable ID/JSON output rules are appended separately,
 and strict result validation still applies. Legacy settings without a prompt use the default.
 The `/api/translation` router checks application origin and write headers. Connections
@@ -87,8 +88,8 @@ source project/audio no longer matches.
 
 ## Protocol v2
 
-The desktop pins py-roller 0.10.2, source commit `39dbbf8`. The compatibility
-gate accepts `>=0.10.2,<0.11` with protocol 2. There is no v1 fallback.
+The desktop pins py-roller 0.10.3, source commit `6d3ded2`. The compatibility
+gate accepts `>=0.10.3,<0.11` with protocol 2. There is no v1 fallback.
 
 ```text
 runtime-python -m pyroller run --request /absolute/run/request.json
@@ -114,8 +115,7 @@ Requests always send alignment_mode. Existing settings and old runs without the
 field are interpreted as unordered, while new installations default to ordered.
 
 The host uses no private py-roller algorithm modules or research configuration.
-Whisper finds sung occurrences; CTC refines their times. English is the supported
-input language. The host never represents scores as accuracy or verification.
+Whisper finds sung occurrences; CTC refines their times. Options carry auto/en/zh/zh-en/mul. One pinned adapter invokes `pyroller.language.resolve_language` in the managed interpreter before model admission. Requests freeze the resolved language while run records retain the requested Auto; batch children resolve independently. Review snapshots and final artifacts must match the frozen language/backend. The host never represents scores as accuracy or verification.
 
 ## Execution and Persistence
 
@@ -193,7 +193,7 @@ structured Python API.
 
 The managed environment lives in `runtime/venv`; successful layout migration removes old owned environments.
 `runtime/preparation.py` coordinates idempotent preparation for desktop startup, Settings and Start.
-`POST /api/runtime/auto-roller/ensure` accepts only original/vocals capability and repair intent;
+`POST /api/runtime/auto-roller/ensure` accepts only original/vocals capability, optional multilingual checks and repair intent;
 the status response includes preparation state, capabilities and job ID. Concurrent requests
 share a task, with Vocals escalation after the base process exits. Other resource owners cause
 a busy response. Old install/upgrade/doctor/vocals-install writes return 410.
@@ -214,7 +214,7 @@ offline. Runtime health uses doctor.runtime_ok independently of model readiness.
 Model downloads are explicit. One `StartupGate` owns runtime readiness, model checks,
 issue prompts and downloads, keeping the illustration mounted across phases. Environment
 failures can bypass model checks and enter manual editing directly. Fresh installations
-offer all three models; every later startup reports missing, corrupt and failed checks
+offer shared models plus language-selected CTCs; later startup reports selected missing models and corrupt/failed installed models
 using the backend `startup_issues` list, shared with Settings. Declining/closing skips only
 the current launch. The onboarding flag controls the initial prompt form, independently
 of preference reset; existing settings without this field count as upgrades.
@@ -255,3 +255,11 @@ resolves target dependencies into a hashed wheelhouse, extracts FFmpeg and
 audits native binaries. `build_resources.py` builds a fresh PyInstaller sidecar
 using standalone Python. No end-user source compilation is permitted.
 See [desktop packaging](DESKTOP.md) and [validation](AUTO_TIMING_VALIDATION.md).
+
+## Multilingual models and native components
+
+The catalog retains `ctc` for English and adds `ctc-zh` and `ctc-mul`, pinned to upstream and ModelScope commits. `model_prepared_kinds` controls missing reminders; installing another model adds it, deletion retains intent, and preference reset preserves the selection. One validated managed or external CTC suppresses missing managed CTC reminders; corruption, check failures and language-specific run admission remain unchanged. All installed managed weights are hashed at startup. Language-specific external CTC paths map to the engine's single `ctc_model` only after resolution; the old path stays English-only.
+
+The base wheel closure includes Mandarin and mul Python dependencies. Bundled eSpeak NG 1.52.0 is built from hashed source without optional system audio libraries. `PHONEMIZER_ESPEAK_LIBRARY` and `ESPEAK_DATA_PATH` point at bundled components. Its source, licenses, build flags and data join the engine manifest. Doctor checks multilingual capability separately; failure leaves verified base capabilities usable. Models remain independent of component repair.
+
+Single retry and batch retry/resume retain the original resolved language. Old records without language are English; active settings without language migrate to Auto. Runtime compatibility requires >=0.10.3,<0.11 and protocol 2.

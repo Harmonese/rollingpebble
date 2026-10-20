@@ -1,6 +1,10 @@
 import { request } from "./request.js";
 
+export type TimingLanguage = "auto" | "en" | "zh" | "zh-en" | "mul";
 export type TimingOptions = {
+    language: TimingLanguage;
+    ctc_zh_model: string | null;
+    ctc_mul_model: string | null;
     alignment_mode: "ordered" | "unordered";
     audio_mode: "mix" | "vocals";
     ctc_device: "auto" | "cpu" | "mps";
@@ -11,6 +15,9 @@ export type TimingOptions = {
     ctc_model: string | null;
 };
 export const defaultTimingOptions: TimingOptions = {
+    language: "auto",
+    ctc_zh_model: null,
+    ctc_mul_model: null,
     alignment_mode: "ordered",
     audio_mode: "mix",
     ctc_device: "auto",
@@ -38,6 +45,8 @@ export type UnalignedLine = {
     reason: string;
 };
 export type Snapshot = {
+    language?: Exclude<TimingLanguage, "auto">;
+    timing_backend?: string;
     revision: number;
     final: boolean;
     audio_available_until: number;
@@ -58,6 +67,8 @@ export type DraftLine = { id: string; text: string; time: number | null };
 export type Draft = { version: number; base_revision: number; lines: DraftLine[] | null };
 export type RunStatus = "queued" | "running" | "cancelling" | "completed" | "failed" | "cancelled" | "interrupted";
 export type TimingRun = {
+    language?: Exclude<TimingLanguage, "auto">;
+    requested_language?: TimingLanguage;
     id: string;
     kind: "run" | "batch";
     project_id: string;
@@ -90,6 +101,12 @@ const post = <T>(url: string, body: unknown = {}) => request<T>(url, { method: "
 export const isRunActive = (run: TimingRun | null) =>
     Boolean(run && ["queued", "running", "cancelling"].includes(run.status));
 export const startTiming = (input: RunInput) => post<TimingRun>(`${base}/runs`, input);
+export const retryTiming = (id: string, input: RunInput) => post<TimingRun>(`${base}/runs/${id}/retry`, input);
+export const rememberTimingLanguage = (language: TimingLanguage) =>
+    request("/api/settings", {
+        method: "POST",
+        body: JSON.stringify({ auto_timing_v2_options: { language } }),
+    });
 export const getTiming = (id: string) => request<TimingRun>(`${base}/runs/${id}`);
 export const timingHistory = (projectId?: string) =>
     request<TimingRun[]>(`${base}/runs${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`);

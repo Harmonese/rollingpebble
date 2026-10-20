@@ -8,7 +8,12 @@ import { ActionRow, Button, ButtonGroup, LogBlock } from "../../../ui/index.js";
 import { modelMaintenanceJob } from "./EngineModels.js";
 
 export function RuntimePreparation(
-    { lang, vocals, onReady }: { lang: Language; vocals: boolean; onReady: (ready: boolean) => void },
+    { lang, vocals, multilingual = false, onReady }: {
+        lang: Language;
+        vocals: boolean;
+        multilingual?: boolean;
+        onReady: (ready: boolean) => void;
+    },
 ) {
     const t = lang.timingV2;
     const [state, setState] = useState<Preparation | null>(cachedPreparation);
@@ -23,13 +28,15 @@ export function RuntimePreparation(
         setFailed(false);
         const poll = async (repair = false) => {
             try {
-                const next = await ensureRuntime(vocals, repair);
+                const next = await ensureRuntime(vocals, repair, multilingual);
                 if (stopped) return;
                 setState(next);
                 onReady(next.status === "ready");
                 setFailed(next.status === "failed");
                 repairNeeded.current = next.status === "failed";
-                setFailureText(t.prepareFailed);
+                setFailureText(
+                    next.error ? backendMessageText({ code: next.error }, lang.backendMessages) : t.prepareFailed,
+                );
                 if (next.status === "preparing" || next.status === "checking") {
                     timer = setTimeout(() => void poll(), 1000);
                 }
@@ -49,7 +56,7 @@ export function RuntimePreparation(
             stopped = true;
             clearTimeout(timer);
         };
-    }, [vocals, retry]);
+    }, [vocals, multilingual, retry]);
     return (
         <>
             {!failed && state?.status !== "ready" && (

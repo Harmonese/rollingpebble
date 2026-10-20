@@ -27,7 +27,7 @@ def decode(text: str):
 
 
 def compatible(version: object) -> bool:
-    return isinstance(version, str) and bool(re.fullmatch(r"0\.10\.(?:[2-9]|[1-9][0-9]+)", version))
+    return isinstance(version, str) and bool(re.fullmatch(r"0\.10\.(?:[3-9]|[1-9][0-9]+)", version))
 
 
 def number(value, *, positive=False):
@@ -58,10 +58,11 @@ def validate_lines(lines, duration=None):
 
 
 class EventStream:
-    def __init__(self, request_id: str, alignment_mode="unordered", input_lines=None):
+    def __init__(self, request_id: str, alignment_mode="unordered", input_lines=None, language=None):
         self.request_id = request_id
         self.alignment_mode = alignment_mode
         self.input_lines = input_lines
+        self.language = language
         self.sequence = 0
         self.revision = 0
         self.started = False
@@ -71,6 +72,10 @@ class EventStream:
         self.rejected_request = None
 
     def validate_snapshot(self, document, duration=None):
+        if self.language is not None:
+            expected_backend = "wav2vec2_phoneme_ctc" if self.language == "mul" else "wav2vec2_ctc"
+            if document.get("language") != self.language or document.get("timing_backend") != expected_backend:
+                raise ProtocolError("Alignment language or timing backend differs from request")
         validate_lines(document.get("lines"), duration)
         mode = document.get("alignment_mode", "unordered")
         if mode != self.alignment_mode:
@@ -200,10 +205,8 @@ def plain_inventory(text: str) -> str:
         line = re.sub(r"^(?:\[\d+:\d+(?:\.\d+)?\])+", "", raw.strip()).strip()
         if not line or re.fullmatch(r"\[[^\]]*\]", line):
             continue
-        if any(c.isalpha() and not c.isascii() for c in line):
-            raise ValueError("Auto Timing supports English lyrics only")
-        if re.search(r"[a-zA-Z0-9]", line):
+        if any(c.isalnum() for c in line):
             output.append(line)
     if not output:
-        raise ValueError("No English lyric lines to time")
+        raise ValueError("No lyric lines to time")
     return "\n".join(output) + "\n"

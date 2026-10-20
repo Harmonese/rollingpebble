@@ -140,6 +140,7 @@ export type RuntimeSettings = {
     model_download_source: "modelscope" | "official";
     model_proxy_enabled: boolean;
     model_onboarding_complete: boolean;
+    model_prepared_kinds: import("./models.js").ModelKind[];
     auto_timing_hf_etag_timeout?: number | null;
     auto_timing_hf_download_timeout?: number | null;
 

@@ -21,11 +21,11 @@ import { settings, updateSettings } from "../shared/api/settings.js";
 import type { JobModel } from "../shared/api/types.js";
 import { appContext } from "../shared/appContext.js";
 import { formatBytes } from "../shared/format.js";
-import { ActionRow, Button, DialogActionRow, MessageText, Modal, StatusPill } from "../ui/index.js";
+import { ActionRow, Button, CheckRow, DialogActionRow, MessageText, Modal, StatusPill } from "../ui/index.js";
 
 type Phase = "environment" | "environment_failed" | "checking" | "ask" | "configure" | "issues" | "working" | "failed";
 export function StartupGate({ children, onSettings }: { children: React.ReactNode; onSettings?: () => void }) {
-    const { lang } = useContext(appContext);
+    const { lang, prefState } = useContext(appContext);
     const t = lang.modelSetup;
     const [ready, setReady] = useState(false);
     const [phase, setPhase] = useState<Phase>("environment");
@@ -112,7 +112,11 @@ export function StartupGate({ children, onSettings }: { children: React.ReactNod
             issue.origin === "managed"
             && ["download", "repair"].includes(issue.action)
         );
-        setSelected(downloadable.map(issue => issue.kind));
+        setSelected(
+            !models.onboarding_complete
+                ? ["whisper", (prefState?.lang || "en-US").startsWith("zh") ? "ctc-zh" : "ctc", "demucs"]
+                : downloadable.map(issue => issue.kind),
+        );
         setPhase(
             !models.onboarding_complete
                 && models.startup_issues.every(issue => issue.status === "missing" && issue.origin === "managed")
@@ -127,7 +131,12 @@ export function StartupGate({ children, onSettings }: { children: React.ReactNod
         try {
             const latest = await getModels();
             if (modelJobActive(latest.job) && latest.job) await cancelModels(latest.job);
-            await updateSettings({ model_onboarding_complete: true });
+            await updateSettings({
+                model_onboarding_complete: true,
+                ...(!report?.onboarding_complete && selected.some(kind => kind.startsWith("ctc"))
+                    ? { model_prepared_kinds: selected }
+                    : {}),
+            });
             if (mounted.current) {
                 setReady(true);
                 if (openSettings) onSettings?.();
@@ -195,7 +204,11 @@ export function StartupGate({ children, onSettings }: { children: React.ReactNod
         setBusy(true);
         setError("");
         try {
-            await updateSettings({ ...network, model_onboarding_complete: true });
+            await updateSettings({
+                ...network,
+                model_onboarding_complete: true,
+                ...(!report?.onboarding_complete ? { model_prepared_kinds: selected } : {}),
+            });
             const next = await manageModels("download", selected);
             setJob(next);
             setPhase("working");
@@ -242,7 +255,7 @@ export function StartupGate({ children, onSettings }: { children: React.ReactNod
                 {active && (
                     <>
                         <p role="status">{job?.status === "cancelling" ? t.cancelling : stage}</p>
-                        {typeof progress?.detail?.kind === "string" && <p>{modelName(progress.detail.kind)}</p>}
+                        {typeof progress?.detail?.kind === "string" && <p>{modelName(progress.detail.kind, lang)}</p>}
                         {total != null && total > 0 && <p>{formatBytes(count)} / {formatBytes(total)}</p>}
                         {error && <MessageText type="error">{error}</MessageText>}
                         {error && (phase === "working" || phase === "checking") && job && !leaving.current && (
@@ -292,7 +305,7 @@ export function StartupGate({ children, onSettings }: { children: React.ReactNod
                     && report?.startup_issues.map(issue => (
                         <ActionRow
                             key={`${issue.origin}-${issue.kind}`}
-                            title={modelName(issue.kind)}
+                            title={modelName(issue.kind, lang)}
                             description={issue.origin === "external" ? t.external : undefined}
                         >
                             <StatusPill>
@@ -300,6 +313,19 @@ export function StartupGate({ children, onSettings }: { children: React.ReactNod
                             </StatusPill>
                         </ActionRow>
                     ))}
+                {phase === "configure" && !report?.onboarding_complete && ([
+                    ["ctc", "en"],
+                    ["ctc-zh", "zh"],
+                    ["ctc-mul", "mul"],
+                ] as const).map(([kind, language]) => (
+                    <CheckRow
+                        key={kind}
+                        title={lang.autoTimingLanguages[language]}
+                        checked={selected.includes(kind)}
+                        onChange={checked =>
+                            setSelected(old => checked ? [...old, kind] : old.filter(value => value !== kind))}
+                    />
+                ))}
                 {phase === "configure" && network && (
                     <ModelDownloadFields value={network} onChange={setNetwork} disabled={busy} />
                 )}
@@ -314,7 +340,8 @@ export function StartupGate({ children, onSettings }: { children: React.ReactNod
                     {selected.length > 0 && (
                         <Button
                             tone="primary"
-                            disabled={busy || !network}
+                            disabled={busy || !network
+                                || (!report?.onboarding_complete && !selected.some(kind => kind.startsWith("ctc")))}
                             onClick={() => {
                                 if (phase === "configure") void download();
                                 else {

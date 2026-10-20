@@ -49,6 +49,7 @@ node frontend/scripts/test-runtime-preparation.mjs
 node frontend/scripts/test-startup.mjs
 node frontend/scripts/test-model-setup.mjs
 node frontend/scripts/test-engine-models.mjs
+node frontend/scripts/test-timing-languages.mjs
 node frontend/scripts/test-storage-transition.mjs
 pnpm -C frontend build
 cargo fmt --manifest-path src-tauri/Cargo.toml --check
@@ -60,6 +61,7 @@ The Chinese i18n gate is required. Other locales still contain historical Englis
 Auto Timing uses the separate Protocol v2 engine described in [migration](AUTO_TIMING_V2.md). Source installations need the prepared platform wheelhouse in `desktop/engine`; the desktop bundles it. For automatic preparation from source, set
 `ROLLINGPEBBLE_APP_RESOURCES` to the absolute `desktop` directory after preparing
 both its engine resources and standalone Python. There is no system-Python fallback.
+For native multilingual component checks without model downloads or inference, run `python desktop/validate_pronunciation.py --python <managed-venv-python> --components <app-resources>/engine/espeak`; it checks long, relocated Unicode paths with no Homebrew PATH.
 Real inference acceptance uses `desktop/validate_engine.py --data-dir <isolated-root> --audio <sample.wav> --lyrics <plain.txt>` after explicit model preparation. It never writes to the source sample or user projects. No automated browser/page tests are required for this upgrade; the maintainer handles interactive acceptance.
 
 For interactive checks use a separate `LRC_ROLLER_DATA_DIR`. Verify the project directory remains empty after import, one complete project appears after saving, repeated saves do not copy audio again, and confirmation cancel/undo behave correctly in both browser and native shell. Generated local QA artifacts belong under ignored `output/`.

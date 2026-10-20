@@ -633,11 +633,11 @@
         "title": "小滚石",
         "tagline": "一个本地化的工作流应用，用于导入、打轴、编辑和发布同步歌词。",
         "whatItDoes": "功能概述",
-        "whatItDoesText": "小滚石 集歌词导入、自动打轴 (Experimental, English)、手动修正、导出和 LRCLIB 发布于一体，所有音频处理和自动打轴 (Experimental, English)均在本地运行。",
+        "whatItDoesText": "小滚石 集歌词导入、自动打轴 (Experimental)、手动修正、导出和 LRCLIB 发布于一体，所有音频处理和自动打轴 (Experimental)均在本地运行。",
         "features": "功能特性",
         "feature1": "从 LRCLIB 或本地 .lrc / .txt 文件导入歌词。",
         "feature2": "从本地音频文件创建单曲项目。",
-        "feature3": "通过自动打轴 (Experimental, English)生成同步歌词并手动修正。",
+        "feature3": "通过自动打轴 (Experimental)生成同步歌词并手动修正。",
         "feature4": "发布同步歌词至 LRCLIB。",
         "author": "作者",
         "authorText": "小滚石由 Harmonese 创建并维护。Harmonese 是来自中国的电子音乐双人组合，也以「簡諧點源」名义发布音乐作品。",
@@ -645,7 +645,7 @@
         "authorGithub": "GitHub",
         "authorMusic": "Bandcamp",
         "credits": "致谢",
-        "creditsText": "同步器和编辑器体验基于 magic-akari/lrc-maker。自动打轴 (Experimental, English)由 Harmonese/py-roller 驱动，LRCLIB 集成由 Harmonese/pylrclib 驱动。",
+        "creditsText": "同步器和编辑器体验基于 magic-akari/lrc-maker。自动打轴 (Experimental)由 Harmonese/py-roller 驱动，LRCLIB 集成由 Harmonese/pylrclib 驱动。",
         "coreHotkeys": "常用快捷键",
         "hotkeySpace": "插入时间戳",
         "hotkeyDelete": "删除时间戳",
@@ -713,8 +713,7 @@
         "timing.install": "请在设置中安装自动打轴环境。",
         "timing.models": "请先在设置中准备模型。",
         "timing.check_failed": "运行环境检查失败，请查看设置中的诊断。",
-        "timing.english": "自动打轴仅支持英文歌词。",
-        "timing.no_lyrics": "没有可打轴的英文歌词。",
+        "timing.no_lyrics": "没有可打轴的歌词。",
         "timing.changed": "工程已更改，请重试自动打轴。",
         "timing.proxy": "人声模式需要 HTTP(S) 代理。",
         "timing.mps": "此设备无法使用 MPS。",
@@ -820,7 +819,9 @@
         "runtime.legacy_path_ignored": "已忽略旧版 PATH 中的 py-roller；Rolling Pebble 使用隔离运行时。",
         "runtime.prepare_failed": "自动打轴准备失败。",
         "runtime.resources_busy": "自动打轴资源正在使用，请稍后重试。",
-        "runtime.preparing": "准备中…"
+        "runtime.preparing": "准备中…",
+        "timing.language": "无法解析歌词语言，请检查语言设置。",
+        "runtime.multilingual_failed": "多语言发音组件不可用，请在设置中修复。"
     },
     "timingV2": {
         "alignmentMode": "对齐模式",
@@ -905,7 +906,12 @@
         "continueApp": "继续",
         "checking": "检查中…",
         "results": "任务结果",
-        "componentsUnavailable": "组件未就绪"
+        "componentsUnavailable": "组件未就绪",
+        "language": "语言",
+        "languageHint": "自动按歌词文字选择；普通话不包含粤语。中文、混唱和多语言为实验性支持。",
+        "ctcEnglish": "CTC · 英文",
+        "ctcMandarin": "CTC · 普通话",
+        "ctcMultilingual": "CTC · 多语言"
     },
     "storageV3": {
         "location": "存储位置",
@@ -924,5 +930,12 @@
         "confirmCache": "清除缓存？",
         "modelFailed": "模型操作失败。",
         "defaults": "默认参数"
+    },
+    "autoTimingLanguages": {
+        "auto": "自动",
+        "en": "英文",
+        "zh": "普通话",
+        "zh-en": "中英混唱",
+        "mul": "多语言"
     }
 }

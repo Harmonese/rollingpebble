@@ -27,6 +27,7 @@ class SettingsStore:
         if data.get("auto_timing_hf_download_timeout") is not None:
             data["auto_timing_hf_download_timeout"] = min(30, max(1, data["auto_timing_hf_download_timeout"]))
         data.setdefault("auto_timing_v2_options", {}).setdefault("alignment_mode", "unordered")
+        data["auto_timing_v2_options"].setdefault("language", "auto")
         return RuntimeSettingsModel.model_validate(data)
 
     def write(self, settings: RuntimeSettingsModel) -> RuntimeSettingsModel:
@@ -37,6 +38,7 @@ class SettingsStore:
         current = self.read()
         defaults = RuntimeSettingsModel()
         defaults.model_onboarding_complete = current.model_onboarding_complete
+        defaults.model_prepared_kinds = current.model_prepared_kinds
         if preserve_runtime_history:
             for field in ("last_doctor_status", "last_doctor_at", "last_install_profile",
                           "last_install_at", "last_install_status"):

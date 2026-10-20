@@ -262,7 +262,8 @@ class LocalPathResponse(BaseModel):
 class RuntimeSettingsModel(BaseModel):
     translation_connection: dict = Field(default_factory=dict)
     storage_layout_version: int = 3
-    auto_timing_v2_options: dict = Field(default_factory=lambda: {"alignment_mode": "ordered"})
+    auto_timing_v2_options: dict = Field(default_factory=lambda: {"alignment_mode": "ordered", "language": "auto"})
+    model_prepared_kinds: list[Literal["whisper", "ctc", "ctc-zh", "ctc-mul", "demucs"]] = Field(default_factory=lambda: ["whisper", "ctc", "demucs"])
 
     auto_roller_profile: Literal["auto"] = "auto"
     auto_fill_lyrics_library_from_project_metadata: bool = True
@@ -339,6 +340,7 @@ class RuntimeSettingsUpdateRequest(BaseModel):
     model_download_source: Literal["modelscope", "official"] | None = None
     model_proxy_enabled: bool | None = None
     model_onboarding_complete: bool | None = None
+    model_prepared_kinds: list[Literal["whisper", "ctc", "ctc-zh", "ctc-mul", "demucs"]] | None = None
     auto_timing_hf_etag_timeout: int | None = None
     auto_timing_hf_download_timeout: int | None = Field(default=None, ge=1, le=30)
 

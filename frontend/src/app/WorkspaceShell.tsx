@@ -150,6 +150,7 @@ export const WorkspaceShell: React.FC = () => {
     const previewView = run && (
         <div className="timing-preview">
             <div className="timing-preview-actions">
+                <StatusPill title={t.languageHint}>{lang.autoTimingLanguages[run.language || "en"]}</StatusPill>
                 <StatusPill>
                     {isRunActive(run)
                         ? (preview.edited ? t.edited : t.following)

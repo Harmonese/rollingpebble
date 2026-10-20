@@ -18,6 +18,7 @@ import { ActionRow, Button, MessageText, StatusPill } from "../../../ui/index.js
 import { ModelDownloadFields, type ModelNetwork, modelNetwork } from "./ModelDownloadFields.js";
 
 export const modelMaintenanceJob = () => cachedModels()?.job?.job_id;
+const modelOrder = ["whisper", "ctc", "ctc-zh", "ctc-mul", "demucs"];
 
 export function EngineModels({ ready }: { ready: boolean }) {
     const { lang } = useContext(appContext);
@@ -30,6 +31,7 @@ export function EngineModels({ ready }: { ready: boolean }) {
     const [busy, setBusy] = useState(false);
     const actionLock = useRef(false);
     const running = modelJobActive(report?.job);
+    const models = report?.models.slice().sort((a, b) => modelOrder.indexOf(a.kind) - modelOrder.indexOf(b.kind));
     useEffect(() => {
         let stopped = false;
         let timer: ReturnType<typeof setTimeout>;
@@ -87,75 +89,83 @@ export function EngineModels({ ready }: { ready: boolean }) {
                     <ModelDownloadFields value={network} onChange={setNetwork} disabled={busy} />
                 </div>
             )}
-            {report?.models.map(model => {
-                const active = running && report.job?.progress?.stage !== "checking_external"
-                    && report.job?.progress?.detail?.kind === model.kind;
-                const progress = active ? report.job?.progress : null;
-                const issue = report.startup_issues.find(item => item.origin === "managed" && item.kind === model.kind);
-                const action = issue && issue.action !== "configure" ? issue.action : model.status === "missing"
-                    ? "download"
-                    : model.status === "corrupt" || model.status === "failed"
-                    ? "repair"
-                    : "verify";
-                return (
-                    <div key={model.kind}>
-                        <ActionRow title={modelName(model.kind)} description={formatBytes(model.total_bytes)}>
-                            <StatusPill>
-                                {active && report.job?.status === "cancelling"
-                                    ? t.cancelling
-                                    : active && progress?.stage === "verifying_download"
-                                    ? t.verifyingDownload
-                                    : model.status === "failed" && model.failure_phase === "downloading"
-                                    ? t.downloadFailed
-                                    : t[model.status]}
-                            </StatusPill>
-                            <Button
-                                disabled={!ready || busy || running || !network}
-                                onClick={() => void manage(model, action)}
-                            >
-                                {action === "download" ? lang.timingV2.download : t[action]}
-                            </Button>
-                            {model.status !== "missing" && (
+            {report && models?.map(
+                model => {
+                    const active = running && report.job?.progress?.stage !== "checking_external"
+                        && report.job?.progress?.detail?.kind === model.kind;
+                    const progress = active ? report.job?.progress : null;
+                    const issue = report.startup_issues.find(item =>
+                        item.origin === "managed" && item.kind === model.kind
+                    );
+                    const action = issue && issue.action !== "configure" ? issue.action : model.status === "missing"
+                        ? "download"
+                        : model.status === "corrupt" || model.status === "failed"
+                        ? "repair"
+                        : "verify";
+                    return (
+                        <div key={model.kind}>
+                            <ActionRow title={modelName(model.kind, lang)} description={formatBytes(model.total_bytes)}>
+                                <StatusPill>
+                                    {active && report.job?.status === "cancelling"
+                                        ? t.cancelling
+                                        : active && progress?.stage === "verifying_download"
+                                        ? t.verifyingDownload
+                                        : model.status === "failed" && model.failure_phase === "downloading"
+                                        ? t.downloadFailed
+                                        : t[model.status]}
+                                </StatusPill>
                                 <Button
-                                    tone="danger"
-                                    disabled={!ready || busy || running}
-                                    onClick={() => void manage(model, "remove")}
+                                    disabled={!ready || busy || running || !network}
+                                    onClick={() => void manage(model, action)}
                                 >
-                                    {lang.timingV2.remove}
+                                    {action === "download" ? lang.timingV2.download : t[action]}
                                 </Button>
+                                {model.status !== "missing" && (
+                                    <Button
+                                        tone="danger"
+                                        disabled={!ready || busy || running}
+                                        onClick={() => void manage(model, "remove")}
+                                    >
+                                        {lang.timingV2.remove}
+                                    </Button>
+                                )}
+                                {active && (
+                                    <Button
+                                        disabled={report.job?.status === "cancelling"}
+                                        onClick={() => {
+                                            if (report.job) {
+                                                void cancelJob(report.job.job_id).catch(e =>
+                                                    setError(backendMessageText(e, lang.backendMessages))
+                                                );
+                                            }
+                                        }}
+                                    >
+                                        {lang.ui.cancel}
+                                    </Button>
+                                )}
+                            </ActionRow>
+                            {progress && (progress.bytes_total || 0) > 0 && (
+                                <div className="model-byte-progress">
+                                    <progress
+                                        aria-label={modelName(model.kind, lang)}
+                                        max={Math.max(1, progress.bytes_total || 0)}
+                                        value={progress.bytes_downloaded || 0}
+                                    />
+                                    <span>
+                                        {formatBytes(progress.bytes_downloaded)} / {formatBytes(progress.bytes_total)}
+                                    </span>
+                                </div>
                             )}
-                            {active && (
-                                <Button
-                                    disabled={report.job?.status === "cancelling"}
-                                    onClick={() => {
-                                        if (report.job) {
-                                            void cancelJob(report.job.job_id).catch(e =>
-                                                setError(backendMessageText(e, lang.backendMessages))
-                                            );
-                                        }
-                                    }}
-                                >
-                                    {lang.ui.cancel}
-                                </Button>
-                            )}
-                        </ActionRow>
-                        {progress && (progress.bytes_total || 0) > 0 && (
-                            <div className="model-byte-progress">
-                                <progress
-                                    aria-label={modelName(model.kind)}
-                                    max={Math.max(1, progress.bytes_total || 0)}
-                                    value={progress.bytes_downloaded || 0}
-                                />
-                                <span>
-                                    {formatBytes(progress.bytes_downloaded)} / {formatBytes(progress.bytes_total)}
-                                </span>
-                            </div>
-                        )}
-                    </div>
-                );
-            })}
+                        </div>
+                    );
+                },
+            )}
             {report?.external_models.map(model => (
-                <ActionRow key={model.kind} title={`${modelName(model.kind)} · ${t.external}`} description={model.path}>
+                <ActionRow
+                    key={model.kind}
+                    title={`${modelName(model.kind, lang)} · ${t.external}`}
+                    description={model.path}
+                >
                     <StatusPill>
                         {running && report.job?.progress?.stage === "checking_external"
                                 && report.job.progress.detail?.kind === model.kind
@@ -166,8 +176,7 @@ export function EngineModels({ ready }: { ready: boolean }) {
                     </StatusPill>
                     <Button
                         disabled={!ready || busy || running}
-                        onClick={() =>
-                            void manage(null, "verify")}
+                        onClick={() => void manage(null, "verify")}
                     >
                         {t.verify}
                     </Button>

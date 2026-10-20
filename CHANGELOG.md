@@ -6,6 +6,26 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Changed
+
+- Startup no longer requests other missing CTC models when at least one managed or external CTC has passed validation. Model corruption and language-specific alignment requirements remain enforced.
+
+## [0.9.0] - 2026-10-20
+
+### Added
+
+- Open beside Fetch Lyrics in NetEase import results, opening the matching song in the default browser.
+- Auto Timing language selection with Auto, English, Mandarin, mixed Mandarin/English and multilingual phoneme alignment, powered by py-roller 0.10.3 / Protocol v2. Auto resolves each song from lyric text; non-English profiles remain experimental.
+- Pinned Mandarin and phoneme CTC downloads from ModelScope or official sources, language-based first-use preparation, separate external CTC paths and selected-model startup reminders. Existing English/Whisper/Demucs weights remain reusable.
+- Bundled eSpeak NG 1.52.0 library, pronunciation data, source and license notices for offline multilingual setup without end-user Homebrew. Multilingual readiness is separate from base/Vocals readiness.
+
+### Changed
+
+- Refined the English default translation prompt for concise, lyrical expression, contextual imagery and wordplay, consistent refrains and semantic checks while preserving the separate ID/JSON output protocol.
+- New and upgraded active settings default to Auto; historical runs without language remain English. Task requests freeze resolved language, including retries and mixed-language batch children. Review validates language/backend while retaining original Unicode lyrics.
+- Model management uses the existing settings rows for five models; startup hashes installed models without requiring unselected language downloads. No model downloads occur implicitly during alignment.
+- English, Mandarin and multilingual CTC rows are grouped together in Auto Timing settings.
+
 ## [0.8.0] - 2026-10-19
 
 ### Added

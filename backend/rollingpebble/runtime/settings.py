@@ -24,10 +24,11 @@ class RuntimeSettingsService:
         return self.store.write(settings)
 
     def update(self, request: RuntimeSettingsUpdateRequest) -> RuntimeSettingsModel:
+        settings = self.store.read()
         if request.auto_timing_v2_options is not None:
             from rollingpebble.auto_timing.contracts import Options
-            request.auto_timing_v2_options = Options.model_validate(request.auto_timing_v2_options).model_dump()
-        settings = self.store.read()
+            request.auto_timing_v2_options = Options.model_validate({
+                **settings.auto_timing_v2_options, **request.auto_timing_v2_options}).model_dump()
         enabled = request.model_proxy_enabled if request.model_proxy_enabled is not None else settings.model_proxy_enabled
         proxy = request.auto_timing_hf_proxy if request.auto_timing_hf_proxy is not None else settings.auto_timing_hf_proxy
         if enabled:

@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class Options(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     alignment_mode: Literal["ordered", "unordered"] = "ordered"
+    language: Literal["auto", "en", "zh", "zh-en", "mul"] = "auto"
     audio_mode: Literal["mix", "vocals"] = "mix"
     ctc_device: Literal["auto", "cpu", "mps"] = "auto"
     cpu_threads: int = Field(default=4, ge=1, le=256)
@@ -13,6 +14,8 @@ class Options(BaseModel):
     offline: bool = True
     whisper_model: str | None = None
     ctc_model: str | None = None
+    ctc_zh_model: str | None = None
+    ctc_mul_model: str | None = None
 
 
 class RunRequest(BaseModel):
@@ -53,7 +56,7 @@ class AppliedRequest(BaseModel):
 class ModelAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["download", "remove", "verify", "repair"]
-    kind: Literal["whisper", "ctc", "demucs"] | None = None
-    kinds: list[Literal["whisper", "ctc", "demucs"]] | None = Field(default=None, min_length=1, max_length=3)
+    kind: Literal["whisper", "ctc", "ctc-zh", "ctc-mul", "demucs"] | None = None
+    kinds: list[Literal["whisper", "ctc", "ctc-zh", "ctc-mul", "demucs"]] | None = Field(default=None, min_length=1, max_length=5)
     startup: bool = False
     apply: bool = False

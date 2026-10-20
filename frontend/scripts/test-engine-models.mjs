@@ -10,7 +10,11 @@ const compiled = ts.transpileModule(source, {
 const slots = [], effects = [], calls = [];
 let cursor = 0, refresh, queryFails = false;
 let report = {
-    models: ["whisper", "ctc", "demucs"].map(kind => ({ kind, status: "missing", total_bytes: 100 })),
+    models: ["whisper", "ctc", "demucs", "ctc-zh", "ctc-mul"].map(kind => ({
+        kind,
+        status: "missing",
+        total_bytes: 100,
+    })),
     external_models: [{ kind: "whisper", path: "/external", status: "unverified" }],
     startup_issues: [],
     job: { status: "running", progress: { stage: "checking_external", detail: { kind: "whisper" } } },

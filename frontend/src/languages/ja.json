@@ -633,11 +633,11 @@
         "title": "Rolling Pebble",
         "tagline": "歌詞のインポート、タイミング、編集、公開のためのローカルワークフローアプリ。",
         "whatItDoes": "機能",
-        "whatItDoesText": "Rolling Pebbleは歌詞インポート、自動タイミング (Experimental, English)、手動修正、エクスポート、LRCLIB公開を統合したローカルWebUIです。",
+        "whatItDoesText": "Rolling Pebbleは歌詞インポート、自動タイミング (Experimental)、手動修正、エクスポート、LRCLIB公開を統合したローカルWebUIです。",
         "features": "特徴",
         "feature1": "LRCLIBまたはローカル.lrc/.txtから歌詞をインポート",
         "feature2": "ローカル音声ファイルから単曲プロジェクトを作成",
-        "feature3": "自動タイミング (Experimental, English)で同期歌詞を生成・修正",
+        "feature3": "自動タイミング (Experimental)で同期歌詞を生成・修正",
         "feature4": "LRCLIBに同期歌詞を公開",
         "author": "作者",
         "authorText": "Rolling Pebbleは、中国出身のエレクトロニック・デュオHarmoneseによって作成・保守されています。Harmoneseは音楽リリースでは「簡諧點源」としても活動しています。",
@@ -645,7 +645,7 @@
         "authorGithub": "GitHub",
         "authorMusic": "Bandcamp",
         "credits": "クレジット",
-        "creditsText": "同期・エディタはmagic-akari/lrc-maker、自動タイミング (Experimental, English)はHarmonese/py-roller、LRCLIB連携はHarmonese/pylrclibに基づく。",
+        "creditsText": "同期・エディタはmagic-akari/lrc-maker、自動タイミング (Experimental)はHarmonese/py-roller、LRCLIB連携はHarmonese/pylrclibに基づく。",
         "coreHotkeys": "主なショートカット",
         "hotkeySpace": "タイムスタンプ挿入",
         "hotkeyDelete": "タイムスタンプ削除",
@@ -713,8 +713,7 @@
         "timing.install": "Install Auto Timing in Settings.",
         "timing.models": "Prepare models in Settings.",
         "timing.check_failed": "Runtime check failed. See Settings diagnostics.",
-        "timing.english": "Auto Timing supports English lyrics only.",
-        "timing.no_lyrics": "No English lyrics to time.",
+        "timing.no_lyrics": "No lyric lines to time.",
         "timing.changed": "The project changed. Retry Auto Timing.",
         "timing.proxy": "Vocals requires an HTTP(S) proxy.",
         "timing.mps": "MPS is unavailable on this device.",
@@ -820,7 +819,9 @@
         "runtime.legacy_path_ignored": "Legacy PATH py-roller is ignored; Rolling Pebble uses an isolated runtime.",
         "runtime.prepare_failed": "Auto Timing could not be prepared.",
         "runtime.resources_busy": "Auto Timing is busy. Try again after the current task finishes.",
-        "runtime.preparing": "Preparing…"
+        "runtime.preparing": "Preparing…",
+        "timing.language": "Could not resolve the lyric language. Check the language setting.",
+        "runtime.multilingual_failed": "Multilingual pronunciation components are unavailable. Repair in Settings."
     },
     "timingV2": {
         "alignmentMode": "Alignment Mode",
@@ -905,7 +906,12 @@
         "continueApp": "Continue",
         "checking": "Checking…",
         "results": "Task Results",
-        "componentsUnavailable": "Components unavailable"
+        "componentsUnavailable": "Components unavailable",
+        "language": "Language",
+        "languageHint": "Auto uses lyric text. Mandarin excludes Cantonese. Mandarin, mixed and multilingual alignment are experimental.",
+        "ctcEnglish": "CTC · English",
+        "ctcMandarin": "CTC · Mandarin",
+        "ctcMultilingual": "CTC · Multilingual"
     },
     "storageV3": {
         "location": "Location",
@@ -924,5 +930,12 @@
         "confirmCache": "Clear cache?",
         "modelFailed": "Model operation failed.",
         "defaults": "Defaults"
+    },
+    "autoTimingLanguages": {
+        "auto": "Auto",
+        "en": "English",
+        "zh": "Mandarin",
+        "zh-en": "Mandarin / English",
+        "mul": "Multilingual"
     }
 }

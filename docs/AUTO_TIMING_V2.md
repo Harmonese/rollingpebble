@@ -1,6 +1,6 @@
 # Auto Timing v2 Migration
 
-Rolling Pebble 0.8.0 pins py-roller 0.10.2 (`39dbbf8`) and Protocol v2.
+Rolling Pebble 0.9.0 pins py-roller 0.10.3 (`6d3ded2`) and Protocol v2.
 
 Alignment Mode is explicit in every request. New installations default to Ordered;
 existing settings and historical runs without a mode retain Unordered. Ordered
@@ -23,9 +23,9 @@ The desktop startup screen prepares bundled components on first launch and check
 subsequent launches. Failure offers Repair or Continue for manual editing. Settings and Start
 retain the same preparation service as a fallback. Selecting Vocals prepares its optional dependencies.
 Fresh installations offer Whisper large-v3, CTC and Demucs with ModelScope as the default
-source. Existing users receive one combined issue list instead of first-install onboarding.
+source, with language-based preparation selection. Existing users retain the original three-model preparation set and receive one combined issue list instead of first-install onboarding.
 Installed models receive full offline SHA-256 checks on every desktop startup; missing models
-are reported even after intentional deletion or a previous skip. Skipping leaves unchecked
+in the preparation selection are reported even after intentional deletion or a previous skip; unselected new CTC models are not required. Skipping leaves unchecked
 models unavailable for inference and waits for the current worker to stop. Environment checks,
 model checks, downloads and final verification share one screen with stage-local progress.
 Missing models do not trigger environment repair. All runs are offline.
@@ -66,8 +66,7 @@ inference starts, rather than running against partially captured inputs.
 
 ## Compatibility
 
-Manual editing remains multilingual. Auto Timing is English-only and can miss
-lyrics. It does not expose accuracy scores or promise verified alignment.
+Language defaults to Auto, with explicit en, zh, zh-en and mul choices. Auto uses lyric text; Mandarin is not a dialect detector. English keeps its original CTC; zh/zh-en use the pinned Mandarin CTC and mul uses phoneme CTC plus bundled eSpeak NG 1.52.0. The non-English profiles are experimental and can miss lyrics. It does not expose accuracy scores or promise verified alignment.
 
 Desktop installation currently targets macOS arm64, macOS 14+. The Python
 distribution supplies the host/WebUI but not a cross-platform engine installer.

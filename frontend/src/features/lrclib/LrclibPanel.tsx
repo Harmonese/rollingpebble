@@ -283,34 +283,43 @@ export const LrclibPanel: React.FC<{
     );
 
     const renderNeteaseActions = ({ song, busy: _b }: NeteaseSearchRenderProps) => (
-        <button
-            type="button"
-            disabled={_b}
-            onClick={async () => {
-                try {
-                    setBusy(true);
-                    setMessage(t.netease.fetchingLyrics, "info");
-                    const result = await neteaseLyrics(song.id);
-                    const lrc = result.lyric || result.tlyric;
-                    if (lrc) {
-                        onImportText(lrc);
-                        setMessage("");
-                        toastPubSub.pub({
-                            type: "success",
-                            text: t.netease.importedLyrics.replace("{name}", song.label || String(song.id)),
-                        });
-                    } else {
-                        setMessage(t.netease.noLyrics, "warning");
+        <>
+            <button
+                type="button"
+                disabled={_b}
+                onClick={async () => {
+                    try {
+                        setBusy(true);
+                        setMessage(t.netease.fetchingLyrics, "info");
+                        const result = await neteaseLyrics(song.id);
+                        const lrc = result.lyric || result.tlyric;
+                        if (lrc) {
+                            onImportText(lrc);
+                            setMessage("");
+                            toastPubSub.pub({
+                                type: "success",
+                                text: t.netease.importedLyrics.replace("{name}", song.label || String(song.id)),
+                            });
+                        } else {
+                            setMessage(t.netease.noLyrics, "warning");
+                        }
+                    } catch (error) {
+                        setMessage(backendMessageText(error, lang.backendMessages), "error");
+                    } finally {
+                        setBusy(false);
                     }
-                } catch (error) {
-                    setMessage(backendMessageText(error, lang.backendMessages), "error");
-                } finally {
-                    setBusy(false);
-                }
-            }}
-        >
-            {u.fetchLyrics}
-        </button>
+                }}
+            >
+                {u.fetchLyrics}
+            </button>
+            <button
+                type="button"
+                onClick={() =>
+                    window.open(`https://music.163.com/#/song?id=${song.id}`, "_blank", "noopener,noreferrer")}
+            >
+                {lang.timingV2.open}
+            </button>
+        </>
     );
 
     return (

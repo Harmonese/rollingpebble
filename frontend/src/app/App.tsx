@@ -41,8 +41,16 @@ export const App: React.FC = () => {
             setSettingsSection("translation");
             setSettingsOpen(true);
         };
+        const openTiming = () => {
+            setSettingsSection("autoTiming");
+            setSettingsOpen(true);
+        };
         window.addEventListener("rollingpebble:translation-settings", open);
-        return () => window.removeEventListener("rollingpebble:translation-settings", open);
+        window.addEventListener("rollingpebble:auto-timing-settings", openTiming);
+        return () => {
+            window.removeEventListener("rollingpebble:translation-settings", open);
+            window.removeEventListener("rollingpebble:auto-timing-settings", openTiming);
+        };
     }, []);
     const [aboutOpen, setAboutOpen] = React.useState(false);
     const audioElRef = React.useRef<HTMLAudioElement>(null);

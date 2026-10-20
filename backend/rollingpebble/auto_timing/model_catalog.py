@@ -56,4 +56,23 @@ CATALOG = {
             ModelFile("htdemucs.yaml", 21, "239c445d0b14454d541ad8bd9bb271c9e536d267e8a4625208744cbb2e7bb66c",
                       b"models: ['955717e8']\n"),
         )),
+    "ctc-zh": ModelSpec("ctc-zh", "99ccb2737be22b8bb50dcfcc39ad4d567fb90cfd",
+        "Harmonese/wav2vec2-large-xlsr-53-chinese-zh-cn", "97fab8015161125b0450cbb94343082f155d1854",
+        "jonatasgrosman/wav2vec2-large-xlsr-53-chinese-zh-cn", (
+            ModelFile("config.json", 1567, "9af98614e322a5300c75605227d93c98af0c8f78754aba1dfc279166688afddd"),
+            ModelFile("preprocessor_config.json", 158, "c403ce09975b90dff0dd8302c42d422e9de1f166cd7772df23490069893cb0cf"),
+            ModelFile("pytorch_model.bin", 1276296151, "de031fd4b29e0c0667e5346450fadfe1326c89936b888b59c4ede608db763ee4"),
+            ModelFile("special_tokens_map.json", 85, "bb7068de1150661a10b55f9e4b12a0e77af8bf91f5e45e1b58afaf1d0e17f675"),
+            ModelFile("vocab.json", 44357, "33fea3444869c2cd2433f59da079b04ce91515f946d21fe1b0ff3825398bcec7"),
+        )),
+    "ctc-mul": ModelSpec("ctc-mul", "2c733782da5604684829819a5eb744c193fe9398",
+        "Harmonese/wav2vec2-xlsr-53-espeak-cv-ft", "ebe2981058623bf988eadb2a6e140b4f305c018f",
+        "facebook/wav2vec2-xlsr-53-espeak-cv-ft", (
+            ModelFile("config.json", 1856, "4609fb49b7e1d28aecb2840da1926c40bd915bc6f1120a940afacf7159bbfb13"),
+            ModelFile("preprocessor_config.json", 212, "a2254a5b58f72cd4de3632f8eee64f3f098b7c1402128d2f419e7d00ae13e335"),
+            ModelFile("pytorch_model.bin", 1263535127, "04366b6c8d24099ef313cf02f0e58d26f5dddfda16edbfc8eb2c713d94a9f551"),
+            ModelFile("special_tokens_map.json", 85, "bb7068de1150661a10b55f9e4b12a0e77af8bf91f5e45e1b58afaf1d0e17f675"),
+            ModelFile("tokenizer_config.json", 412, "d663833dacef7d29f563e23029d448fe41415dbe5e8e6d5a98b598a5258c18d8"),
+            ModelFile("vocab.json", 4637, "d732ab2456c0c017930001dc9af0b41b3b93d25b2eb9740bf9d925508d7d87d0"),
+        )),
 }

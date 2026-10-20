@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 from rollingpebble.auto_timing.model_download import check_cancel
+from rollingpebble.auto_timing.languages import MODEL_LANGUAGES
 
 
 def external_signature(value):
@@ -16,8 +17,10 @@ def external_signature(value):
 
 
 def inspect_external(manager, kind, path, cancel):
+    language = MODEL_LANGUAGES.get(kind, "en")
+    kind = "whisper" if kind == "whisper" else "ctc"
     command = [*manager.command_prefix("auto"), "models", "list", "--json", "--kind", kind,
-               "--cache-dir", str(manager.engine_data()), "--" + kind + "-model", path]
+               "--cache-dir", str(manager.engine_data()), "--language", language, "--" + kind + "-model", path]
     env = manager.runtime_env(manager.venv_path("auto"))
     env.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, text=True)
