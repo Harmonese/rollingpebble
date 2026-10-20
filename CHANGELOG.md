@@ -6,10 +6,6 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
-### Changed
-
-- Startup no longer requests other missing CTC models when at least one managed or external CTC has passed validation. Model corruption and language-specific alignment requirements remain enforced.
-
 ## [0.9.0] - 2026-10-20
 
 ### Added
@@ -25,6 +21,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - New and upgraded active settings default to Auto; historical runs without language remain English. Task requests freeze resolved language, including retries and mixed-language batch children. Review validates language/backend while retaining original Unicode lyrics.
 - Model management uses the existing settings rows for five models; startup hashes installed models without requiring unselected language downloads. No model downloads occur implicitly during alignment.
 - English, Mandarin and multilingual CTC rows are grouped together in Auto Timing settings.
+- Startup no longer requests other missing CTC models when at least one managed or external CTC has passed validation. Model corruption and language-specific alignment requirements remain enforced.
 
 ## [0.8.0] - 2026-10-19
 
