@@ -6,6 +6,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-26
+
+### Added
+
+- Linux x86_64 `.deb` and AppImage packaging on Ubuntu 24.04, including standalone Python 3.12.15, offline CPU engine wheels, FFmpeg and eSpeak components.
+- Shared desktop build entry and platform recipes for macOS arm64 and Linux x86_64, with installer exports and SHA-256 checksums under `dist/desktop/<platform>`.
+- Linux ELF auditing and isolated native package validation covering first-run offline preparation, packaged WebUI assets and backend cleanup on window close.
+
 ### Fixed
 
 - Namespaced workspace panel keys so repeated new/open project transitions cannot leave duplicate Import Audio panels behind.

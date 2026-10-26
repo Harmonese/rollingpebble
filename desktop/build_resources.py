@@ -58,7 +58,7 @@ def main() -> None:
     )
     prepare_distribution()
     subprocess.run(
-        [str(python), str(ROOT / "desktop" / "audit_macos.py"),
+        [str(python), str(ROOT / "desktop" / "audit_native.py"),
          str(ROOT / "desktop" / "bin" / "rollingpebble-backend"), str(TARGET_ROOT)],
         check=True,
     )

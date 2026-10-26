@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import shutil
 import subprocess
 import tarfile
@@ -19,6 +20,9 @@ FLAGS = ["-DBUILD_SHARED_LIBS=ON", "-DBUILD_TESTING=OFF", "-DUSE_MBROLA=OFF",
          "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_OSX_ARCHITECTURES=arm64",
          "-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0", "-DCMAKE_C_FLAGS=-DN_PATH_HOME=4096", "-DCMAKE_C_COMPILER=/usr/bin/clang",
          "-DCMAKE_CXX_COMPILER=/usr/bin/clang++", "-DCMAKE_INSTALL_PREFIX=/rollingpebble-components"]
+
+if sys.platform == "linux":
+    FLAGS = [flag for flag in FLAGS if not flag.startswith(("-DCMAKE_OSX_", "-DCMAKE_C_COMPILER=", "-DCMAKE_CXX_COMPILER="))]
 
 
 def prepare():
@@ -50,11 +54,15 @@ def prepare():
         if DEST.exists():
             shutil.rmtree(DEST)
         DEST.mkdir(parents=True)
-        library = DEST / "libespeak-ng.1.dylib"
-        shutil.copy2(next(build.rglob("libespeak-ng.1.52.0.dylib")), library)
-        subprocess.run(["install_name_tool", "-id", "@rpath/libespeak-ng.1.dylib", str(library)], check=True)
-        subprocess.run(["codesign", "--force", "--sign", "-", str(library)], check=True)
-        from audit_macos import audit_binary
+        if sys.platform == "darwin":
+            library = DEST / "libespeak-ng.1.dylib"
+            shutil.copy2(next(build.rglob("libespeak-ng.1.52.0.dylib")), library)
+            subprocess.run(["install_name_tool", "-id", "@rpath/libespeak-ng.1.dylib", str(library)], check=True)
+            subprocess.run(["codesign", "--force", "--sign", "-", str(library)], check=True)
+        else:
+            library = DEST / "libespeak-ng.so.1"
+            shutil.copy2(next(build.rglob("libespeak-ng.so.1.52.0")), library)
+        from audit_native import audit_binary
         audit_binary(library, (14, 0, 0))
         shutil.copytree(build / "espeak-ng-data", DEST / "espeak-ng-data")
         shutil.copy2(archive, DEST / archive.name)

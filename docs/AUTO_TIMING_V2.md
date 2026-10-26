@@ -1,6 +1,6 @@
 # Auto Timing v2 Migration
 
-Rolling Pebble 0.9.0 pins py-roller 0.10.3 (`6d3ded2`) and Protocol v2.
+Rolling Pebble 0.9.1 pins py-roller 0.10.3 (`6d3ded2`) and Protocol v2.
 
 Alignment Mode is explicit in every request. New installations default to Ordered;
 existing settings and historical runs without a mode retain Unordered. Ordered

@@ -108,7 +108,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![workspace_ready, workspace_exit_reply])
         .setup(|app| {
             let port = pick_port()?;
-            let mut child = start_backend(port)?;
+            let mut child = start_backend(port, app.handle())?;
             wait_for_backend(port).map_err(|err| {
                 let _ = child.kill();
                 err
@@ -186,11 +186,15 @@ fn pick_port() -> Result<u16, Box<dyn std::error::Error>> {
     Ok(addr.port())
 }
 
-fn start_backend(port: u16) -> Result<Child, Box<dyn std::error::Error>> {
+fn start_backend(port: u16, app: &tauri::AppHandle) -> Result<Child, Box<dyn std::error::Error>> {
     let repo_root = repo_root_guess();
     let frontend_dist = repo_root.join("frontend").join("dist");
 
-    let mut command = backend_command();
+    let resources = app_resources_dir(app);
+    if !cfg!(debug_assertions) && resources.is_none() {
+        return Err("Bundled desktop resources are missing; reinstall Rolling Pebble".into());
+    }
+    let mut command = backend_command(resources.as_deref());
     command
         .arg("serve")
         .arg("--host")
@@ -201,10 +205,10 @@ fn start_backend(port: u16) -> Result<Child, Box<dyn std::error::Error>> {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    if frontend_dist.join("index.html").exists() {
+    if cfg!(debug_assertions) && frontend_dist.join("index.html").exists() {
         command.env("LRC_ROLLER_FRONTEND_DIST", frontend_dist);
     }
-    if let Some(resources) = app_resources_dir() {
+    if let Some(resources) = resources {
         command.env("ROLLINGPEBBLE_APP_RESOURCES", resources);
     }
 
@@ -214,27 +218,30 @@ fn start_backend(port: u16) -> Result<Child, Box<dyn std::error::Error>> {
     Ok(command.spawn()?)
 }
 
-fn app_resources_dir() -> Option<PathBuf> {
-    let exe = env::current_exe().ok()?;
-    let exe_dir = exe.parent()?;
-    if exe_dir.file_name().and_then(|name| name.to_str()) == Some("MacOS") {
-        return Some(exe_dir.parent()?.join("Resources"));
+fn app_resources_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    let root = app.path().resource_dir().ok()?;
+    if root.join("python-runtime").is_dir() && root.join("engine/manifest.json").is_file() {
+        Some(root)
+    } else {
+        None
     }
-    if exe_dir.file_name().and_then(|name| name.to_str()) == Some("bin")
-        && exe_dir.parent()?.file_name().and_then(|name| name.to_str()) == Some("Resources")
-    {
-        return Some(exe_dir.parent()?.to_path_buf());
-    }
-    None
 }
 
-fn backend_command() -> Command {
+fn backend_command(resources: Option<&Path>) -> Command {
     if let Ok(path) = env::var("ROLLINGPEBBLE_BACKEND") {
         if !path.trim().is_empty() {
             return Command::new(path);
         }
     }
 
+    if let Some(root) = resources {
+        let name = if cfg!(windows) {
+            "rollingpebble-backend.exe"
+        } else {
+            "rollingpebble-backend"
+        };
+        return Command::new(root.join("bin").join(name));
+    }
     if let Some(sidecar) = sidecar_candidate() {
         return Command::new(sidecar);
     }

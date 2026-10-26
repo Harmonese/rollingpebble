@@ -38,7 +38,7 @@ No engine resource lock or permanent task directory is used.
 
 Tauri starts a local FastAPI sidecar on a random loopback port and opens its WebUI.
 React/Vite implements the workspace. The Python package also serves the same
-frontend without Tauri. macOS arm64 is the maintained desktop target.
+frontend without Tauri. macOS arm64 and Ubuntu 24.04 x86_64 use the same desktop build entry; platform resources and engine locks remain separate.
 
 `main.create_app()` composes ProjectService, RuntimeService, StorageService,
 JobManager and AutoTimingService through `api/context.AppServices`. Routers handle

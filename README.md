@@ -9,7 +9,7 @@
 
 Rolling Pebble is a local lyrics workstation for searching, editing, timing, translating, organizing, and publishing LRC lyrics.
 
-It provides a Tauri desktop app for macOS Apple Silicon and a browser interface backed by a local Python server. Your projects, audio, lyrics, runtime environments, and model caches stay on your machine. Auto Timing is powered by `py-roller` in an isolated runtime so large audio dependencies do not pollute the main app environment.
+It provides a Tauri desktop app for macOS Apple Silicon and Linux x86_64 and a browser interface backed by a local Python server. Your projects, audio, lyrics, runtime environments, and model caches stay on your machine. Auto Timing is powered by `py-roller` in an isolated runtime so large audio dependencies do not pollute the main app environment.
 
 ## What It Does
 
@@ -24,7 +24,7 @@ It provides a Tauri desktop app for macOS Apple Silicon and a browser interface 
 - **Publish** prepared lyrics through LRCLIB workflows.
 - **Use multiple languages** through the built-in i18n layer.
 
-Version 0.9.0 adds Mandarin and multilingual Auto Timing through py-roller 0.10.3, with separate CTC downloads and bundled offline pronunciation components. Existing users can keep their English models and add languages in Settings. NetEase lyric results now include an Open button for the song page.
+Version 0.9.1 adds shared desktop packaging for Linux x86_64 and macOS arm64, with platform-specific resources and checksummed installer exports. Auto Timing supports Mandarin and multilingual alignment through py-roller 0.10.3, with separate CTC downloads and bundled offline pronunciation components. Existing users can keep their English models and add languages in Settings. NetEase lyric results now include an Open button for the song page.
 
 ## Typical Workflow
 
@@ -40,7 +40,7 @@ The Project panel shows **Unsaved**, **Saving**, **Saved**, or **Save failed**. 
 
 ### macOS Desktop (Apple Silicon)
 
-Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**. This checkout prepares version **0.9.0**.
+Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**. This checkout prepares version **0.9.1**.
 
 1. Open the app; the unified startup screen prepares or checks bundled components.
 2. On first use, choose English, Mandarin and/or multilingual models; Whisper large-v3 and Demucs are shared. ModelScope is the default source; official downloads and HTTP(S) proxy settings are also available.
@@ -50,9 +50,13 @@ The app bundles Python 3.12.15, FFmpeg and hashed binary wheels for py-roller 0.
 
 **Distribution limitation:** the DMG is ad-hoc signed and is not Apple-notarized. macOS Gatekeeper may block first launch. Do not disable system-wide security protections. This build targets Apple Silicon with macOS 14 or newer.
 
+### Linux Desktop (x86_64)
+
+This source checkout can build `.deb` and AppImage installers on Ubuntu 24.04 using `pnpm desktop:build`. The shared build includes standalone Python, CPU engine wheels, FFmpeg and eSpeak; model downloads remain explicit. Installers and checksums are exported to `dist/desktop/linux-x86_64/`. See [Linux setup](docs/LINUX_X86_64.md) for prerequisites and validation limits. These local artifacts are not automatically published to GitHub Releases.
+
 ### Command Line
 
-The Python distribution includes the backend and WebUI, but not the platform-specific engine wheelhouse, standalone Python or FFmpeg. Manual editing works independently. For the supported Auto Timing installation use the macOS arm64 app, or prepare the matching engine resources from a source checkout as described in [desktop packaging](docs/DESKTOP.md).
+The Python distribution includes the backend and WebUI, but not the platform-specific engine wheelhouse, standalone Python or FFmpeg. Manual editing works independently. For the supported Auto Timing installation use a prepared desktop app, or prepare the matching engine resources from a source checkout as described in [desktop packaging](docs/DESKTOP.md).
 
 For the command-line installation below, Rolling Pebble requires Python 3.10 or newer. Auto Timing requires the matching bundled Python 3.12 and engine resources; it does not fall back to system Python.
 

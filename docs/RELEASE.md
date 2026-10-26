@@ -1,6 +1,6 @@
 # Release Checklist
 
-Read the release version from `pyproject.toml`; current examples use `0.9.0`. Run commands from the repository root.
+Read the release version from `pyproject.toml`; current examples use `0.9.1`. Run commands from the repository root.
 
 Publishing a GitHub Release triggers `.github/workflows/python-publish.yml` and
 publishes Python distributions to PyPI through trusted publishing. Pushing the
@@ -8,7 +8,7 @@ commit/tag alone does not publish a GitHub Release or upload the DMG.
 
 ## Current Preparation
 
-Version 0.9.0 adds py-roller 0.10.3 multilingual alignment, Mandarin and phoneme CTC models, bundled eSpeak NG, NetEase song links and a refined translation prompt. Existing projects, translations and shared model weights remain reusable. The validation archive records earlier development builds; use freshly built 0.9.0 artifacts for release. Commit/tag pushes do not publish packages.
+Version 0.9.1 adds shared macOS arm64/Linux x86_64 desktop packaging, a checksum-pinned Linux standalone Python, offline CPU engine resources and native package smoke checks. It also includes the workspace, recovery and UI refinements recorded in CHANGELOG. Build fresh 0.9.1 artifacts for release; earlier local 0.9.0 package validation remains historical evidence. Commit/tag pushes do not publish packages.
 
 ## Version and Checks
 
@@ -37,8 +37,8 @@ Build on Apple Silicon with the tools described in [DESKTOP.md](DESKTOP.md):
 ```bash
 pnpm desktop:build
 codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Rolling Pebble.app"
-hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.0_aarch64.dmg"
-shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.0_aarch64.dmg"
+hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.1_aarch64.dmg"
+shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.1_aarch64.dmg"
 ```
 
 The build hook rebuilds the sidecar with standalone Python, includes app version
@@ -74,8 +74,8 @@ cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
 
 Expected files:
 
-- `dist/rollingpebble-0.9.0-py3-none-any.whl`
-- `dist/rollingpebble-0.9.0.tar.gz`
+- `dist/rollingpebble-0.9.1-py3-none-any.whl`
+- `dist/rollingpebble-0.9.1.tar.gz`
 
 Verify these include the WebUI and current metadata, but not standalone Python,
 virtual environments, or models. CLI/PyPI users need the bundled Python 3.12 and matching engine resources prepared from source for Auto
@@ -86,12 +86,12 @@ Timing; the Python package alone does not include an engine wheelhouse. The work
 After checks and artifact verification:
 
 ```bash
-git tag -a v0.9.0 -m "Release v0.9.0"
-git push --atomic origin main v0.9.0
+git tag -a v0.9.1 -m "Release v0.9.1"
+git push --atomic origin main v0.9.1
 ```
 
-Manually publish the GitHub Release for `v0.9.0`, attach
-`Rolling Pebble_0.9.0_aarch64.dmg` and its SHA-256 checksum, and use the v0.9.0
+Manually publish the GitHub Release for `v0.9.1`, attach
+`Rolling Pebble_0.9.1_aarch64.dmg` and its SHA-256 checksum, and use the v0.9.1
 changelog as release notes after maintainer acceptance. Mention that Python, FFmpeg and binary dependencies are bundled, model weights are prepared separately in Settings, and Vocals needs Demucs. Then verify the PyPI
 publishing workflow completes. Do not publish a Release merely to test CI.
 
@@ -104,3 +104,7 @@ publishing workflow completes. Do not publish a Release merely to test CI.
 - Preserve eSpeak NG GPL notices, corresponding source, pronunciation data and build parameters. Check relocated long Unicode paths with `desktop/validate_pronunciation.py` without Homebrew on PATH.
 - Developer ID signing/notarization, if required for the intended distribution.
 - Obtain explicit GitHub Release/PyPI publication instructions after artifact acceptance.
+
+## Linux x86_64 local installers
+
+Build on Ubuntu 24.04 with `pnpm desktop:build`. Check both exported installers in `dist/desktop/linux-x86_64` with `desktop/validate_linux_bundle.py`, inspect `.deb` dependencies, and verify `SHA256SUMS` before sharing. Preserve bundled third-party notices and sources. Native startup/offline component checks are separate from real model inference and interactive playback/editing acceptance. No upload or publication is triggered by this local build.

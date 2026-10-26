@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,10 +16,11 @@ def validate(python: Path, components: Path):
         shutil.copytree(components, moved)
         assert len(str(moved)) > 160
         env = {k: v for k, v in os.environ.items() if k in {"HOME", "TMPDIR", "LANG"}}
-        env.update(PATH="/usr/bin:/bin", PHONEMIZER_ESPEAK_LIBRARY=str(moved / "libespeak-ng.1.dylib"),
+        env.update(PATH="/usr/bin:/bin", PHONEMIZER_ESPEAK_LIBRARY=str(moved / ("libespeak-ng.1.dylib" if sys.platform == "darwin" else "libespeak-ng.so.1")),
                    ESPEAK_DATA_PATH=str(moved), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
         script = """
 import os
+import sys
 from pathlib import Path
 from phonemizer.backend import EspeakBackend
 from phonemizer.backend.espeak.wrapper import EspeakWrapper

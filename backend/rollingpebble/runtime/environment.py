@@ -53,7 +53,7 @@ def build_runtime_env(venv: Path, data_dir: Path | StorageLayout, *, include_dev
     from rollingpebble.runtime.installer import engine_resources
     resources = engine_resources()
     if resources:
-        env["PHONEMIZER_ESPEAK_LIBRARY"] = str(resources / "espeak" / "libespeak-ng.1.dylib")
+        env["PHONEMIZER_ESPEAK_LIBRARY"] = str(resources / "espeak" / ("libespeak-ng.1.dylib" if platform.system() == "Darwin" else "libespeak-ng.dll" if platform.system() == "Windows" else "libespeak-ng.so.1"))
         env["ESPEAK_DATA_PATH"] = str(resources / "espeak")
     ffmpeg = str(resources / "bin") + os.pathsep if resources else ""
     env.update(

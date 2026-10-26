@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import urllib.request
 from pathlib import Path
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / "desktop" / "ffmpeg"
@@ -22,6 +23,10 @@ FLAGS = ["--cc=/usr/bin/clang", "--arch=arm64", "--target-os=darwin",
          "--disable-ffplay", "--disable-ffprobe", "--disable-devices", "--disable-encoders",
          "--enable-encoder=pcm_s16le,pcm_s24le,pcm_s32le,pcm_f32le,pcm_f64le,flac",
          "--disable-videotoolbox", "--enable-small"]
+
+if sys.platform == "linux":
+    FLAGS = [flag for flag in FLAGS if not flag.startswith(("--cc=", "--arch=", "--target-os=", "--extra-cflags=", "--extra-ldflags="))]
+    FLAGS += ["--cc=gcc", "--arch=x86_64", "--target-os=linux", "--disable-x86asm"]
 
 
 def prepare():
@@ -49,7 +54,7 @@ def prepare():
         env = {**os.environ, "MACOSX_DEPLOYMENT_TARGET": "14.0", "SOURCE_DATE_EPOCH": "1727654400"}
         subprocess.run([str(source / "configure"), *FLAGS], cwd=source, env=env, check=True)
         subprocess.run(["/usr/bin/make", "-j", str(min(os.cpu_count() or 4, 8)), "ffmpeg"], cwd=source, env=env, check=True)
-        from audit_macos import audit_binary
+        from audit_native import audit_binary
         audit_binary(source / "ffmpeg", (14, 0, 0))
         result = subprocess.run([str(source / "ffmpeg"), "-L"], capture_output=True, text=True, check=True)
         if "Lesser General Public License" not in result.stdout:

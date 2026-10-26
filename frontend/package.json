@@ -1,5 +1,6 @@
 {
     "name": "rollingpebble-frontend",
+    "version": "0.9.1",
     "description": "Local lyrics workstation for editing, timing, translation, and publishing.",
     "repository": "https://github.com/Harmonese/rollingpebble",
     "author": "Harmonese",

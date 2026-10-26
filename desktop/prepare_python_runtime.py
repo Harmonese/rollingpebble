@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import platform
 import shutil
 import subprocess
@@ -14,12 +15,23 @@ from pathlib import Path
 
 VERSION = "3.12.15"
 RELEASE = "20261003"
-ARCHIVE_NAME = f"cpython-{VERSION}+{RELEASE}-aarch64-apple-darwin-install_only.tar.gz"
+def target_spec(system=None, machine=None):
+    system = system or sys.platform
+    machine = machine or platform.machine().lower()
+    targets = json.loads(Path(__file__).with_name("platforms.json").read_text())
+    for key, spec in targets.items():
+        if (system, machine) == (spec["system"], spec["machine"]):
+            return dict(spec, key=key)
+    raise RuntimeError(f"Desktop resources are not configured for {system}/{machine}")
+
+
+TARGET = target_spec()
+ARCHIVE_NAME = f"cpython-{VERSION}+{RELEASE}-{TARGET['python_triple']}-install_only.tar.gz"
 ARCHIVE_URL = (
     "https://github.com/astral-sh/python-build-standalone/releases/download/"
     f"{RELEASE}/{ARCHIVE_NAME.replace('+', '%2B')}"
 )
-ARCHIVE_SHA256 = "316a463172740e71d8dca1f2730784e325f3f720941137b5d674d5801a632213"
+ARCHIVE_SHA256 = TARGET["python_sha256"]
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 FULL_RUNTIME_ROOT = PROJECT_ROOT / "build" / "python-build-runtime"
 TARGET_ROOT = PROJECT_ROOT / "desktop" / "python-runtime"
@@ -49,7 +61,7 @@ def prepare_full_runtime() -> None:
 
     with tempfile.TemporaryDirectory(prefix="rollingpebble-python-") as temporary:
         archive = Path(temporary) / ARCHIVE_NAME
-        print(f"Downloading bundled Python {VERSION} for macOS arm64...")
+        print(f"Downloading bundled Python {VERSION} for {TARGET['key']}...")
         urllib.request.urlretrieve(ARCHIVE_URL, archive)
         actual_sha256 = _sha256(archive)
         if actual_sha256 != ARCHIVE_SHA256:
@@ -120,6 +132,4 @@ def prepare() -> None:
 
 
 if __name__ == "__main__":
-    if sys.platform != "darwin" or platform.machine() != "arm64":
-        raise SystemExit("This bundled runtime preparation script targets macOS arm64.")
     prepare()

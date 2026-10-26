@@ -1,4 +1,4 @@
-# macOS Desktop Packaging
+# Desktop Packaging
 
 Rolling Pebble can be packaged as a lightweight Tauri desktop app while keeping the existing React frontend and Python backend.
 
@@ -6,7 +6,10 @@ The desktop shell does not replace the backend. It starts a local Rolling Pebble
 
 ## Supported targets
 
-The maintained release preparation currently supports **macOS Apple Silicon only**. Linux, Windows and Intel macOS need platform-specific standalone Python selection, resource discovery, build hooks and native validation. Tauri support alone does not establish support for the bundled Python/audio dependency stack. Build PyInstaller sidecars on each target OS.
+The shared build entry supports **macOS Apple Silicon** and **Linux x86_64**.
+Linux is built and validated on Ubuntu 24.04; `.deb` and AppImage outputs do not establish support for every Linux distribution or older glibc baseline. Windows and other architectures still need their own resource recipe and native validation.
+
+`desktop/platforms.json` selects the checksum-pinned standalone Python and Torch variant. Each platform has its own engine lock; shared scripts build the backend and native components. Build on the target OS/architecture rather than cross-compiling the Python/audio stack.
 
 Run the commands below from the repository root. [Development](DEVELOPMENT.md) covers the shared setup; [Release checklist](RELEASE.md) covers publication.
 
@@ -30,7 +33,7 @@ Release build:
 - Build the frontend.
 - Build a platform-specific Python sidecar with PyInstaller.
 - Bundle that sidecar into the Tauri app.
-- Bundle standalone macOS arm64 Python 3.12, FFmpeg and a hashed binary engine wheelhouse so runtime installation needs no compiler, Homebrew or network.
+- Bundle platform-specific standalone Python 3.12, FFmpeg and a hashed binary engine wheelhouse so runtime installation needs no compiler, Homebrew or network.
 
 ## Requirements
 
@@ -39,8 +42,7 @@ Release build:
 - Python environment with Rolling Pebble installed
 - Tauri system dependencies for the target platform
 
-The current release hook targets macOS Apple Silicon only. Windows and Intel
-macOS packaging are not provided by this hook.
+The release hook selects macOS arm64 or Linux x86_64 from the host. Windows and Intel macOS packaging are not provided yet.
 
 ## Development Run
 
@@ -80,11 +82,7 @@ ROLLINGPEBBLE_BACKEND="$PWD/desktop/bin/rollingpebble-backend" pnpm desktop:dev
 
 ## Bundle
 
-Install the Tauri CLI:
-
-```bash
-cargo install tauri-cli --version "^2"
-```
+The Tauri CLI is pinned in the root pnpm lockfile and installed by `pnpm install`; a global Cargo CLI installation is unnecessary.
 
 Build:
 
@@ -113,11 +111,16 @@ non-system library dependencies before bundling the app.
 Expected outputs include:
 
 - macOS: `.app` / `.dmg`
+- Linux x86_64: `.deb` / `.AppImage`
+
+The shared entry exports installers, `README.txt` and `SHA256SUMS` to
+`dist/desktop/<platform>/`. The local `CARGO_TARGET_DIR` may place intermediate
+artifacts elsewhere; exported installer paths remain stable.
 
 The Tauri config bundles `desktop/bin/rollingpebble-backend*` into the app resources under `bin/`, where the desktop shell can discover it automatically.
 The build also downloads pinned Python 3.12 into `desktop/python-runtime/` and bundles it under `python-runtime/`. `desktop/engine/` contains the wheelhouse, hashed requirements, FFmpeg and license notices. Both are generated and ignored by Git.
 
-`desktop/prepare_engine.py` builds py-roller 0.10.3 from the adjacent repository's commit `6d3ded2`, not from an installed development environment. Native neural dependencies must have compatible binary wheels. Source-only pure Python dependencies are built on the build machine. `desktop/engine-macos-arm64.lock` pins dependency versions/hashes. Changing dependencies requires an explicit lock update and another native audit. Demucs 4.1.0 is required for the upstream `--clip-mode none` command. `desktop/prepare_ffmpeg.py` builds FFmpeg 7.1 from a checksum-pinned source archive using Xcode on the build machine; its source, license and build flags accompany the executable.
+`desktop/prepare_engine.py` builds py-roller 0.10.3 from commit `6d3ded2537c7a6d6b444c18571581d6919dea409`, not from an installed development environment. It obtains the source under ignored `build/py-roller-source`, or uses `ROLLINGPEBBLE_ENGINE_SOURCE`. Native neural dependencies must have compatible binary wheels. Source-only pure Python dependencies are built on the build machine. `desktop/engine-macos-arm64.lock` pins dependency versions/hashes. Changing dependencies requires an explicit lock update and another native audit. Demucs 4.1.0 is required for the upstream `--clip-mode none` command. `desktop/prepare_ffmpeg.py` builds FFmpeg 7.1 from a checksum-pinned source archive using Xcode on the build machine; its source, license and build flags accompany the executable.
 
 ## Notes
 
@@ -166,3 +169,21 @@ It uses temporary home/cache/venv directories, checks relocated SSL and pip, ins
 the hashed wheelhouse offline including Vocals, and checks English/Mandarin/multilingual
 components and relocated pronunciation without downloading models or running inference.
 The Tauri/Rust configuration and symbol settings are unchanged by this optimization.
+
+## Linux x86_64
+
+See [Linux setup and validation](LINUX_X86_64.md) for the Ubuntu dependency list and this checkout's results.
+The same `pnpm desktop:build` command selects Linux resources, builds the PyInstaller sidecar with standalone Python 3.12.15, and packages the Tauri app.
+
+The Linux engine lock uses Torch/Torchaudio 2.8.0+cpu. FFmpeg and eSpeak are built from the same checksum-pinned sources as macOS using Linux compiler flags. ELF architecture and developer library paths are audited in place of Mach-O deployment targets. Model weights are not included and require an explicit download in the app.
+
+Tauri's resource directory resolves installed Linux paths and extracted AppImage layouts. Release startup requires bundled resources and runs the packaged backend/WebUI rather than falling back to a source checkout or system Python. `.deb` declares GTK/WebKit, OpenMP and audio codec dependencies; AppImage additionally bundles the media framework. Neither format removes the need to validate the host Linux system libraries.
+
+Before sharing an installer, extract it and exercise its actual native window with a fresh data directory and PATH restricted to system tools:
+
+```bash
+.venv/bin/python desktop/validate_linux_bundle.py --deb "dist/desktop/linux-x86_64/Rolling Pebble_0.9.1_amd64.deb" --log-dir output/linux-x86_64/deb-smoke
+.venv/bin/python desktop/validate_linux_bundle.py --appimage "dist/desktop/linux-x86_64/Rolling Pebble_0.9.1_amd64.AppImage" --log-dir output/linux-x86_64/appimage-smoke
+```
+
+The test needs Xvfb (`--xvfb /path/to/Xvfb`), xwininfo and dbus-run-session. It verifies startup-triggered offline preparation, HTTP assets, a real native window and backend cleanup on window close. It does not download models or substitute for real-song alignment and interactive editing/playback acceptance.

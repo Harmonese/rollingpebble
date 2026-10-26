@@ -7,11 +7,13 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+
+from prepare_python_runtime import TARGET
 from email.parser import BytesParser
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT.parent / "py-roller"
-COMMIT = "6d3ded2"
+SOURCE = Path(os.environ.get("ROLLINGPEBBLE_ENGINE_SOURCE", ROOT / "build" / "py-roller-source"))
+COMMIT = "6d3ded2537c7a6d6b444c18571581d6919dea409"
 DEST = ROOT / "desktop" / "engine"
 
 
@@ -32,9 +34,12 @@ def add_notices(root):
 
 
 def prepare(python, *, update_lock=False):
+    if not SOURCE.exists():
+        subprocess.run(["git", "clone", "https://github.com/Harmonese/py-roller.git", str(SOURCE)], check=True)
+    subprocess.run(["git", "-C", str(SOURCE), "cat-file", "-e", COMMIT + "^{commit}"], check=True)
     if (DEST / "manifest.json").exists():
         manifest = json.loads((DEST / "manifest.json").read_text())
-        if not update_lock and manifest.get("recipe") == 6 and manifest.get("source") == COMMIT and all(
+        if not update_lock and manifest.get("recipe") == 6 and manifest.get("source") == COMMIT and manifest.get("platform") == TARGET["key"] and all(
             (DEST / file).is_file() and hashlib.sha256((DEST / file).read_bytes()).hexdigest() == digest
             for file, digest in manifest["files"].items()
         ):
@@ -55,35 +60,43 @@ def prepare(python, *, update_lock=False):
         stage = Path(temp)
         wheels = stage / "wheels"
         wheels.mkdir()
-        for cached in (DEST / "wheels").glob("*.whl"):
-            if not cached.name.startswith("py_roller-"):
-                shutil.copy2(cached, wheels / cached.name)
+        previous = json.loads((DEST / "manifest.json").read_text()) if (DEST / "manifest.json").exists() else {}
+        if previous.get("platform") == TARGET["key"]:
+            for cached in (DEST / "wheels").glob("*.whl"):
+                if not cached.name.startswith("py_roller-"):
+                    shutil.copy2(cached, wheels / cached.name)
         # Build from the exact committed source, never an editable installation.
         archive = subprocess.check_output(["git", "-C", str(SOURCE), "archive", COMMIT])
         import io
         import tarfile
         with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
             tar.extractall(stage / "source", filter="data")
-        env = {**os.environ, "MACOSX_DEPLOYMENT_TARGET": "14.0", "SOURCE_DATE_EPOCH": "1791504000"}
+        env = {**os.environ, "SOURCE_DATE_EPOCH": "1791504000"}
+        if TARGET["system"] == "darwin":
+            env["MACOSX_DEPLOYMENT_TARGET"] = "14.0"
+        else:
+            env.setdefault("CC", "gcc")
+            env.setdefault("CXX", "g++")
         subprocess.run([str(python), "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheels),
                         str(stage / "source")], env=env, check=True)
         engine = next(wheels.glob("py_roller-*.whl"))
         subprocess.run([str(python), "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheels),
                         "demucs==4.1.0", "dora-search==0.1.12", "julius==0.2.7", "treetable==0.2.5", "antlr4-python3-runtime==4.9.3", "langid==1.1.6"], env=env, check=True)
-        lock = ROOT / "desktop" / "engine-macos-arm64.lock"
+        lock = ROOT / "desktop" / f"engine-{TARGET['key']}.lock"
         locked = stage / "locked.txt"
         if lock.exists() and not update_lock:
             locked.write_text(lock.read_text())
             subprocess.run([str(python), "-m", "pip", "download", "--only-binary=:all:", "--require-hashes",
-                            "--find-links", str(wheels), "-d", str(wheels), "-r", str(locked)], check=True)
+                            "--find-links", str(wheels), *(["--extra-index-url", TARGET["extra_index"]] if TARGET["extra_index"] else []), "-d", str(wheels), "-r", str(locked)], check=True)
         else:
+            seed = lock if lock.exists() else ROOT / "desktop" / "engine-macos-arm64.lock"
             constraints = stage / "constraints.txt"
-            constraints.write_text("\n".join(line.split()[0] for line in lock.read_text().splitlines()) if lock.exists() else "")
+            constraints.write_text("\n".join(line.split()[0] for line in seed.read_text().splitlines() if not line.lower().startswith(("torch==", "torchaudio=="))))
             # These upstream packages ship Python source only. Build their wheels here,
             # never at install time. All native neural dependencies must be binary wheels.
-            subprocess.run([str(python), "-m", "pip", "download", "--only-binary=:all:", "--find-links", str(wheels), "-d", str(wheels), "--constraint", str(constraints),
+            subprocess.run([str(python), "-m", "pip", "download", "--only-binary=:all:", "--find-links", str(wheels), "-d", str(wheels), *(["--extra-index-url", TARGET["extra_index"]] if TARGET["extra_index"] else []), "--constraint", str(constraints),
                             str(engine) + "[vocals,mul]", "demucs==4.1.0", "dora-search==0.1.12", "julius==0.2.7", "treetable==0.2.5", "antlr4-python3-runtime==4.9.3",
-                            "torch==2.8.0", "torchaudio==2.8.0", "numpy==2.2.6", "PySocks==1.7.1",
+                            f"torch=={TARGET['torch']}", f"torchaudio=={TARGET['torch']}", "numpy==2.2.6", "PySocks==1.7.1",
                             "av==16.1.0"], check=True)
         requirements = []
         names = {}
@@ -92,7 +105,7 @@ def prepare(python, *, update_lock=False):
                 meta = BytesParser().parsebytes(package.read(next(n for n in package.namelist() if n.endswith('.dist-info/METADATA'))))
                 requirements.append(f'{meta["Name"]}=={meta["Version"]} --hash=sha256:{hashlib.sha256(wheel.read_bytes()).hexdigest()}')
                 names[meta["Name"].lower().replace("_", "-")] = requirements[-1]
-                from audit_macos import audit_binary
+                from audit_native import audit_binary
                 for member in package.namelist():
                     if member.endswith((".so", ".dylib")):
                         binary = stage / "audit-binary"
@@ -113,14 +126,14 @@ def prepare(python, *, update_lock=False):
         # Locally built wheel bytes can vary by compiler. Its source commit is pinned;
         # every installation still verifies its exact build-specific manifest hash.
         third_party = "\n".join(line for line in requirements if not line.startswith("py-roller==")) + "\n"
-        if not lock.exists() or update_lock:
-            lock.write_text(third_party)
-        from audit_macos import audit_binary
+        from audit_native import audit_binary
         add_notices(stage)
         audit_binary(stage / "bin" / "ffmpeg", (14, 0, 0))
         shutil.rmtree(stage / "source")
         files = {str(p.relative_to(stage)): hashlib.sha256(p.read_bytes()).hexdigest() for p in stage.rglob('*') if p.is_file()}
-        (stage / "manifest.json").write_text(json.dumps({"source": COMMIT, "recipe": 6, "files": files}, indent=2))
+        (stage / "manifest.json").write_text(json.dumps({"source": COMMIT, "platform": TARGET["key"], "recipe": 6, "files": files}, indent=2))
         if DEST.exists():
             shutil.rmtree(DEST)
         shutil.copytree(stage, DEST)
+        if not lock.exists() or update_lock:
+            lock.write_text(third_party)

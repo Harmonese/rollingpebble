@@ -1,0 +1,20 @@
+{
+  "macos-arm64": {
+    "system": "darwin",
+    "machine": "arm64",
+    "python_triple": "aarch64-apple-darwin",
+    "python_sha256": "316a463172740e71d8dca1f2730784e325f3f720941137b5d674d5801a632213",
+    "torch": "2.8.0",
+    "extra_index": null,
+    "espeak_library": "libespeak-ng.1.dylib"
+  },
+  "linux-x86_64": {
+    "system": "linux",
+    "machine": "x86_64",
+    "python_triple": "x86_64-unknown-linux-gnu",
+    "python_sha256": "f937814031eab4698ca6d07ec606ede1825768f3f3e99af76d9db3900bee03c5",
+    "torch": "2.8.0+cpu",
+    "extra_index": "https://download.pytorch.org/whl/cpu",
+    "espeak_library": "libespeak-ng.so.1"
+  }
+}

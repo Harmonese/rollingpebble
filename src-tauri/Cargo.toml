@@ -1,6 +1,6 @@
 [package]
 name = "rollingpebble-desktop"
-version = "0.9.0"
+version = "0.9.1"
 description = "Desktop shell for Rolling Pebble"
 authors = ["Harmonese"]
 license = "MIT"

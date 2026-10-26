@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 import shutil
 import subprocess
@@ -28,7 +29,7 @@ def validate(runtime: Path, engine: Path):
                    PIP_CONFIG_FILE=os.devnull, PIP_DISABLE_PIP_VERSION_CHECK="1", PIP_NO_CACHE_DIR="1",
                    XDG_CACHE_HOME=str(root / "cache"), TORCH_HOME=str(root / "torch"),
                    HF_HOME=str(root / "huggingface"), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
-                   PHONEMIZER_ESPEAK_LIBRARY=str(engine / "espeak" / "libespeak-ng.1.dylib"),
+                   PHONEMIZER_ESPEAK_LIBRARY=str(engine / "espeak" / ("libespeak-ng.1.dylib" if sys.platform == "darwin" else "libespeak-ng.so.1")),
                    ESPEAK_DATA_PATH=str(engine / "espeak"))
         python = moved / "bin" / "python3.12"
         subprocess.run([str(python), "-I", "-B", "-c", "import ssl,venv,ensurepip; print(ssl.OPENSSL_VERSION)"], env=env, check=True)
