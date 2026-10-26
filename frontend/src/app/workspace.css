@@ -50,3 +50,24 @@
     max-height: 20rem;
     overflow: auto;
 }
+
+.workspace-recovery-gate {
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    min-height: calc(100dvh - var(--app-header-height) - var(--app-footer-height));
+    margin-top: var(--app-header-height);
+    margin-bottom: var(--app-footer-height);
+    padding: 24px;
+}
+
+.workspace-recovery-card {
+    width: min(100%, 480px);
+    box-sizing: border-box;
+    padding: 24px;
+}
+
+.workspace-recovery-card p {
+    color: var(--studio-muted);
+    line-height: 1.65;
+}

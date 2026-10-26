@@ -30,8 +30,8 @@ export const TimingResultRow: React.FC<{
                 {onDelete && (
                     <IconButton
                         tone="danger"
-                        title={lang.timingV2.deleteResult}
-                        aria-label={lang.timingV2.deleteResult}
+                        title={run.kind === "batch" ? lang.timingV2.deleteBatch : lang.timingV2.deleteResult}
+                        aria-label={run.kind === "batch" ? lang.timingV2.deleteBatch : lang.timingV2.deleteResult}
                         disabled={deleteDisabled}
                         onClick={onDelete}
                     >

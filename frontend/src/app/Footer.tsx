@@ -8,6 +8,7 @@ import { AUDIO_DECODE_WORKER_ERROR, AUDIO_UNSUPPORTED_ERROR, prepareAudioFile } 
 import { audioElementContext } from "../shared/audioElementContext.js";
 import { LOAD_PROJECT_AUDIO_EVENT, type ProjectAudioLoadDetail } from "../shared/audioEvents.js";
 import { AudioActionType, audioStatePubSub, currentTimePubSub } from "../shared/audioPlaybackEvents.js";
+import { stepPlaybackRate } from "../shared/playbackRate.js";
 import { removeSessionText, writeSessionText } from "../storage/browserStorage.js";
 import { toastPubSub } from "../ui/Toast.js";
 import { InputAction } from "../utils/input-action.js";
@@ -60,13 +61,13 @@ export const Footer: React.FC = () => {
                 case InputAction.IncreaseRate: {
                     ev.preventDefault();
                     const rate = audio.playbackRate;
-                    audio.playbackRate = Math.exp(Math.min(Math.log(rate) + 0.2, 1));
+                    audio.playbackRate = stepPlaybackRate(rate, 1);
                     break;
                 }
                 case InputAction.DecreaseRate: {
                     ev.preventDefault();
                     const rate = audio.playbackRate;
-                    audio.playbackRate = Math.exp(Math.max(Math.log(rate) - 0.2, -1));
+                    audio.playbackRate = stepPlaybackRate(rate, -1);
                     break;
                 }
                 case InputAction.TogglePlay:

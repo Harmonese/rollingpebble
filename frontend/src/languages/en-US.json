@@ -599,7 +599,7 @@
         "savingProject": "Saving…",
         "saveFailed": "Save failed",
         "retrySave": "Retry",
-        "recoverWorkspace": "Restore the unfinished workspace?",
+        "recoverWorkspace": "Restore the unfinished workspace? Restore brings back unsaved edits. Discard Changes opens the last saved project, or an empty workspace if it was never saved.",
         "recoveryFailed": "Workspace recovery failed.",
         "projectSaved": "Project saved.",
         "draftStatus": "Unsaved workspace · Audio is kept only for this session until you save or start Auto Timing.",
@@ -685,6 +685,7 @@
         "unhealthy": "unhealthy"
     },
     "backendMessages": {
+        "timing.retry_input_changed": "Task inputs changed. Start a new task.",
         "translation.url": "Invalid API or proxy address.",
         "translation.https": "Use HTTPS for remote services.",
         "translation.auth": "Check API key and permissions.",
@@ -911,7 +912,13 @@
         "languageHint": "Auto uses lyric text. Mandarin excludes Cantonese. Mandarin, mixed and multilingual alignment are experimental.",
         "ctcEnglish": "CTC · English",
         "ctcMandarin": "CTC · Mandarin",
-        "ctcMultilingual": "CTC · Multilingual"
+        "ctcMultilingual": "CTC · Multilingual",
+        "newBatch": "New Batch",
+        "deleteBatch": "Delete Batch Results",
+        "removeBatch": "Delete all results, drafts and logs in this batch? Projects and applied lyrics will be kept.",
+        "submitting": "Submitting task…",
+        "batchProgress": "Batch progress: {done} / {total} finished",
+        "selectionChanged": "Project selection changed. Review your selection and start again."
     },
     "storageV3": {
         "location": "Location",

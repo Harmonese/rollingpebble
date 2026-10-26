@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { ButtonGroup, FormGrid, KeyValueList, LogBlock, Message, Panel, Tabs, WarningText } from "../../ui/index.js";
 
@@ -13,6 +13,8 @@ import { toastPubSub } from "../../ui/Toast.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
 
+import { useRequestScope } from "../shared/useRequestScope.js";
+
 type UploadDestination = "lrclib" | "netease";
 
 const uploadModeLabels = (u: Language["ui"]): Record<string, string> => ({
@@ -24,16 +26,18 @@ const uploadModeLabels = (u: Language["ui"]): Record<string, string> => ({
 });
 
 export const UploadPanel: React.FC<{
+    panelSessionId: string;
+    workspaceId: string;
     project: ProjectModel | null;
     plainLyrics: string;
     syncedLyrics: string;
     editorMeta: MetaModel;
     onSave: () => Promise<ProjectModel>;
-}> = ({ project, plainLyrics, syncedLyrics, editorMeta, onSave }) => {
+}> = ({ project, plainLyrics, syncedLyrics, editorMeta, onSave, panelSessionId, workspaceId }) => {
     const [destination, setDestination] = useState<UploadDestination>("lrclib");
     const [mode, setMode] = useState("auto");
     const [allowDerivedPlain, setAllowDerivedPlain] = useState(true);
-    const [plan, setPlan] = useState<UploadPlan | null>(null);
+    const [preparedPlan, setPreparedPlan] = useState<{ identity: string; value: UploadPlan } | null>(null);
     const [message, setMessage, , messageFading, messageType, messageKey] = useMessage();
     const { lang } = useContext(appContext, AppContextBits.lang);
     const u = lang.ui;
@@ -49,9 +53,28 @@ export const UploadPanel: React.FC<{
         }
     }, true);
 
+    const identity = JSON.stringify([
+        panelSessionId,
+        workspaceId,
+        project?.project_id,
+        mode,
+        allowDerivedPlain,
+        editorMeta.track,
+        editorMeta.artist,
+        editorMeta.album,
+        editorMeta.duration,
+        plainLyrics,
+        syncedLyrics,
+    ]);
+    const scope = useRequestScope(identity);
+    const operation = useRef(false);
+    const plan = preparedPlan?.identity === identity ? preparedPlan.value : null;
     useEffect(() => {
-        setPlan(null);
-    }, [project?.project_id]);
+        setPreparedPlan(null);
+        setMessage("");
+        setBusy(false);
+        operation.current = false;
+    }, [identity]);
 
     const payload = () => ({
         mode,
@@ -66,24 +89,36 @@ export const UploadPanel: React.FC<{
             setMessage(u.noProject, "warning");
             return;
         }
+        if (!scope.snapshot()() || operation.current) return;
+        operation.current = true;
+        const valid = scope.begin();
+        const input = payload();
         setBusy(true);
         try {
-            await onSave();
-            const response = await uploadPlan(project.project_id, payload());
-            setPlan(response);
+            const saved = await onSave();
+            if (!valid() || saved.project_id !== project.project_id) return;
+            const response = await uploadPlan(saved.project_id, input);
+            if (!valid()) return;
+            setPreparedPlan({ identity, value: response });
             setMessage(response.can_upload ? u.planReady : u.planWarnings, response.can_upload ? "success" : "warning");
         } catch (error) {
-            setMessage(backendMessageText(error, lang.backendMessages), "error");
+            if (valid()) setMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
-            setBusy(false);
+            if (valid()) {
+                setBusy(false);
+                operation.current = false;
+            }
         }
     };
 
     const runUpload = async () => {
-        if (!project) return;
+        if (!scope.snapshot()() || !project || !plan?.can_upload || operation.current) return;
+        operation.current = true;
+        const valid = scope.begin();
         setBusy(true);
         try {
             const response = await uploadRun(project.project_id, payload());
+            if (!valid()) return;
             toastPubSub.pub({
                 type: "success",
                 text: response.message_message
@@ -91,9 +126,12 @@ export const UploadPanel: React.FC<{
                     : response.message,
             });
         } catch (error) {
-            setMessage(backendMessageText(error, lang.backendMessages), "error");
+            if (valid()) setMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
-            setBusy(false);
+            if (valid()) {
+                setBusy(false);
+                operation.current = false;
+            }
         }
     };
 
@@ -162,11 +200,13 @@ export const UploadPanel: React.FC<{
 
     const renderNeteaseUpload = () => (
         <NeteaseSearch
+            panelSessionId={panelSessionId}
+            workspaceId={workspaceId}
             defaultQuery=""
             meta={{
-                track: editorMeta.track || project?.metadata.track,
-                artist: editorMeta.artist || project?.metadata.artist,
-                album: editorMeta.album || project?.metadata.album,
+                track: editorMeta.track,
+                artist: editorMeta.artist,
+                album: editorMeta.album,
             }}
             onMessage={setMessage}
             renderResultActions={renderNeteaseUploadActions}

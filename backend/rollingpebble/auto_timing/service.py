@@ -145,12 +145,27 @@ class AutoTimingService:
             raise
         return record, env
 
-    def start(self, request, *, language=None):
+    def start(self, request, *, language=None, retry_of=None):
         if not self.jobs.resource_lock.acquire(blocking=False):
             raise RuntimeError("Auto Timing resources are busy")
         record = None
         try:
+            if retry_of is not None:
+                from rollingpebble.messages import AppError
+                old = self.store.get(retry_of)
+                if (old["kind"] != "run" or old["status"] in ACTIVE
+                        or old["project_id"] != request.project_id or not old.get("language")
+                        or old.get("options") != request.options.model_dump()):
+                    raise AppError("timing.retry_input_changed", "Task inputs changed. Start a new task.")
+                _, text, identity = self._input(request)
+                if (not old.get("audio_identity") or old["audio_identity"] != identity
+                        or not old.get("lyrics_hash") or old["lyrics_hash"] != hashlib.sha256(text.encode()).hexdigest()):
+                    raise AppError("timing.retry_input_changed", "Task inputs changed. Start a new task.")
+                language = old.get("language")
             checked = self.preflight(request, language=language) if language else self.preflight(request)
+            if retry_of is not None and (checked["audio_identity"] != old["audio_identity"]
+                    or checked["lyrics_hash"] != old["lyrics_hash"]):
+                raise AppError("timing.retry_input_changed", "Task inputs changed. Start a new task.")
             record, env = self._record(request, checked=checked)
             def run():
                 try:
@@ -335,6 +350,38 @@ class AutoTimingService:
             finally:
                 self.jobs.resource_lock.release()
             raise
+
+    def delete_results(self, record_id, *, kind):
+        if not self.jobs.resource_lock.acquire(blocking=False):
+            raise ValueError("Auto Timing resources are busy")
+        try:
+            with self.store.lock:
+                record = self.store.get(record_id)
+                if record["kind"] != kind:
+                    raise ValueError("Unexpected result kind")
+                records = [record]
+                parent = None
+                if kind == "batch":
+                    records += [self.store.get(child) for child in record["children"]]
+                elif record.get("batch_id"):
+                    parent = self.store.get(record["batch_id"])
+                if any(row["status"] in ACTIVE for row in records) or (parent and parent["status"] in ACTIVE):
+                    raise ValueError("Run is still active")
+                deleted_ids = [row["id"] for row in records]
+                if parent:
+                    remaining = [child for child in parent["children"] if child != record_id]
+                    if remaining:
+                        self.store.update(parent["id"], children=remaining)
+                    else:
+                        records.append(parent)
+                        deleted_ids.append(parent["id"])
+                # Resolve every path before removing anything. Delete the parent last.
+                folders = [self.store.folder(row["id"]) for row in sorted(records, key=lambda row: row["kind"] == "batch")]
+                for folder in folders:
+                    shutil.rmtree(folder)
+                return {"deleted": True, "deleted_ids": deleted_ids}
+        finally:
+            self.jobs.resource_lock.release()
 
     def close(self):
         for record in self.store.list():

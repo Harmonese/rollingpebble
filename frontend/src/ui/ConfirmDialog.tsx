@@ -5,7 +5,13 @@ import { DialogActionRow } from "./DialogActionRow.js";
 import { Modal } from "./Modal.js";
 
 type Choice = "confirm" | "discard" | "cancel";
-type Options = { message: string; confirmLabel?: string; discardLabel?: string; danger?: boolean };
+type Options = {
+    message: string;
+    confirmLabel?: string;
+    discardLabel?: string;
+    danger?: boolean;
+    requireDecision?: boolean;
+};
 type Ask = (options: Options) => Promise<Choice>;
 const ConfirmContext = createContext<Ask | null>(null);
 
@@ -42,7 +48,9 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
             {children}
             <Modal
                 open={Boolean(options)}
-                onClose={() => finish("cancel")}
+                onClose={() => {
+                    if (!options?.requireDecision) finish("cancel");
+                }}
                 ariaLabel={lang.ui.confirmAction}
                 modalClassName="confirm-modal"
                 exitMs={0}
@@ -50,9 +58,13 @@ export const ConfirmProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 <h2>{lang.ui.confirmAction}</h2>
                 <p className="confirm-message">{options?.message}</p>
                 <DialogActionRow>
-                    <Button onClick={() => finish("cancel")}>{lang.ui.cancel}</Button>
+                    {!options?.requireDecision && <Button onClick={() => finish("cancel")}>{lang.ui.cancel}</Button>}
                     {options?.discardLabel && <Button onClick={() => finish("discard")}>{options.discardLabel}</Button>}
-                    <Button tone={options?.danger ? "danger" : "primary"} onClick={() => finish("confirm")}>
+                    <Button
+                        tone={options?.danger ? "danger" : "primary"}
+                        data-autofocus={options?.requireDecision ? "true" : undefined}
+                        onClick={() => finish("confirm")}
+                    >
                         {options?.confirmLabel || lang.ui.confirmAction}
                     </Button>
                 </DialogActionRow>

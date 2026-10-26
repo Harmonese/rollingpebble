@@ -9,7 +9,7 @@ import {
     translationConnection,
 } from "../../../shared/api/translation.js";
 import { appContext } from "../../../shared/appContext.js";
-import { ActionRow, Button, FormGrid, MessageText } from "../../../ui/index.js";
+import { ActionRow, Button, FormGrid, MessageText, TaskStatus } from "../../../ui/index.js";
 
 export function TranslationSettingsSection() {
     const { lang } = useContext(appContext);
@@ -18,6 +18,9 @@ export function TranslationSettingsSection() {
     const [key, setKey] = useState("");
     const [keyEdited, setKeyEdited] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [operation, setOperation] = useState<"save" | "test">("save");
+    const [testActive, setTestActive] = useState(false);
+    const [cancelling, setCancelling] = useState(false);
     const [message, setMessage] = useState("");
     const [error, setError] = useState("");
     const lock = useRef(false);
@@ -40,6 +43,8 @@ export function TranslationSettingsSection() {
         if (!config || lock.current) return;
         lock.current = true;
         setBusy(true);
+        setOperation(test ? "test" : "save");
+        setCancelling(false);
         setMessage("");
         setError("");
         try {
@@ -51,6 +56,7 @@ export function TranslationSettingsSection() {
             if (test) {
                 const id = crypto.randomUUID();
                 task.current = id;
+                setTestActive(true);
                 let job = await startTranslation({
                     request_id: id,
                     workspace_id: "connection-test",
@@ -68,6 +74,7 @@ export function TranslationSettingsSection() {
                 }
                 if (job.status === "failed") throw { code: job.error || "translation.network" };
                 if (mounted.current && job.status === "succeeded") setMessage(t.connected);
+                if (mounted.current && job.status === "canceled") setMessage(lang.timingV2.cancelled);
             } else setMessage(t.saved);
         } catch (e) {
             if (task.current) await cancelTranslation(task.current).catch(() => {});
@@ -75,7 +82,11 @@ export function TranslationSettingsSection() {
         } finally {
             task.current = null;
             lock.current = false;
-            if (mounted.current) setBusy(false);
+            if (mounted.current) {
+                setBusy(false);
+                setTestActive(false);
+                setCancelling(false);
+            }
         }
     };
     return (
@@ -165,25 +176,41 @@ export function TranslationSettingsSection() {
                         >
                             {t.clearKey}
                         </Button>
-                        {busy && (
-                            <Button
-                                onClick={() => {
-                                    if (task.current) {
-                                        void cancelTranslation(task.current).catch(e =>
-                                            setError(backendMessageText(e, lang.backendMessages))
-                                        );
-                                    }
-                                }}
-                            >
-                                {lang.ui.cancel}
-                            </Button>
-                        )}
                     </ActionRow>
                 </>
             )}
-            {busy && <span role="status">{t.connecting}</span>}
-            {message && <MessageText>{message}</MessageText>}
-            {error && <MessageText type="error">{error}</MessageText>}
+            {(busy || message || error) && (
+                <TaskStatus
+                    title={busy
+                        ? cancelling
+                            ? t.cancelling
+                            : operation === "test"
+                            ? t.connecting
+                            : lang.settings.messages.saving
+                        : message || t.connection}
+                    active={busy}
+                    error={error}
+                >
+                    {busy && operation === "test" && (
+                        <Button
+                            disabled={!testActive || cancelling}
+                            onClick={() => {
+                                if (task.current) {
+                                    setCancelling(true);
+                                    void cancelTranslation(task.current).catch(e => {
+                                        if (mounted.current) {
+                                            setError(backendMessageText(e, lang.backendMessages));
+                                            setCancelling(false);
+                                        }
+                                    });
+                                }
+                            }}
+                        >
+                            {lang.ui.cancel}
+                        </Button>
+                    )}
+                </TaskStatus>
+            )}
         </section>
     );
 }

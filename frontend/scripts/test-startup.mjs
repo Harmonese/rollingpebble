@@ -127,3 +127,32 @@ resolveReady();
 await settle();
 assert.equal(render().type, "main", "an abandoned check must not open the workspace");
 console.log("Startup: readiness gate, saved Vocals capability, WebUI fallback, repair, continue and cleanup passed.");
+
+const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+const illustrationSource = await readFile(new URL("../src/app/branding/Illustrations.tsx", import.meta.url), "utf8");
+const illustrationCode = ts.transpileModule(illustrationSource, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
+}).outputText;
+const illustrations = {};
+new Function("require", "exports", illustrationCode)(() => ({ jsx, jsxs: jsx }), illustrations);
+function all(tree, output = []) {
+    if (Array.isArray(tree)) tree.forEach(child => all(child, output));
+    else if (tree && typeof tree === "object") {
+        output.push(tree);
+        all(tree.props?.children, output);
+    }
+    return output;
+}
+const mark = illustrations.StartupMark({ active: false });
+assert.equal(mark.props["data-active"], false);
+assert.equal(mark.props["aria-hidden"], "true");
+assert.equal(all(mark).find(node => node.type === "img").props.src, "/img/rollingpebble-icon.png");
+assert.equal(all(mark).find(node => node.props?.className === "startup-mark-wave").props.children.length, 9);
+assert.ok(html.includes("class=\"startup-mark\"") && html.includes("/img/rollingpebble-icon.png"));
+assert.ok(!html.includes("roller-splash-") && !html.includes("rollingpebble-avatar.webp"));
+assert.deepEqual(
+    await readFile(new URL("../public/img/rollingpebble-icon.png", import.meta.url)),
+    await readFile(new URL("../../src-tauri/icons/icon.png", import.meta.url)),
+    "startup uses the exact packaged app icon",
+);
+console.log("Startup branding: packaged icon identity, shared loading markup and paused decorative animation passed.");

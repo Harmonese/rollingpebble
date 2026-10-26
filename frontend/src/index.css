@@ -15,6 +15,7 @@
 @import url("./ui/panel.css");
 @import url("./ui/form.css");
 @import url("./ui/actions.css");
+@import url("./ui/task-status.css");
 @import url("./app/workspace-layout.css");
 @import url("./app/workspace.css");
 @import url("./features/settings/settings.css");

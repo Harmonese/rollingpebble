@@ -398,3 +398,102 @@ def test_rejected_batch_keeps_parent_and_releases_snapshots(tmp_path, monkeypatc
         service.batch(BatchRequest(project_ids=["p1", "missing"]))
     assert not service.jobs.resource_lock.locked()
     assert not service.store.list()
+
+
+def completed_batch_fixture(service):
+    parent = dict(id="b" * 32, project_id=None, kind="batch", status="completed", created_at=now(),
+                  children=["c" * 32, "d" * 32])
+    service.store.create(parent)
+    for child in parent["children"]:
+        folder = service.store.create(dict(id=child, project_id="p1", kind="run", status="completed",
+                                          created_at=now(), batch_id=parent["id"]))
+        (folder / "draft.json").write_text('{"version": 1}')
+        (folder / "stderr.log").write_text("log")
+    return parent
+
+
+def test_delete_batch_preserves_project_and_other_results(tmp_path):
+    service, layout = service_fixture(tmp_path)
+    parent = completed_batch_fixture(service)
+    other, _ = make_record(service.store, "completed")
+    project_folder = layout.projects_root / "p1"
+    before = {path.name: path.read_bytes() for path in project_folder.iterdir()}
+    result = service.delete_results(parent["id"], kind="batch")
+    assert result["deleted"] is True
+    assert set(result["deleted_ids"]) == {parent["id"], *parent["children"]}
+    assert [record["id"] for record in service.store.list()] == [other["id"]]
+    assert {path.name: path.read_bytes() for path in project_folder.iterdir()} == before
+    assert not service.jobs.resource_lock.locked()
+
+
+def test_delete_last_child_reports_removed_parent(tmp_path):
+    service, _ = service_fixture(tmp_path)
+    parent = completed_batch_fixture(service)
+    first, last = parent["children"]
+    assert service.delete_results(first, kind="run")["deleted_ids"] == [first]
+    assert service.store.get(parent["id"])["children"] == [last]
+    assert service.delete_results(last, kind="run")["deleted_ids"] == [last, parent["id"]]
+    assert service.store.list() == []
+
+
+@pytest.mark.parametrize("active_target", ["parent", "child", "resources"])
+def test_delete_rejects_active_batch_without_partial_removal(tmp_path, active_target):
+    service, _ = service_fixture(tmp_path)
+    parent = completed_batch_fixture(service)
+    if active_target == "resources":
+        service.jobs.resource_lock.acquire()
+    else:
+        service.store.update(parent["id"] if active_target == "parent" else parent["children"][1], status="running")
+    try:
+        with pytest.raises(ValueError):
+            service.delete_results(parent["id"], kind="batch")
+        assert len(service.store.list()) == 3
+    finally:
+        if active_target == "resources":
+            service.jobs.resource_lock.release()
+    assert not service.jobs.resource_lock.locked()
+
+
+def test_batch_delete_routes_and_kind_validation(tmp_path):
+    app = create_app(Settings(data_dir=tmp_path))
+    client = TestClient(app)
+    # Discover the same store through its layout, without starting the runtime.
+    store = RunStore(StorageLayout.from_data_dir(tmp_path).results_root)
+    service = SimpleNamespace(store=store)
+    parent = completed_batch_fixture(service)
+    assert client.delete(f'/api/auto-timing/runs/{parent["id"]}').status_code == 400
+    result = client.delete(f'/api/auto-timing/batches/{parent["id"]}')
+    assert result.status_code == 200
+    assert set(result.json()["deleted_ids"]) == {parent["id"], *parent["children"]}
+    assert client.delete(f'/api/auto-timing/batches/{parent["id"]}').status_code == 404
+
+
+@pytest.mark.parametrize("change", ["audio", "lyrics", "options", "legacy", "active", "preflight_race"])
+def test_retry_rejects_changed_inputs_and_releases_admission(tmp_path, monkeypatch, change):
+    from rollingpebble.auto_timing.contracts import Options
+    from rollingpebble.messages import AppError
+    service, layout = service_fixture(tmp_path)
+    request = RunRequest(project_id="p1")
+    old, _ = service._record(request)
+    service.store.update(old["id"], status="failed")
+    if change == "audio":
+        (layout.projects_root / "p1" / "audio.wav").write_bytes(b"replacement")
+    elif change == "lyrics":
+        (layout.projects_root / "p1" / "plain.txt").write_text("Changed lyrics")
+    elif change == "options":
+        request.options = Options(language="mul")
+    elif change == "legacy":
+        service.store.update(old["id"], lyrics_hash=None)
+    elif change == "active":
+        service.store.update(old["id"], status="running")
+    elif change == "preflight_race":
+        original = service.preflight
+        def changed(request, **kwargs):
+            (layout.projects_root / "p1" / "plain.txt").write_text("Changed during admission")
+            return original(request, **kwargs)
+        monkeypatch.setattr(service, "preflight", changed)
+    with pytest.raises(AppError) as caught:
+        service.start(request, retry_of=old["id"])
+    assert caught.value.message.code == "timing.retry_input_changed"
+    assert len(service.store.list()) == 1
+    assert not service.jobs.resource_lock.locked()

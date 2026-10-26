@@ -4,7 +4,7 @@ import { autoRollerRuntime } from "../../../shared/api/autoTiming.js";
 import { getJob } from "../../../shared/api/jobs.js";
 import { BackendApiError, backendMessageText } from "../../../shared/api/request.js";
 import { cachedPreparation, ensureRuntime, type Preparation } from "../../../shared/api/runtimePreparation.js";
-import { ActionRow, Button, ButtonGroup, LogBlock } from "../../../ui/index.js";
+import { Button, ButtonGroup, LogBlock, TaskStatus } from "../../../ui/index.js";
 import { modelMaintenanceJob } from "./EngineModels.js";
 
 export function RuntimePreparation(
@@ -26,6 +26,8 @@ export function RuntimePreparation(
         let stopped = false;
         let timer: ReturnType<typeof setTimeout>;
         setFailed(false);
+        setState(null);
+        onReady(false);
         const poll = async (repair = false) => {
             try {
                 const next = await ensureRuntime(vocals, repair, multilingual);
@@ -57,19 +59,22 @@ export function RuntimePreparation(
             clearTimeout(timer);
         };
     }, [vocals, multilingual, retry]);
-    return (
-        <>
-            {!failed && state?.status !== "ready" && (
-                <p role="status">{state?.status === "preparing" ? t.preparing : t.checking}</p>
-            )}
+    return state?.status === "ready" && !failed ? null : (
+        <TaskStatus
+            title={failed
+                ? t.prepareFailed
+                : state?.status === "preparing"
+                ? lang.modelSetup.preparingEnvironment
+                : lang.modelSetup.checkingEnvironment}
+            active={!failed}
+            error={failed ? failureText : undefined}
+        >
             {failed && (
-                <ActionRow title={failureText}>
-                    <Button onClick={() => setRetry(value => value + 1)}>
-                        {repairNeeded.current ? t.repair : t.retry}
-                    </Button>
-                </ActionRow>
+                <Button onClick={() => setRetry(value => value + 1)}>
+                    {repairNeeded.current ? t.repair : t.retry}
+                </Button>
             )}
-        </>
+        </TaskStatus>
     );
 }
 

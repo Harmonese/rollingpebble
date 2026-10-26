@@ -277,6 +277,7 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
             if (restore) {
                 const choice = await confirm({
                     message: args.lang.ui.recoverWorkspace,
+                    requireDecision: true,
                     confirmLabel: args.lang.ui.restore,
                     discardLabel: args.lang.ui.discardChanges,
                 });
@@ -449,7 +450,7 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
 
     const importLyrics = async (text: string, origin = { source: "local file", lrclib_id: null as number | null }) => {
         if (latest.current.workspaceId !== workspaceId) return;
-        if (!await lyrics.importText(text, true)) return;
+        if (!await lyrics.importText(text, true) || latest.current.workspaceId !== workspaceId) return;
         if (latest.current.file || latest.current.project?.audio_name) {
             lyrics.rawDispatch({
                 type: ActionType.info,
@@ -549,6 +550,7 @@ export function useProjectWorkspace(args: { trimOptions: LyricsTrimOptions; pref
         source: provenance.source,
         lyrics,
         workspaceId,
+        panelSessionId: draftId.current,
         signature,
         dirty: dirty || Boolean(readEditorRecovery()),
         canSave: canSave || Boolean(readEditorRecovery()),

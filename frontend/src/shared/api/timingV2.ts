@@ -79,6 +79,7 @@ export type TimingRun = {
     workspace_id: string;
     lyrics_version: string;
     audio_identity: string;
+    lyrics_hash?: string;
     snapshot: Snapshot | null;
     progress: { stage: string; duration?: number; audio_available_until?: number } | null;
     error: string | null;
@@ -123,9 +124,14 @@ export const getBatch = (id: string) => request<TimingBatch>(`${base}/batches/${
 export const retryBatch = (id: string) => post<TimingBatch>(`${base}/batches/${id}/retry`);
 export const resumeBatch = (id: string) => post<TimingBatch>(`${base}/batches/${id}/resume`);
 export const TIMING_DELETED_EVENT = "rollingpebble:timing-deleted";
-export const deleteTiming = async (id: string) => {
-    const result = await request(`${base}/runs/${id}`, { method: "DELETE" });
-    window.dispatchEvent(new CustomEvent(TIMING_DELETED_EVENT, { detail: id }));
+export const deleteTiming = async (id: string, kind: "run" | "batch" = "run") => {
+    const result = await request<{ deleted: boolean; deleted_ids: string[] }>(
+        `${base}/${kind === "batch" ? "batches" : "runs"}/${id}`,
+        { method: "DELETE" },
+    );
+    for (const deletedId of result.deleted_ids) {
+        window.dispatchEvent(new CustomEvent(TIMING_DELETED_EVENT, { detail: deletedId }));
+    }
     return result;
 };
 export const timingDiagnostics = (id: string) =>

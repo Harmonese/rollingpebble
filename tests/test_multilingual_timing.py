@@ -149,17 +149,33 @@ def test_retry_api_preserves_language_and_rejects_other_workspace(tmp_path, monk
     checked['engine_options'] = engine_options(checked['engine_options'], 'zh')
     record, _ = service._record(request, checked=checked)
     service.store.update(record['id'], status='failed')
-    called = []
-    monkeypatch.setattr(service, 'start', lambda request, **kwargs: called.append((request, kwargs)) or {'ok': True})
+    checked_calls = []
+    original = service.preflight
+    def preflight(request, **kwargs):
+        checked_calls.append(kwargs)
+        value = original(request, **kwargs)
+        value["language"] = kwargs.get("language") or value["language"]
+        value["engine_options"] = engine_options(value["engine_options"], value["language"])
+        return value
+    monkeypatch.setattr(service, 'preflight', preflight)
+    monkeypatch.setattr(service, '_execute', lambda record, env: service.store.update(record['id'], status='completed'))
     app = FastAPI()
     app.include_router(create_auto_timing_router(SimpleNamespace(auto_timing=service)))
     client = TestClient(app)
     response = client.post(f"/api/auto-timing/runs/{record['id']}/retry", json={'project_id': 'p1', 'options': {'language': 'mul'}})
+    assert response.status_code == 400 and checked_calls == []
+    response = client.post(f"/api/auto-timing/runs/{record['id']}/retry", json={'project_id': 'p1', 'options': {'language': 'auto'}})
     assert response.status_code == 200
-    assert called[0][0].options.language == 'auto'
-    assert called[0][1]['language'] == 'zh'
+    assert response.json()['language'] == 'zh'
+    assert response.json()['options']['language'] == 'auto'
+    assert checked_calls == [{'language': 'zh'}]
+    import time
+    for _ in range(100):
+        if not service.jobs.resource_lock.locked():
+            break
+        time.sleep(.01)
     response = client.post(f"/api/auto-timing/runs/{record['id']}/retry", json={'project_id': 'another'})
-    assert response.status_code == 400 and len(called) == 1
+    assert response.status_code == 400 and len(checked_calls) == 1
 
 
 def test_unicode_final_alignment_and_lrc_keep_source(tmp_path):

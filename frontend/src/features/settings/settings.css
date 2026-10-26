@@ -84,7 +84,8 @@
 }
 
 .settings-header button,
-.settings-section :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)) {
+.settings-section
+    :where(button:not(.ui-button):not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -112,7 +113,7 @@
 
 .settings-header button:hover:not(:disabled),
 .settings-section
-    :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):hover:not(:disabled) {
+    :where(button:not(.ui-button):not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):hover:not(:disabled) {
     transform: translateY(-1px);
     background: rgba(var(--theme-rgb), 0.16);
     border-color: rgba(var(--theme-rgb), 0.62);
@@ -122,19 +123,20 @@
 
 .settings-header button:active:not(:disabled),
 .settings-section
-    :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):active:not(:disabled) {
+    :where(button:not(.ui-button):not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):active:not(:disabled) {
     transform: translateY(0);
 }
 
 .settings-header button:focus-visible,
 .settings-section
-    :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):focus-visible {
+    :where(button:not(.ui-button):not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.14);
 }
 
 .settings-header button:disabled,
-.settings-section :where(button:not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):disabled {
+.settings-section
+    :where(button:not(.ui-button):not(.theme-color-chip):not(.cp-swatch):not(.cp-cell):not(.space-stepper-btn)):disabled {
     cursor: not-allowed;
     opacity: 0.48;
 }
@@ -247,7 +249,7 @@
     content: "";
     width: 9px;
     height: 5px;
-    border: solid #07110d;
+    border: solid var(--theme-contrast-color);
     border-width: 0 0 2px 2px;
     opacity: 0;
     transform: rotate(-45deg) translateY(-1px);
@@ -321,19 +323,6 @@
     border-radius: var(--radius-pill);
     font-size: 0.78rem;
     line-height: 1;
-}
-
-.settings-section .storage-actions button:not(.danger-action) {
-    border-color: rgba(var(--theme-rgb), 0.34);
-    background: rgba(var(--theme-rgb), 0.08);
-    color: var(--theme-color);
-}
-
-.settings-section .storage-actions button:not(.danger-action):hover:not(:disabled) {
-    background: rgba(var(--theme-rgb), 0.16);
-    border-color: rgba(var(--theme-rgb), 0.62);
-    color: var(--theme-color);
-    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.08);
 }
 
 @media (width <= 720px) {
@@ -467,23 +456,6 @@
 .browse-row input:focus {
     border-color: rgba(var(--theme-rgb), 0.7);
     box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
-}
-
-.settings-section button.danger-action {
-    border-color: rgba(var(--studio-danger-rgb, 255, 111, 111), 0.38);
-    background: rgba(var(--studio-danger-rgb, 255, 111, 111), 0.13);
-    color: #f0a8a8;
-}
-
-.settings-section button.danger-action:hover:not(:disabled) {
-    border-color: rgba(var(--studio-danger-rgb, 255, 111, 111), 0.68);
-    background: rgba(var(--studio-danger-rgb, 255, 111, 111), 0.20);
-    color: #ffd0d0;
-    box-shadow: 0 0 0 3px rgba(var(--studio-danger-rgb, 255, 111, 111), 0.10);
-}
-
-.settings-section button.danger-action:focus-visible {
-    box-shadow: 0 0 0 3px rgba(var(--studio-danger-rgb, 255, 111, 111), 0.14);
 }
 
 .theme-color-row {

@@ -16,7 +16,7 @@ import {
     setEditorRecovery,
 } from "../../shared/editorDraft.js";
 import { CopySVG, DownloadSVG, PreferencesSVG } from "../../ui/icons.js";
-import { Button, ButtonGroup, MessageText, Select } from "../../ui/index.js";
+import { Button, ButtonGroup, Input, MessageText, Select, TaskStatus } from "../../ui/index.js";
 import { PairedEditors } from "./PairedEditors.js";
 import type { TranslationController } from "./useTranslation.js";
 import "./translation.css";
@@ -49,7 +49,7 @@ function LanguageField({ label, value, change, auto, locale, automatic, other }:
                 <option value="other">{other}</option>
             </Select>
             {(custom || !known) && (
-                <input
+                <Input
                     aria-label={label}
                     value={value}
                     onChange={event => change(event.target.value)}
@@ -150,37 +150,24 @@ export function TranslationEditor({ state, dispatch, controller: c, metadata = t
                     />
                 </div>
                 <ButtonGroup compact className="translation-run-actions">
-                    {c.busy
-                        ? (
-                            <>
-                                <span role="status">
-                                    {c.job?.status === "cancelling" ? t.cancelling : t.translating}
-                                </span>
-                                <Button onClick={() => void c.cancel()}>{lang.ui.cancel}</Button>
-                            </>
-                        )
-                        : (
-                            <>
-                                <Button
-                                    tone="primary"
-                                    disabled={!state.lyric.some(line => line.text.trim()) || !c.target.trim()
-                                        || c.target === "auto"}
-                                    onClick={() => {
-                                        if (!editorDraftError()) void c.run();
-                                    }}
-                                >
-                                    {t.translate}
-                                </Button>
-                                <Button
-                                    disabled={!state.lyric[state.selectIndex]?.text.trim()}
-                                    onClick={() => {
-                                        if (!editorDraftError()) void c.run(true);
-                                    }}
-                                >
-                                    {t.retranslate}
-                                </Button>
-                            </>
-                        )}
+                    <Button
+                        tone="primary"
+                        disabled={c.busy || !state.lyric.some(line => line.text.trim()) || !c.target.trim()
+                            || c.target === "auto"}
+                        onClick={() => {
+                            if (!editorDraftError()) void c.run();
+                        }}
+                    >
+                        {t.translate}
+                    </Button>
+                    <Button
+                        disabled={c.busy || !state.lyric[state.selectIndex]?.text.trim()}
+                        onClick={() => {
+                            if (!editorDraftError()) void c.run(true);
+                        }}
+                    >
+                        {t.retranslate}
+                    </Button>
                     <button
                         type="button"
                         className="editor-tools-item ripple"
@@ -200,10 +187,22 @@ export function TranslationEditor({ state, dispatch, controller: c, metadata = t
                 </MessageText>
             )}
             {copyError && <MessageText type="error">{lang.ui.copyFailed}</MessageText>}
-            {c.error && (
-                <MessageText type="error">
-                    {c.error} <Button onClick={() => void c.retry()}>{t.retry}</Button>
-                </MessageText>
+            {(c.busy || c.error) && (
+                <TaskStatus
+                    title={c.busy
+                        ? c.job?.status === "cancelling" ? t.cancelling : t.translating
+                        : lang.modelSetup.operationFailed}
+                    active={c.busy}
+                    error={c.error}
+                >
+                    {c.busy
+                        ? (
+                            <Button disabled={c.job?.status === "cancelling"} onClick={() => void c.cancel()}>
+                                {lang.ui.cancel}
+                            </Button>
+                        )
+                        : <Button onClick={() => void c.retry()}>{t.retry}</Button>}
+                </TaskStatus>
             )}
             <div className="translation-columns">
                 {(["original", "translation"] as const).map((mode, i) => (

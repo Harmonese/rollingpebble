@@ -599,7 +599,7 @@
         "savingProject": "正在儲存…",
         "saveFailed": "儲存失敗",
         "retrySave": "重試",
-        "recoverWorkspace": "還原未完成的工作區？",
+        "recoverWorkspace": "是否恢復未完成的工作區？「恢復」會找回未儲存的編輯；「放棄變更」會開啟上次儲存的專案，尚未儲存過則進入空白工作區。",
         "recoveryFailed": "工作區還原失敗。",
         "projectSaved": "專案已儲存。",
         "draftStatus": "未儲存工作區 · 儲存專案或開始自動打軸前，音訊僅在本次工作階段中保留。",
@@ -685,6 +685,7 @@
         "unhealthy": "異常"
     },
     "backendMessages": {
+        "timing.retry_input_changed": "工作輸入已變更，請開始新工作。",
         "translation.url": "API 或代理位址無效。",
         "translation.https": "遠端服務請使用 HTTPS。",
         "translation.auth": "請檢查 API 金鑰和存取權限。",
@@ -911,7 +912,13 @@
         "languageHint": "自動按歌詞文字選擇；普通話不包含粵語。中文、混唱和多語言為實驗性支援。",
         "ctcEnglish": "CTC · 英文",
         "ctcMandarin": "CTC · 普通話",
-        "ctcMultilingual": "CTC · 多語言"
+        "ctcMultilingual": "CTC · 多語言",
+        "newBatch": "新增批次",
+        "deleteBatch": "刪除批次結果",
+        "removeBatch": "刪除此批次的全部結果、草稿與日誌？專案及已套用的歌詞將保留。",
+        "submitting": "正在提交工作…",
+        "batchProgress": "批次進度：已結束 {done} / {total}",
+        "selectionChanged": "專案清單已變更，請檢查勾選後重新開始。"
     },
     "storageV3": {
         "location": "儲存位置",

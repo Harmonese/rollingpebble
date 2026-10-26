@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
 
+const retryExports = {};
+new Function(
+    "require",
+    "exports",
+    ts.transpileModule(
+        await readFile(new URL("../src/features/roller/retryEligibility.ts", import.meta.url), "utf8"),
+        { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+    ).outputText,
+)(
+    () => ({ isRunActive: value => Boolean(value && ["running", "queued", "cancelling"].includes(value.status)) }),
+    retryExports,
+);
+
 const source = await readFile(new URL("../src/shared/api/runtimePreparation.ts", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
@@ -62,7 +75,13 @@ const panelCode = ts.transpileModule(panelSource, {
 }).outputText;
 let slots, cursor, resolvePreparation, preparationCalls, saves, starts;
 const options = { audio_mode: "mix" };
-const language = { ui: {}, timingV2: { start: "Start", cancel: "Cancel" }, backendMessages: {} };
+const language = {
+    modelSetup: {},
+    settings: { runtime: {} },
+    ui: {},
+    timingV2: { start: "Start", cancel: "Cancel" },
+    backendMessages: {},
+};
 const react = {
     useState(value) {
         const index = cursor++;
@@ -82,6 +101,7 @@ const react = {
 const jsx = (type, props) => ({ type, props });
 const panelExports = {};
 new Function("require", "exports", panelCode)(name => {
+    if (name.includes("retryEligibility")) return retryExports;
     if (name === "react") return react;
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx };
     if (name.includes("useAutoTimingState")) return { useAutoTimingState: () => ({ options }) };

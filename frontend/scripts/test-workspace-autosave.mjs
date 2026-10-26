@@ -11,7 +11,9 @@ let saves = 0,
     recovery = null,
     choice = "confirm",
     raw = null,
-    invalid = null;
+    invalid = null,
+    lastConfirmation = null,
+    missingProject = false;
 const realNow = Date.now;
 Date.now = () => clock;
 globalThis.document = { querySelector: () => null };
@@ -98,7 +100,10 @@ const mocks = {
         });
     },
     useLyricsDocument: () => lyrics,
-    useConfirmDialog: () => async () => choice,
+    useConfirmDialog: () => async options => {
+        lastConfirmation = options;
+        return choice;
+    },
     hasLyricContent: Boolean,
     editorDraftError: () => invalid,
     readEditorRecovery: () => raw,
@@ -119,7 +124,10 @@ const mocks = {
     recoveryAudio: async () => null,
     saveWorkspace: save,
     applyLyrics: save,
-    getProject: async () => model,
+    getProject: async () => {
+        if (missingProject) throw Object.assign(new Error("not found"), { status: 404 });
+        return model;
+    },
     replaceWorkspaceAudio: async () => {
         replacements++;
         return save();
@@ -164,15 +172,18 @@ function edit(text) {
 render();
 await tick();
 assert.equal(workspace.ready, true);
+const firstPanelSession = workspace.panelSessionId;
 await workspace.importAudio(new File(["audio"], "first.wav"));
 await tick();
 await advance(1500);
 assert.equal(saves, 0);
 assert.equal(recovery.audio_name, "first.wav");
+assert.equal(workspace.panelSessionId, firstPanelSession);
 assert.equal(lyrics.editorMeta.track, "Manual");
 await workspace.save();
 await tick();
 assert.equal(workspace.dirty, false);
+assert.equal(workspace.panelSessionId, firstPanelSession);
 await advance(500);
 assert.equal(recovery.audio_key, null);
 edit("Auto save");
@@ -248,14 +259,18 @@ failed = false;
 await workspace.newProject();
 await tick();
 assert.equal(workspace.project, null);
+assert.notEqual(workspace.panelSessionId, firstPanelSession);
+const secondPanelSession = workspace.panelSessionId;
 await workspace.importAudio(new File(["next"], "next.wav"));
 await tick();
 choice = "cancel";
 assert.equal(await workspace.newProject(), false);
+assert.equal(workspace.panelSessionId, secondPanelSession);
 choice = "discard";
 assert.equal(await workspace.newProject(), true);
 await tick();
 assert.equal(workspace.file, null);
+assert.notEqual(workspace.panelSessionId, secondPanelSession);
 // A lost first-save response reuses the recovered project rather than creating another.
 await workspace.importAudio(new File(["retry"], "retry.wav"));
 await tick();
@@ -306,6 +321,55 @@ raw = null;
 await workspace.save();
 await tick();
 assert.equal(await workspace.prepareExit(async () => {}), true);
+// Explicit discard restores the saved version; interrupted prompts remain retryable.
+async function reopen(answer, { missing = false, clean = false } = {}) {
+    for (const slot of slots) slot?.cleanup?.();
+    slots = [];
+    timers.clear();
+    raw = null;
+    missingProject = missing;
+    lastConfirmation = null;
+    recovery = {
+        version: 1,
+        project_id: missing ? null : model.project_id,
+        draft_id: crypto.randomUUID(),
+        snapshot: { ...model, plain_lyrics: "Unsaved edits", synced_lyrics: "Unsaved edits", metadata_sources: {} },
+        dirty: !clean,
+        audio_key: null,
+        editor: { mode: "plain", text: "Unsaved edits" },
+    };
+    choice = answer;
+    render();
+    await tick();
+    await tick();
+}
+await reopen("discard");
+assert.equal(lastConfirmation.requireDecision, true);
+assert.equal(workspace.ready, true);
+assert.equal(workspace.restorePending, false);
+assert.equal(workspace.project.project_id, model.project_id);
+assert.equal(lyrics.plainLyrics, model.plain_lyrics);
+assert.equal(raw, null);
+assert.equal(recovery, null);
+await reopen("discard", { missing: true });
+assert.equal(workspace.ready, true);
+assert.equal(workspace.project, null);
+assert.equal(lyrics.plainLyrics, "");
+assert.equal(recovery, null);
+await reopen("cancel");
+assert.equal(workspace.ready, false);
+assert.equal(workspace.restorePending, true);
+assert.equal(recovery.snapshot.plain_lyrics, "Unsaved edits", "an interrupted decision must preserve recovery");
+choice = "confirm";
+workspace.retryRecovery();
+await tick();
+await tick();
+assert.equal(workspace.ready, true);
+assert.equal(workspace.restorePending, false);
+assert.equal(lyrics.plainLyrics, "Unsaved edits");
+await reopen("cancel", { clean: true });
+assert.equal(workspace.ready, true, "clean saved workspaces reopen without asking");
+assert.equal(lastConfirmation, null);
 Date.now = realNow;
 console.log(
     "Autosave debounce/deadline, recovery, shortcuts, audio replacement, concurrent edits, save failures and exit guards passed.",

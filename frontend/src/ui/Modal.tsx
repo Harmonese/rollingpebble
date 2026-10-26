@@ -36,7 +36,9 @@ export const Modal: React.FC<{
         modalStack.push(root);
         root.style.zIndex = String(1000 + modalStack.length);
         const panel = root.querySelector<HTMLElement>(".about-modal")!;
-        const focusFirst = () => (panel.querySelector<HTMLElement>(focusableSelector) || root).focus();
+        const focusFirst = () =>
+            (panel.querySelector<HTMLElement>("[data-autofocus=\"true\"]:not(:disabled)")
+                || panel.querySelector<HTMLElement>(focusableSelector) || root).focus();
         focusFirst();
         const onFocus = (event: FocusEvent) => {
             if (modalStack[modalStack.length - 1] === root && !root.contains(event.target as Node)) focusFirst();

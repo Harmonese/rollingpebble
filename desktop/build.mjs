@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 
 const candidates = [
     process.env.ROLLINGPEBBLE_BUILD_PYTHON,
+    "build/python-build-runtime/bin/python3.12",
     "desktop/python-runtime/bin/python3.12",
     ".venv/bin/python",
     "python3",

@@ -18,7 +18,7 @@ import { appContext } from "../shared/appContext.js";
 import { registerDesktopExit } from "../shared/desktopExit.js";
 import { registerStorageTransition } from "../shared/storageTransition.js";
 import { useConfirmDialog } from "../ui/ConfirmDialog.js";
-import { Button, StatusPill } from "../ui/index.js";
+import { Button, MessageText, StatusPill, TaskStatus } from "../ui/index.js";
 import { toastPubSub } from "../ui/Toast.js";
 import { LyricsWorkspace } from "./lyrics/LyricsWorkspace.js";
 import { useProjectWorkspace } from "./projects/useProjectWorkspace.js";
@@ -204,15 +204,15 @@ export const WorkspaceShell: React.FC = () => {
                 </span>
             )}
             {preview.error && (
-                <p role="alert">
+                <MessageText type="error" role="alert">
                     {preview.loaded ? t.saveFailed : t.loadFailed}{" "}
                     <Button onClick={() => void preview.retrySave()}>{t.retry}</Button>
-                </p>
+                </MessageText>
             )}
-            {previewError && <p role="alert">{previewError}</p>}
-            {binding === "mismatched" && <p className="timing-preview-waiting">{t.audioChanged}</p>}
-            {binding === "failed" && <p className="timing-preview-waiting" role="alert">{t.bindingFailed}</p>}
-            {preview.saving && <span role="status">{t.saving}</span>}
+            {previewError && <MessageText type="error" role="alert">{previewError}</MessageText>}
+            {binding === "mismatched" && <MessageText type="warning">{t.audioChanged}</MessageText>}
+            {binding === "failed" && <MessageText type="error" role="alert">{t.bindingFailed}</MessageText>}
+            {preview.saving && <MessageText type="info" role="status">{t.saving}</MessageText>}
             {showPreviewEditor(run, preview.loaded, preview.edited)
                 ? (
                     <LyricsWorkspace
@@ -225,9 +225,10 @@ export const WorkspaceShell: React.FC = () => {
                     />
                 )
                 : (
-                    <p className="timing-preview-waiting" role="status">
-                        {t[run.progress?.stage as keyof typeof t] || run.progress?.stage || t.waiting}
-                    </p>
+                    <TaskStatus
+                        title={t[run.progress?.stage as keyof typeof t] || run.progress?.stage || t.waiting}
+                        active={isRunActive(run)}
+                    />
                 )}
         </div>
     );
@@ -236,14 +237,24 @@ export const WorkspaceShell: React.FC = () => {
 
     if (!workspace.ready) {
         return (
-            <main className="workspace-shell">
-                {workspace.restorePending && <Button onClick={workspace.retryRecovery}>{lang.ui.restore}</Button>}
-                {workspace.recoveryError && (
-                    <Button onClick={workspace.retryRecovery}>{lang.ui.recoveryFailed} · {lang.ui.retrySave}</Button>
-                )}
-                {workspace.recoveryError && (
-                    <Button onClick={() => void workspace.discardRecovery()}>{lang.ui.discardChanges}</Button>
-                )}
+            <main className="workspace-shell workspace-recovery-gate">
+                <section
+                    className="ui-panel workspace-recovery-card"
+                    aria-busy={!workspace.restorePending && !workspace.recoveryError}
+                >
+                    <h1 className="ui-panel-title">{lang.ui.restore}</h1>
+                    <p role={workspace.recoveryError ? "alert" : "status"}>
+                        {workspace.recoveryError ? lang.ui.recoveryFailed : lang.ui.recoverWorkspace}
+                    </p>
+                    {(workspace.restorePending || workspace.recoveryError) && (
+                        <div className="ui-dialog-action-row">
+                            <Button onClick={() => void workspace.discardRecovery()}>{lang.ui.discardChanges}</Button>
+                            <Button tone="primary" onClick={workspace.retryRecovery}>
+                                {workspace.recoveryError ? lang.ui.retrySave : lang.ui.restore}
+                            </Button>
+                        </div>
+                    )}
+                </section>
             </main>
         );
     }
@@ -284,6 +295,8 @@ export const WorkspaceShell: React.FC = () => {
                     <Button onClick={workspace.retryRecovery}>{lang.ui.recoveryFailed} · {lang.ui.retrySave}</Button>
                 )}
                 <ImportAudioPanel
+                    key={`import-audio:${workspace.panelSessionId}`}
+                    panelSessionId={workspace.panelSessionId}
                     project={project}
                     onImportAudio={workspace.importAudio}
                     workspaceId={workspace.workspaceId}
@@ -292,6 +305,9 @@ export const WorkspaceShell: React.FC = () => {
                     disabled={workspace.saving || workspace.transitioning}
                 />
                 <LrclibPanel
+                    workspaceId={workspace.workspaceId}
+                    key={`import-lyrics:${workspace.panelSessionId}`}
+                    panelSessionId={workspace.panelSessionId}
                     project={project}
                     editorMeta={lyrics.editorMeta}
                     onImportText={workspace.importLyrics}
@@ -337,6 +353,9 @@ export const WorkspaceShell: React.FC = () => {
                     onDelete={id => setRun(previous => previous?.id === id ? null : previous)}
                 />
                 <UploadPanel
+                    workspaceId={workspace.workspaceId}
+                    key={`upload-lyrics:${workspace.panelSessionId}`}
+                    panelSessionId={workspace.panelSessionId}
                     project={project}
                     plainLyrics={lyrics.plainLyrics}
                     syncedLyrics={lyrics.syncedLyrics}

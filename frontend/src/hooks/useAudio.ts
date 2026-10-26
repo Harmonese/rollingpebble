@@ -1,6 +1,7 @@
 import { useContext, useMemo } from "react";
-import { audioElementContext } from "../shared/audioElementContext.js";
 import { guard } from "../domain/lyrics/useLyricsEngine.js";
+import { audioElementContext } from "../shared/audioElementContext.js";
+import { clampPlaybackRate } from "../shared/playbackRate.js";
 
 export function useAudio() {
     const ref = useContext(audioElementContext)!;
@@ -21,7 +22,7 @@ export function useAudio() {
             return ref.current?.playbackRate ?? 1;
         },
         set playbackRate(rate: number) {
-            if (ref.current) ref.current.playbackRate = rate;
+            if (ref.current) ref.current.playbackRate = clampPlaybackRate(rate);
         },
         get currentTime() {
             return ref.current?.currentTime ?? 0;

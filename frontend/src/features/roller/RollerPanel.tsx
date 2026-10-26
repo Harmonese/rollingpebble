@@ -4,7 +4,7 @@ import { useSettingsUpdated } from "../../hooks/useSettingsUpdated.js";
 import { modelName } from "../../shared/api/models.js";
 import { listProjects } from "../../shared/api/projects.js";
 import { BackendApiError, backendMessageText } from "../../shared/api/request.js";
-import { waitForRuntime } from "../../shared/api/runtimePreparation.js";
+import { type Preparation, waitForRuntime } from "../../shared/api/runtimePreparation.js";
 import { settings } from "../../shared/api/settings.js";
 import {
     cancelTiming,
@@ -26,12 +26,14 @@ import {
 } from "../../shared/api/timingV2.js";
 import type { ProjectModel } from "../../shared/api/types.js";
 import { appContext } from "../../shared/appContext.js";
+import { PROJECTS_CHANGED_EVENT } from "../../shared/projectEvents.js";
 import { useConfirmDialog } from "../../ui/ConfirmDialog.js";
-import { Button, ButtonGroup, Panel, StatusPill, Tabs } from "../../ui/index.js";
+import { Button, ButtonGroup, CommandBlock, LogBlock, MessageText, Panel, StatusPill, Tabs } from "../../ui/index.js";
 import { AutoTimingFields } from "./AutoTimingFields.js";
 import { BatchProjectPicker } from "./parts/BatchProjectPicker.js";
-import { TimingProgress } from "./parts/TimingProgress.js";
+import { TimingProgress, TimingStartupProgress } from "./parts/TimingProgress.js";
 import { TimingResultRow } from "./parts/TimingResultRow.js";
+import { canRetryTiming, timingOptionsEqual } from "./retryEligibility.js";
 
 export const RollerPanel: React.FC<{
     project: ProjectModel | null;
@@ -55,6 +57,9 @@ export const RollerPanel: React.FC<{
     const [projects, setProjects] = useState<ProjectModel[]>([]);
     const [selected, setSelected] = useState(new Set<string>());
     const [busy, setBusy] = useState(false);
+    const [startup, setStartup] = useState<
+        { stage: "checking" | "preparing" | "submitting"; startedAt: number } | null
+    >(null);
     const [preparing, setPreparing] = useState(false);
     const [prepareFailed, setPrepareFailed] = useState(false);
     const [repairNeeded, setRepairNeeded] = useState(true);
@@ -79,17 +84,28 @@ export const RollerPanel: React.FC<{
         const token = ++intent.current;
         const expected = latestIdentity.current;
         setPreparing(true);
+        setClock(Date.now());
+        setStartup({ stage: "checking", startedAt: Date.now() });
         setPrepareFailed(false);
         try {
-            return await waitForRuntime(
+            const ready = await waitForRuntime(
                 vocals,
                 () => intent.current === token && latestIdentity.current === expected,
                 repair,
-                undefined,
+                (state: Preparation) => {
+                    if (intent.current === token && latestIdentity.current === expected) {
+                        setStartup(value =>
+                            value ? { ...value, stage: state.status === "preparing" ? "preparing" : "checking" } : value
+                        );
+                    }
+                },
                 at.options.language === "mul",
             );
+            if (!ready) setStartup(null);
+            return ready;
         } catch (error) {
             setError(backendMessageText(error, lang.backendMessages));
+            setClock(Date.now());
             setPrepareFailed(true);
             setRepairNeeded(!(error instanceof BackendApiError && error.status === 409));
             return false;
@@ -107,7 +123,7 @@ export const RollerPanel: React.FC<{
             setHistory(rows => rows.filter(row => row.id !== id));
             setRun(value => value?.id === id ? null : value);
             setBatch(value =>
-                value
+                value?.id === id ? null : value
                     ? {
                         ...value,
                         runs: value.runs?.filter(row => row.id !== id),
@@ -119,12 +135,64 @@ export const RollerPanel: React.FC<{
         window.addEventListener(TIMING_DELETED_EVENT, deleted);
         return () => window.removeEventListener(TIMING_DELETED_EVENT, deleted);
     }, []);
-    const sameOptions = run
-        && Object.keys(at.options).every(key =>
-            (at.options[key as keyof typeof at.options] ?? null)
-                === (run.options?.[key as keyof typeof at.options] ?? null)
-        );
+    const refreshProjects = async () => {
+        const available = await listProjects();
+        setProjects(available);
+        setSelected(old => new Set([...old].filter(id => available.some(project => project.project_id === id))));
+        return available;
+    };
+    useEffect(() => {
+        let stopped = false;
+        const changed = () => {
+            void listProjects().then(available => {
+                if (stopped) return;
+                setProjects(available);
+                setSelected(old =>
+                    new Set([...old].filter(id => available.some(project => project.project_id === id)))
+                );
+            }).catch(e => {
+                if (!stopped) setError(backendMessageText(e, lang.backendMessages));
+            });
+        };
+        window.addEventListener(PROJECTS_CHANGED_EVENT, changed);
+        return () => {
+            stopped = true;
+            window.removeEventListener(PROJECTS_CHANGED_EVENT, changed);
+        };
+    }, []);
+    const removeResult = async (item: TimingRun) => {
+        if (
+            await confirm({ message: item.kind === "batch" ? t.removeBatch : t.removeResult, danger: true })
+                !== "confirm"
+        ) return;
+        await deleteTiming(item.id, item.kind);
+        setHistory(await timingHistory());
+    };
+    const retryEligible = canRetryTiming(run, {
+        projectId: props.project?.project_id,
+        workspaceId: props.workspaceId,
+        signature: props.workspaceSignature,
+        options: at.options,
+    });
+    const runMatches = run?.workspace_id === props.workspaceId && run?.lyrics_version === props.workspaceSignature
+        && run?.project_id === props.project?.project_id && timingOptionsEqual(at.options, run.options);
     const active = isRunActive(run) || isRunActive(batch);
+    useEffect(() => {
+        setError("");
+        setPrepareFailed(false);
+        setDiagnostics("");
+        setRun(value =>
+            isRunActive(value) || canRetryTiming(value, {
+                    projectId: props.project?.project_id,
+                    workspaceId: props.workspaceId,
+                    signature: props.workspaceSignature,
+                    options: at.options,
+                })
+                ? value
+                : null
+        );
+    }, [props.project?.project_id, props.workspaceId, props.workspaceSignature, JSON.stringify(at.options)]);
+
     useSettingsUpdated(async () => {
         at.loadFromSettings(await settings());
     }, true);
@@ -141,10 +209,10 @@ export const RollerPanel: React.FC<{
         };
     }, [props.project?.project_id, run?.status, batch?.status]);
     useEffect(() => {
-        if (!active) return;
+        if (!active && (!startup || prepareFailed)) return;
         const timer = window.setInterval(() => setClock(Date.now()), 1000);
         return () => window.clearInterval(timer);
-    }, [active]);
+    }, [active, Boolean(startup), prepareFailed]);
     useEffect(() => {
         if (!active) return;
         let stopped = false;
@@ -177,6 +245,8 @@ export const RollerPanel: React.FC<{
         setBusy(true);
         setError("");
         setNeedsSettings(false);
+        setPrepareFailed(false);
+        setStartup(null);
         try {
             await action();
         } catch (e) {
@@ -190,6 +260,7 @@ export const RollerPanel: React.FC<{
                 message?.code === "models.not_verified" || message?.code === "runtime.multilingual_failed",
             );
         } finally {
+            setStartup(value => value?.stage === "submitting" ? null : value);
             actionLock.current = false;
             setBusy(false);
         }
@@ -207,10 +278,30 @@ export const RollerPanel: React.FC<{
                 value={mode}
                 onChange={next => {
                     setMode(next);
-                    if (next === "batch") void act(async () => setProjects(await listProjects()));
+                    if (next === "batch") {
+                        void act(async () => {
+                            await refreshProjects();
+                        });
+                    }
                 }}
                 items={[{ value: "single", label: lang.ui.single }, { value: "batch", label: lang.ui.batch }]}
             />
+            {mode === "batch" && (
+                <Button
+                    disabled={busy || active || props.workspaceBusy}
+                    onClick={() => {
+                        intent.current++;
+                        setBatch(null);
+                        setSelected(new Set());
+                        setError("");
+                        setNeedsSettings(false);
+                        setPrepareFailed(false);
+                        setStartup(null);
+                    }}
+                >
+                    {t.newBatch}
+                </Button>
+            )}
             {mode === "batch" && (
                 <BatchProjectPicker
                     projects={projects}
@@ -234,9 +325,56 @@ export const RollerPanel: React.FC<{
                         .catch(e => setError(backendMessageText(e, lang.backendMessages)));
                 }}
             />
-            {mode === "single" && run && <TimingProgress run={run} lang={lang} clock={clock} />}
-            {mode === "batch" && batch && (
-                <TimingProgress run={batch.runs?.find(isRunActive) || batch} lang={lang} clock={clock} />
+            {startup && (
+                <TimingStartupProgress
+                    stage={prepareFailed
+                        ? t.prepareFailed
+                        : startup.stage === "checking"
+                        ? lang.modelSetup.checkingEnvironment
+                        : startup.stage === "preparing"
+                        ? lang.modelSetup.preparingEnvironment
+                        : t.submitting}
+                    startedAt={startup.startedAt}
+                    clock={clock}
+                    elapsedLabel={lang.settings.runtime.elapsed}
+                    failed={prepareFailed}
+                    error={error}
+                >
+                    {prepareFailed && (
+                        <Button
+                            disabled={busy}
+                            onClick={() =>
+                                void act(async () => {
+                                    if (await prepare(repairNeeded)) setStartup(null);
+                                })}
+                        >
+                            {repairNeeded ? t.repair : t.retry}
+                        </Button>
+                    )}
+                </TimingStartupProgress>
+            )}
+            {!startup && mode === "single" && run && runMatches && (
+                <TimingProgress run={run} lang={lang} clock={clock} />
+            )}
+            {!startup && mode === "batch" && batch && (
+                <>
+                    <p className="ui-muted">
+                        {t.batchProgress.replace(
+                            "{done}",
+                            String(batch.runs?.filter(item => !isRunActive(item)).length || 0),
+                        ).replace("{total}", String(batch.children.length))}
+                    </p>
+                    <TimingProgress run={batch.runs?.find(isRunActive) || batch} lang={lang} clock={clock} />
+                </>
+            )}
+            {mode === "single" && run && !runMatches && isRunActive(run) && (
+                <>
+                    <MessageText role="status">
+                        {lang.ui.autoTiming} ·{" "}
+                        {projects.find(item => item.project_id === run.project_id)?.metadata.track || run.project_id}
+                    </MessageText>
+                    <TimingProgress run={run} lang={lang} clock={clock} />
+                </>
             )}
             <ButtonGroup className="studio-run-actions">
                 <Button
@@ -245,7 +383,14 @@ export const RollerPanel: React.FC<{
                         || (mode === "single" ? !props.canStart : !selected.size)}
                     onClick={() =>
                         void act(async () => {
+                            if (mode === "batch") {
+                                const available = await refreshProjects();
+                                if ([...selected].some(id => !available.some(project => project.project_id === id))) {
+                                    throw new Error(t.selectionChanged);
+                                }
+                            }
                             if (!await prepare()) return;
+                            setStartup(value => value ? { ...value, stage: "submitting" } : value);
                             if (mode === "batch") {
                                 setBatch(await startBatch([...selected], at.options));
                                 return;
@@ -259,14 +404,20 @@ export const RollerPanel: React.FC<{
                                 workspace_id: props.workspaceId,
                                 lyrics_version: props.workspaceSignature,
                             };
-                            const next = run && sameOptions && run.project_id === saved.project_id
+                            const next = run
+                                    && canRetryTiming(run, {
+                                        projectId: saved.project_id,
+                                        workspaceId: props.workspaceId,
+                                        signature: props.workspaceSignature,
+                                        options: at.options,
+                                    })
                                 ? await retryTiming(run.id, input)
                                 : await startTiming(input);
                             setRun(next);
                             props.onRun(next);
                         })}
                 >
-                    {mode === "single" && run && sameOptions && !active ? t.retry : t.start}
+                    {mode === "single" && retryEligible ? t.retry : t.start}
                 </Button>
                 <Button
                     tone="danger"
@@ -294,6 +445,7 @@ export const RollerPanel: React.FC<{
                         onClick={() =>
                             void act(async () => {
                                 if (await prepare(false, batch.options.audio_mode === "vocals")) {
+                                    setStartup(value => value ? { ...value, stage: "submitting" } : value);
                                     setBatch(await retryBatch(batch.id));
                                 }
                             })}
@@ -308,6 +460,7 @@ export const RollerPanel: React.FC<{
                         onClick={() =>
                             void act(async () => {
                                 if (await prepare(false, batch.options.audio_mode === "vocals")) {
+                                    setStartup(value => value ? { ...value, stage: "submitting" } : value);
                                     setBatch(await resumeBatch(batch.id));
                                 }
                             })}
@@ -316,17 +469,11 @@ export const RollerPanel: React.FC<{
                     </Button>
                 )}
             </ButtonGroup>
-            {preparing && <p role="status">{t.preparing}</p>}
-            {prepareFailed && (
-                <div className="ui-action-row">
-                    <Button
-                        disabled={busy}
-                        onClick={() =>
-                            void act(async () => {
-                                await prepare(repairNeeded);
-                            })}
-                    >
-                        {repairNeeded ? t.repair : t.retry}
+            {mode === "batch" && batch && (
+                <div className="studio-batch-results-header">
+                    <h3 className="ui-section-title">{t.results}</h3>
+                    <Button tone="danger" disabled={busy || active} onClick={() => void act(() => removeResult(batch))}>
+                        {t.deleteBatch}
                     </Button>
                 </div>
             )}
@@ -338,10 +485,12 @@ export const RollerPanel: React.FC<{
                         lang={lang}
                         title={projects.find(p => p.project_id === item.project_id)?.metadata.track || item.project_id}
                         busy={busy}
+                        deleteDisabled={busy || active || isRunActive(item)}
+                        onDelete={() => void act(() => removeResult(item))}
                         onOpen={() => void act(async () => props.onOpen(await getTiming(item.id)))}
                     />
                 ))}
-            {error && <p role="alert">{error}</p>}
+            {error && !prepareFailed && <MessageText type="error" role="alert">{error}</MessageText>}
             {needsSettings && (
                 <Button onClick={() => window.dispatchEvent(new Event("rollingpebble:auto-timing-settings"))}>
                     {lang.ui.settings}
@@ -376,22 +525,11 @@ export const RollerPanel: React.FC<{
                                 await props.onOpen(next);
                                 if (!isRunActive(run) || run?.id === next.id) setRun(next);
                             })}
-                        onDelete={item.kind === "run"
-                            ? () =>
-                                void act(async () => {
-                                    if (
-                                        await confirm({ message: t.removeResult, danger: true }) !== "confirm"
-                                    ) return;
-                                    await deleteTiming(item.id);
-                                    props.onDelete(item.id);
-                                    if (run?.id === item.id) setRun(null);
-                                    setHistory(rows => rows.filter(row => row.id !== item.id));
-                                })
-                            : undefined}
+                        onDelete={() => void act(() => removeResult(item))}
                     />
                 ))}
             </details>
-            {run && (
+            {run && runMatches && (
                 <details
                     onToggle={e => {
                         if (e.currentTarget.open) {
@@ -400,7 +538,9 @@ export const RollerPanel: React.FC<{
                     }}
                 >
                     <summary>{t.diagnostics}</summary>
-                    <pre>{run.command?.join(" ")}{"\n"}{run.error}{"\n"}{JSON.stringify(run.metrics, null, 2)}{"\n"}{diagnostics}</pre>
+                    {run.command?.length ? <CommandBlock>{run.command.join(" ")}</CommandBlock> : null}
+                    {run.error && <MessageText type="error" role="alert">{run.error}</MessageText>}
+                    <LogBlock>{JSON.stringify(run.metrics, null, 2)}{"\n"}{diagnostics}</LogBlock>
                 </details>
             )}
         </Panel>

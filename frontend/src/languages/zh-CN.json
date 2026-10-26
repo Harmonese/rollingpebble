@@ -599,7 +599,7 @@
         "savingProject": "正在保存…",
         "saveFailed": "保存失败",
         "retrySave": "重试",
-        "recoverWorkspace": "恢复未完成的工作区？",
+        "recoverWorkspace": "是否恢复未完成的工作区？“恢复”会找回未保存的编辑；“放弃更改”会打开上次保存的工程，尚未保存过则进入空工作区。",
         "recoveryFailed": "工作区恢复失败。",
         "projectSaved": "工程已保存。",
         "draftStatus": "未保存工作区 · 保存工程或开始自动打轴前，音频仅在本次会话中保留。",
@@ -685,6 +685,7 @@
         "unhealthy": "异常"
     },
     "backendMessages": {
+        "timing.retry_input_changed": "任务输入已变化，请开始新任务。",
         "translation.url": "API 或代理地址无效。",
         "translation.https": "远程服务请使用 HTTPS。",
         "translation.auth": "请检查 API 密钥和访问权限。",
@@ -911,7 +912,13 @@
         "languageHint": "自动按歌词文字选择；普通话不包含粤语。中文、混唱和多语言为实验性支持。",
         "ctcEnglish": "CTC · 英文",
         "ctcMandarin": "CTC · 普通话",
-        "ctcMultilingual": "CTC · 多语言"
+        "ctcMultilingual": "CTC · 多语言",
+        "newBatch": "新建批次",
+        "deleteBatch": "删除批次结果",
+        "removeBatch": "删除此批次的全部结果、草稿和日志？工程及已应用的歌词将保留。",
+        "submitting": "正在提交任务…",
+        "batchProgress": "批次进度：已结束 {done} / {total}",
+        "selectionChanged": "工程列表已变化，请检查勾选后重新开始。"
     },
     "storageV3": {
         "location": "存储位置",

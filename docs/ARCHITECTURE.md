@@ -76,6 +76,11 @@ UUIDs managed by the backend. The record includes project/draft identity, the ly
 snapshot, dirty state and unfinished editor text. It is not a project or cache.
 Saved audio is reused; a pending audio copy is released after project persistence.
 Desktop startup does not use origin-scoped localStorage for workspace recovery.
+Unfinished edits require an explicit Restore or Discard Changes decision; this startup
+prompt has no Cancel action and ignores Escape/backdrop dismissal. Discard opens the
+saved project when available, otherwise an empty workspace. Interrupted decisions and
+recovery errors retain an actionable recovery screen without initializing autosave or
+overwriting recovery data.
 The native shell negotiates close/quit through two restricted commands available
 only to the main window at its current loopback origin; the backend remains alive
 until saving completes or the user explicitly discards.
@@ -140,7 +145,14 @@ are never automatically removed.
 
 Run records retain configuration, input identity, latest snapshot, errors,
 artifact locations and application history. Batch parents retain child IDs.
-Result deletion is explicit and updates the parent's child list.
+Result deletion is explicit and updates the parent's child list. New Batch resets
+only the visible batch and project selection, retaining options, projects and history.
+Individual results can be deleted from the batch list; deleting the final child also
+removes its parent. Whole-batch deletion removes the parent and all child results,
+drafts and logs, preserving source projects and already-applied lyrics. Both deletion
+routes use the shared resource lock, reject active records and return `deleted_ids`
+for frontend history, batch and review synchronization. Project change events refresh
+the batch picker and remove stale selections; submission rechecks available projects.
 
 ## Preview and Apply
 
@@ -174,7 +186,8 @@ Opening a batch result first uses the normal project-switch save flow.
 | POST /api/auto-timing/runs/{id}/applied | Record application, without saving lyrics |
 | GET /api/auto-timing/runs/{id}/diagnostics | Bounded stderr tail and result path |
 | GET /api/auto-timing/runs/{id}/lrc | Completed engine LRC |
-| DELETE /api/auto-timing/runs/{id} | Explicit result/draft removal |
+| DELETE /api/auto-timing/runs/{id} | Explicit result/draft removal; reports all deleted IDs |
+| DELETE /api/auto-timing/batches/{id} | Explicit whole-batch result/draft/log removal |
 | POST /api/auto-timing/batches | Create serial queue |
 | GET /api/auto-timing/batches/{id} | Parent and child summaries |
 | POST .../batches/{id}/cancel, retry, resume | Cancel, retry failures, continue interrupted items |
@@ -198,7 +211,7 @@ the status response includes preparation state, capabilities and job ID. Concurr
 share a task, with Vocals escalation after the base process exits. Other resource owners cause
 a busy response. Old install/upgrade/doctor/vocals-install writes return 410.
 
-The desktop's React StartupGate reuses the existing startup illustration and animation,
+The desktop's React StartupGate uses the application icon and shared loading animation,
 requests the saved audio capability, and mounts the workspace after readiness. Failure permits
 repair or continuing to manual editing. The runtime response advertises startup_preparation
 only when app resources are configured; unbundled WebUI users are not forced into installation.
@@ -263,3 +276,57 @@ The catalog retains `ctc` for English and adds `ctc-zh` and `ctc-mul`, pinned to
 The base wheel closure includes Mandarin and mul Python dependencies. Bundled eSpeak NG 1.52.0 is built from hashed source without optional system audio libraries. `PHONEMIZER_ESPEAK_LIBRARY` and `ESPEAK_DATA_PATH` point at bundled components. Its source, licenses, build flags and data join the engine manifest. Doctor checks multilingual capability separately; failure leaves verified base capabilities usable. Models remain independent of component repair.
 
 Single retry and batch retry/resume retain the original resolved language. Old records without language are English; active settings without language migrate to Auto. Runtime compatibility requires >=0.10.3,<0.11 and protocol 2.
+
+## Frontend progress and playback
+
+Auto Timing uses one progress-card position for environment checking, component
+preparation, task submission and engine execution. Preparation consumes the existing
+runtime state callback; checking, preparation and submission use indeterminate progress.
+Failures retain the card with repair/retry actions. Repair alone does not restart
+alignment. Cancelling preparation withdraws the start intent without cancelling shared
+environment work. Batch execution also shows finished child count and current stage.
+
+Audio playback uses a logarithmic range from 1/3 to 3, with 1 at the slider center.
+Slider input, keyboard changes (0.2 logarithmic steps) and assignments through the
+audio hook share the same bounds. Playback speed changes do not modify source audio
+or Auto Timing input. Clicking the speed display resets playback to 1.
+
+The initial HTML loader and React startup gate use the same packaged application icon
+and decorative halo, counter-rotating orbits and waveform animation. Decorations are
+hidden from assistive technology, pause while startup awaits a decision or has failed,
+and respect reduced-motion preferences. Branding changes do not delay startup readiness.
+
+Task progress presentation lives in `ui/TaskStatus`, shared by Auto Timing,
+environment preparation, translation and connection tests. Indeterminate stages do
+not advertise a percentage; terminal failure and connection outcomes retain the
+same card. Translation toolbar actions remain mounted and disabled during work,
+with cancellation in the task card. Errors and review-save notifications use shared
+messages; timing diagnostics use separate command, error and log containers.
+
+LRC tool actions and settings reset use the public button tones. Settings-specific
+legacy button rules exclude public buttons so danger hover/focus colors are retained.
+Custom translation language codes use the shared Input with keyboard focus feedback.
+Native controls follow explicit and automatic light/dark themes via `color-scheme`;
+checkbox glyphs use the computed theme contrast color. Tool borders and shared muted
+surfaces use theme variables. The crash boundary presentation is unchanged.
+
+## Panel session ownership
+
+The workspace exposes its existing draft ID as `panelSessionId`. New/open/reset
+transitions change this ID, while first save and audio replacement retain it. Import
+audio, import lyrics and publishing panels are keyed by this session. Search defaults
+track automatic versus manual ownership per field, including explicit empty edits;
+automatic fields follow current metadata only when auto-fill is enabled. Saved project
+identity is not used as a search-session boundary. Async search, lyric fetch, file reads
+and publish-plan responses are guarded by session/material/input revisions and request
+sequence; unmounted, superseded and out-of-date callbacks cannot update the new panel.
+Publish plans also bind all publication inputs and are checked again at submission.
+An already submitted upload is never automatically repeated on a workspace transition.
+
+Single-run Retry uses one predicate for its label and admission: current project,
+workspace, signature, options and complete historical identities must match, and the
+run must be terminal. Changed inputs offer Start. Active runs remain monitored with
+their project title even when their source workspace is no longer displayed; history
+and batch queues survive single-workspace changes. Backend retry revalidates audio,
+normalized lyric hash and options inside the resource lock before reusing the resolved
+language and freezing inputs. Legacy records without these identities require Start.

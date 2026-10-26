@@ -138,7 +138,7 @@
     content: "";
     width: 9px;
     height: 5px;
-    border: solid #07110d;
+    border: solid var(--theme-contrast-color);
     border-width: 0 0 2px 2px;
     opacity: 0;
     transform: rotate(-45deg) translateY(-1px);
@@ -426,4 +426,13 @@
 
 .command-preview {
     margin-top: 8px;
+}
+
+.ui-button:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.2);
+}
+
+.ui-button-danger:focus-visible {
+    box-shadow: 0 0 0 3px rgba(var(--studio-danger-rgb), 0.24);
 }

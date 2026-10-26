@@ -229,7 +229,6 @@ a > * {
 
 /* rollingpebble shell refinements */
 html {
-    color-scheme: dark;
     background: var(--studio-bg);
     overflow: hidden;
 }
@@ -296,6 +295,7 @@ select, input, textarea, button {
 
 /* rollingpebble startup screen */
 .startup-gate {
+    box-sizing: border-box;
     min-height: 100dvh;
     display: grid;
     place-items: center;
@@ -338,7 +338,7 @@ select, input, textarea, button {
     height: 4px;
     border: 0;
     border-radius: 0;
-    accent-color: var(--theme);
+    accent-color: var(--theme-color);
 }
 
 .model-download-fields {
@@ -371,49 +371,144 @@ select, input, textarea, button {
     opacity: 1;
 }
 
-.studio-splash-card {
-    position: fixed;
-    inset: 0;
-    width: min(62vw, 42vmin, 280px);
-    height: min(62dvh, 42vmin, 280px);
-    margin: auto;
+.startup-mark {
+    position: relative;
     display: grid;
     place-items: center;
+    width: min(66vw, 260px);
+    aspect-ratio: 1;
     isolation: isolate;
+    flex: 0 0 auto;
 }
 
-.studio-splash-avatar {
-    width: min(54vw, 34vmin, 216px);
-    height: min(54dvh, 34vmin, 216px);
-    object-fit: contain;
-    border-radius: 0;
-    border: 0;
-    box-shadow: 0 0 46px rgba(var(--theme-rgb), 0.26), 0 24px 70px rgba(0, 0, 0, 0.15);
-    animation: studio-splash-float 2.8s ease-in-out infinite alternate;
-}
-
-.studio-splash-orbit {
+.startup-mark-halo {
     position: absolute;
-    inset: 4%;
+    inset: -14%;
     z-index: -1;
     border-radius: 50%;
-    border: 0;
-    background:
-        radial-gradient(circle, rgba(var(--theme-rgb), 0.17), transparent 58%),
-        conic-gradient(from 90deg, transparent, rgba(var(--theme-rgb), 0.32), transparent 42%);
-    filter: blur(0.2px) drop-shadow(0 0 14px rgba(var(--theme-rgb), 0.24));
-    opacity: 0.85;
-    animation: studio-splash-orbit 3.2s linear infinite;
+    background: radial-gradient(circle, rgba(var(--theme-rgb), 0.2), transparent 65%);
+    animation: startup-halo-breathe 3.6s ease-in-out infinite alternate;
 }
 
-.studio-splash-title {
+.startup-mark-icon {
+    position: relative;
+    width: 66%;
+    height: auto;
+    object-fit: contain;
+    filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.18));
+    animation: startup-icon-float 3.6s ease-in-out infinite alternate;
+}
+
+.startup-mark-orbit {
     position: absolute;
-    bottom: clamp(-2rem, -5dvh, -1.15rem);
-    color: var(--studio-text);
-    font-size: clamp(1rem, 2.8vmin, 1.35rem);
-    font-weight: 760;
-    letter-spacing: 0.04em;
-    text-shadow: 0 0 18px rgba(var(--theme-rgb), 0.35);
+    border: 1px solid var(--overlay-border);
+    border-top-color: rgba(var(--theme-rgb), 0.65);
+    border-bottom-color: var(--studio-accent-2);
+    border-radius: 50%;
+    animation: startup-orbit-turn 10s linear infinite;
+}
+
+.startup-mark-orbit::after {
+    content: "";
+    position: absolute;
+    top: 12%;
+    left: 12%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--theme-color);
+    box-shadow: 0 0 12px rgba(var(--theme-rgb), 0.7);
+}
+
+.startup-mark-orbit-outer {
+    inset: 0;
+}
+
+.startup-mark-orbit-inner {
+    inset: 8%;
+    opacity: 0.45;
+    animation-duration: 7s;
+    animation-direction: reverse;
+}
+
+.startup-mark-wave {
+    position: absolute;
+    bottom: 7%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 12px;
+    border-radius: var(--radius-pill);
+    background: var(--studio-bg);
+}
+
+.startup-mark-wave span {
+    width: 3px;
+    height: 18px;
+    border-radius: var(--radius-pill);
+    background: var(--theme-color);
+    transform: scaleY(0.4);
+    animation: startup-wave-rise 1.4s ease-in-out infinite alternate;
+}
+
+.startup-mark-wave span:nth-child(2n) {
+    height: 12px;
+    animation-delay: -0.6s;
+}
+
+.startup-mark-wave span:nth-child(3n) {
+    height: 22px;
+    animation-delay: -1s;
+}
+
+.startup-mark-wave span:nth-child(4n) {
+    animation-delay: -0.3s;
+    background: var(--studio-accent-2);
+}
+
+.startup-mark[data-active="false"] *,
+.startup-mark[data-active="false"] *::after {
+    animation-play-state: paused;
+}
+
+@keyframes startup-halo-breathe {
+    from {
+        opacity: 0.5;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1.08);
+    }
+}
+
+@keyframes startup-icon-float {
+    from {
+        transform: translateY(-3px);
+    }
+    to {
+        transform: translateY(3px);
+    }
+}
+
+@keyframes startup-orbit-turn {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes startup-wave-rise {
+    to {
+        transform: scaleY(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .startup-mark *, .startup-mark *::after {
+        animation: none;
+    }
 }
 
 .studio-splash-start {
@@ -428,21 +523,6 @@ select, input, textarea, button {
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
-    }
-}
-
-@keyframes studio-splash-float {
-    from {
-        transform: translateY(-2px) scale(0.995);
-    }
-    to {
-        transform: translateY(5px) scale(1.012);
-    }
-}
-
-@keyframes studio-splash-orbit {
-    to {
-        transform: rotate(360deg);
     }
 }
 

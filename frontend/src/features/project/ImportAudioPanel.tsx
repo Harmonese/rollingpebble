@@ -10,6 +10,7 @@ import { Message, Panel, Tabs } from "../../ui/index.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
 import { useProjectMetadataSeed } from "../shared/useProjectMetadataSeed.js";
+import { useRequestScope } from "../shared/useRequestScope.js";
 
 type AudioSourceKind = "local" | "netease";
 
@@ -25,13 +26,14 @@ function audioImportErrorText(
 }
 
 export const ImportAudioPanel: React.FC<{
+    panelSessionId: string;
     project: ProjectModel | null;
     onImportAudio: (file: File, metadata?: MetaModel) => Promise<boolean>;
     disabled: boolean;
     hasAudio: boolean;
     workspaceId: string;
     editorMeta: MetaModel;
-}> = ({ project, onImportAudio, disabled, hasAudio, workspaceId, editorMeta }) => {
+}> = ({ project, onImportAudio, disabled, hasAudio, workspaceId, editorMeta, panelSessionId }) => {
     const currentWorkspace = useRef(workspaceId);
     currentWorkspace.current = workspaceId;
     const operation = useRef(false);
@@ -42,32 +44,40 @@ export const ImportAudioPanel: React.FC<{
     const { lang } = useContext(appContext, AppContextBits.lang);
     const u = lang.ui;
     const t = lang.toast;
-    const { meta } = useProjectMetadataSeed({ project, fallbackMeta: editorMeta });
+    const { meta } = useProjectMetadataSeed({ project, fallbackMeta: editorMeta, panelSessionId });
+
+    const scope = useRequestScope(panelSessionId);
 
     const onAudioUpload = async (ev: React.ChangeEvent<HTMLInputElement>) => {
         const file = ev.target.files?.[0];
         if (!file || operation.current || disabled) return;
+        const valid = scope.begin();
+        if (!valid()) return;
         operation.current = true;
         const startedIn = workspaceId;
         setBusy(true);
         setMessage(t.import.preparing, "info");
         try {
             const prepared = await prepareAudioFile(file);
-            if (startedIn !== currentWorkspace.current) return;
+            if (!valid() || startedIn !== currentWorkspace.current) return;
             if (await onImportAudio(prepared.file)) {
                 setMessage("");
             } else setMessage("");
         } catch (error) {
-            setMessage(audioImportErrorText(error, u, lang.backendMessages), "error");
+            if (valid()) setMessage(audioImportErrorText(error, u, lang.backendMessages), "error");
         } finally {
-            operation.current = false;
-            setBusy(false);
+            if (valid()) {
+                operation.current = false;
+                setBusy(false);
+            }
             ev.target.value = "";
         }
     };
 
     const loadNeteaseAudio = async (song: NeteaseSong) => {
         if (operation.current || disabled) return;
+        const valid = scope.begin();
+        if (!valid()) return;
         operation.current = true;
         const startedIn = workspaceId;
         setBusy(true);
@@ -79,7 +89,7 @@ export const ImportAudioPanel: React.FC<{
             const prepared = await prepareAudioFile(
                 new File([blob], `${song.name}.mp3`, { type: blob.type || "audio/mpeg" }),
             );
-            if (startedIn !== currentWorkspace.current) return;
+            if (!valid() || startedIn !== currentWorkspace.current) return;
             await onImportAudio(prepared.file, {
                 track: song.name,
                 artist: song.artists,
@@ -88,10 +98,12 @@ export const ImportAudioPanel: React.FC<{
             });
             setMessage("");
         } catch (error) {
-            setMessage(audioImportErrorText(error, u, lang.backendMessages), "error");
+            if (valid()) setMessage(audioImportErrorText(error, u, lang.backendMessages), "error");
         } finally {
-            operation.current = false;
-            setBusy(false);
+            if (valid()) {
+                operation.current = false;
+                setBusy(false);
+            }
         }
     };
 
@@ -120,9 +132,15 @@ export const ImportAudioPanel: React.FC<{
         </div>
     );
 
-    const renderNeteaseActions = ({ song }: NeteaseSearchRenderProps) => (
+    const renderNeteaseActions = ({ song, isCurrent }: NeteaseSearchRenderProps) => (
         <>
-            <button type="button" disabled={busy || disabled} onClick={() => void loadNeteaseAudio(song)}>
+            <button
+                type="button"
+                disabled={busy || disabled}
+                onClick={() => {
+                    if (isCurrent()) void loadNeteaseAudio(song);
+                }}
+            >
                 {hasAudio ? u.replaceAudio : u.importAudio}
             </button>
             <button type="button" onClick={() => window.open(song.song_url, "_blank", "noopener,noreferrer")}>
@@ -134,6 +152,8 @@ export const ImportAudioPanel: React.FC<{
     const renderNetease = () => (
         <div className="local-file-import">
             <NeteaseSearch
+                panelSessionId={panelSessionId}
+                workspaceId={workspaceId}
                 defaultQuery=""
                 meta={{ track: meta.track, artist: meta.artist, album: meta.album }}
                 onMessage={setMessage}

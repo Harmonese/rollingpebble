@@ -1,13 +1,14 @@
-import { convertTimeToTag } from "../../domain/lyrics/lyricsDocument.js";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { convertTimeToTag } from "../../domain/lyrics/lyricsDocument.js";
+import { useAudio } from "../../hooks/useAudio.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
 import {
     AudioActionType,
     type AudioState,
     audioStatePubSub,
     currentTimePubSub,
 } from "../../shared/audioPlaybackEvents.js";
-import { useAudio } from "../../hooks/useAudio.js";
-import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { PLAYBACK_LOG_LIMIT, playbackRateFromLog, playbackRateToLog } from "../../shared/playbackRate.js";
 import { Forward5sSVG, PauseSVG, PlaySVG, Replay5sSVG } from "../../ui/icons.js";
 import { Waveform } from "./Waveform.js";
 
@@ -40,7 +41,6 @@ const Slider: React.FC<ISliderProps> = ({ min, max, step, value, onInput, classN
         </div>
     );
 };
-
 
 const supportsWaveformPreview = (src: string): boolean => {
     if (src.startsWith("blob:")) return true;
@@ -170,17 +170,12 @@ const RateSlider: React.FC<{ lang: Language }> = ({ lang }) => {
         });
     }, []);
 
-    // playbackRate: [1/e, e]
-    // playbackRateSliderValue: [-1, 1]
-    // playbackRateSliderValue === ln(playbackRate)
-    // playbackRate === exp(playbackRateSliderValue)
-
     const playbackRateSliderValue = useMemo(() => {
-        return Math.log(playbackRate);
+        return playbackRateToLog(playbackRate);
     }, [playbackRate]);
 
     const onPlaybackRateChange = useCallback((ev: React.ChangeEvent<HTMLInputElement>) => {
-        const value = Math.exp(Number.parseFloat(ev.target.value));
+        const value = playbackRateFromLog(Number.parseFloat(ev.target.value));
         setPlaybackRate(value);
         audio.playbackRate = value;
     }, []);
@@ -198,8 +193,8 @@ const RateSlider: React.FC<{ lang: Language }> = ({ lang }) => {
 
             <Slider
                 className="playbackrate"
-                min={-1}
-                max={1}
+                min={-PLAYBACK_LOG_LIMIT}
+                max={PLAYBACK_LOG_LIMIT}
                 step="any"
                 value={playbackRateSliderValue}
                 onInput={onPlaybackRateChange}

@@ -1,4 +1,4 @@
-import { useContext, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { appContext, AppContextBits } from "../../shared/appContext.js";
 import { ButtonGroup, FormGrid, Message, MutedText, Panel, Tabs } from "../../ui/index.js";
 
@@ -12,6 +12,7 @@ import { toastPubSub } from "../../ui/Toast.js";
 import { NeteaseSearch } from "../shared/NeteaseSearch.js";
 import type { NeteaseSearchRenderProps } from "../shared/NeteaseSearch.js";
 import { useProjectMetadataSeed } from "../shared/useProjectMetadataSeed.js";
+import { useRequestScope } from "../shared/useRequestScope.js";
 
 type LibraryKind = "lrclib" | "local" | "netease";
 
@@ -27,14 +28,20 @@ const previewText = (record: LyricsRecord, u: Language["ui"]) => {
 };
 
 export const LrclibPanel: React.FC<{
+    panelSessionId: string;
+    workspaceId: string;
     project: ProjectModel | null;
     editorMeta: MetaModel;
     onImportText: (text: string, origin?: { source: string; lrclib_id: number | null }) => void;
-}> = ({ project, editorMeta, onImportText }) => {
+}> = ({ project, editorMeta, onImportText, panelSessionId, workspaceId }) => {
     const [library, setLibrary] = useState<LibraryKind>("lrclib");
-    const [query, setQuery] = useState("");
-    const { meta, updateMeta } = useProjectMetadataSeed({ project, fallbackMeta: editorMeta, updateQuery: setQuery });
+    const { meta, updateMeta, query, updateQuery } = useProjectMetadataSeed({
+        project,
+        fallbackMeta: editorMeta,
+        panelSessionId,
+    });
     const [lrclibId, setLrclibId] = useState("");
+    const [resultIdentity, setResultIdentity] = useState("");
     const [results, setResults] = useState<LyricsRecord[]>([]);
     const [searched, setSearched] = useState(false);
     const [message, setMessage, , messageFading, messageType, messageKey] = useMessage();
@@ -48,7 +55,21 @@ export const LrclibPanel: React.FC<{
 
     const normalizedId = useMemo(() => Number.parseInt(lrclibId.trim(), 10), [lrclibId]);
 
+    const identity = JSON.stringify([panelSessionId, workspaceId, library, query, meta, lrclibId]);
+    const scope = useRequestScope(identity);
+    const importScope = useRequestScope(JSON.stringify([panelSessionId, workspaceId, library]));
+    const isCurrentResult = scope.snapshot();
+    const isCurrentImport = importScope.snapshot();
+    useEffect(() => {
+        setResults([]);
+        setSearched(false);
+        setBusy(false);
+        setMessage("");
+    }, [identity]);
+
     const doSearch = async () => {
+        const valid = scope.begin();
+        if (!valid()) return;
         setBusy(true);
         setSearched(true);
         setMessage(t.lrclib.searching, "info");
@@ -60,6 +81,8 @@ export const LrclibPanel: React.FC<{
                 album: meta.album,
                 limit: 20,
             });
+            if (!valid()) return;
+            setResultIdentity(identity);
             setResults(response.results);
             setMessage("");
             toastPubSub.pub({
@@ -67,46 +90,55 @@ export const LrclibPanel: React.FC<{
                 text: t.lrclib.results.replace("{n}", String(response.results.length)),
             });
         } catch (error) {
-            setMessage(backendMessageText(error, lang.backendMessages), "error");
+            if (valid()) setMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
-            setBusy(false);
+            if (valid()) setBusy(false);
         }
     };
 
     const doGet = async () => {
+        const valid = scope.begin();
+        if (!valid()) return;
         setBusy(true);
         setSearched(true);
         setMessage(t.lrclib.exactLookup, "info");
         try {
             const response = await lrclibGet(meta);
+            if (!valid()) return;
+            setResultIdentity(identity);
             setResults(response.record ? [response.record] : []);
             setMessage("");
             toastPubSub.pub({ type: "success", text: t.lrclib.results.replace("{n}", response.record ? "1" : "0") });
         } catch (error) {
-            setMessage(backendMessageText(error, lang.backendMessages), "error");
+            if (valid()) setMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
-            setBusy(false);
+            if (valid()) setBusy(false);
         }
     };
 
     const doGetById = async () => {
         if (!Number.isFinite(normalizedId)) return;
+        const valid = scope.begin();
+        if (!valid()) return;
         setBusy(true);
         setSearched(true);
         setMessage(t.lrclib.fetching.replace("{id}", String(normalizedId)), "info");
         try {
             const record = await lrclibGetById(normalizedId);
+            if (!valid()) return;
+            setResultIdentity(identity);
             setResults(record ? [record] : []);
             setMessage("");
             toastPubSub.pub({ type: "success", text: t.lrclib.results.replace("{n}", record ? "1" : "0") });
         } catch (error) {
-            setMessage(backendMessageText(error, lang.backendMessages), "error");
+            if (valid()) setMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
-            setBusy(false);
+            if (valid()) setBusy(false);
         }
     };
 
     const importRecord = async (record: LyricsRecord, mode: "plain" | "synced") => {
+        if (!isCurrentResult()) return;
         try {
             const syncedLyrics = mode === "plain" ? "" : record.synced_lyrics.trim();
             const plainLyrics = mode === "synced" ? "" : record.plain_lyrics;
@@ -125,20 +157,24 @@ export const LrclibPanel: React.FC<{
     const onLocalFile = async (ev: React.ChangeEvent<HTMLInputElement>) => {
         const file = ev.target.files?.[0];
         if (!file) return;
+        const valid = importScope.begin();
+        if (!valid()) return;
         setLocalFileName(file.name);
         setMessage("");
         try {
             const text = await file.text();
+            if (!valid()) return;
             setLocalText(text);
             toastPubSub.pub({ type: "success", text: t.lrclib.loaded.replace("{name}", file.name) });
         } catch (error) {
-            setMessage(backendMessageText(error, lang.backendMessages), "error");
+            if (valid()) setMessage(backendMessageText(error, lang.backendMessages), "error");
         } finally {
             ev.target.value = "";
         }
     };
 
     const importLocalText = async () => {
+        if (!isCurrentImport()) return;
         const raw = localText.trim();
         if (!raw) return;
         try {
@@ -189,7 +225,7 @@ export const LrclibPanel: React.FC<{
                 <input
                     placeholder={u.searchPlaceholder}
                     value={query}
-                    onChange={(ev) => setQuery(ev.target.value)}
+                    onChange={(ev) => updateQuery(ev.target.value)}
                     onKeyDown={searchOnEnter}
                 />
                 <input
@@ -213,7 +249,7 @@ export const LrclibPanel: React.FC<{
             </ButtonGroup>
             <div className="studio-results">
                 {searched && results.length === 0 && !busy && <MutedText>{u.noResultsFound}</MutedText>}
-                {results.map((record, index) => (
+                {(resultIdentity === identity ? results : []).map((record, index) => (
                     <article key={`${record.id || index}-${record.label}`} className="studio-result">
                         <b>{record.label || `${record.artist_name} - ${record.track_name}`}</b>
                         <small>
@@ -282,16 +318,20 @@ export const LrclibPanel: React.FC<{
         </div>
     );
 
-    const renderNeteaseActions = ({ song, busy: _b }: NeteaseSearchRenderProps) => (
+    const renderNeteaseActions = ({ song, busy: _b, isCurrent }: NeteaseSearchRenderProps) => (
         <>
             <button
                 type="button"
                 disabled={_b}
                 onClick={async () => {
+                    if (!isCurrent()) return;
+                    const valid = importScope.begin();
+                    if (!valid()) return;
                     try {
                         setBusy(true);
                         setMessage(t.netease.fetchingLyrics, "info");
                         const result = await neteaseLyrics(song.id);
+                        if (!valid() || !isCurrent()) return;
                         const lrc = result.lyric || result.tlyric;
                         if (lrc) {
                             onImportText(lrc);
@@ -304,9 +344,11 @@ export const LrclibPanel: React.FC<{
                             setMessage(t.netease.noLyrics, "warning");
                         }
                     } catch (error) {
-                        setMessage(backendMessageText(error, lang.backendMessages), "error");
+                        if (valid() && isCurrent()) {
+                            setMessage(backendMessageText(error, lang.backendMessages), "error");
+                        }
                     } finally {
-                        setBusy(false);
+                        if (valid()) setBusy(false);
                     }
                 }}
             >
@@ -338,11 +380,13 @@ export const LrclibPanel: React.FC<{
             {library === "lrclib" && renderLrclib()}
             {library === "netease" && (
                 <NeteaseSearch
+                    panelSessionId={panelSessionId}
+                    workspaceId={workspaceId}
                     defaultQuery=""
                     meta={{
-                        track: editorMeta.track || project?.metadata.track,
-                        artist: editorMeta.artist || project?.metadata.artist,
-                        album: editorMeta.album || project?.metadata.album,
+                        track: editorMeta.track,
+                        artist: editorMeta.artist,
+                        album: editorMeta.album,
                     }}
                     onMessage={setMessage}
                     renderResultActions={renderNeteaseActions}

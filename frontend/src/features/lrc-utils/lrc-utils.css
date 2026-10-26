@@ -47,7 +47,7 @@
     padding: 8px 10px;
     background: var(--studio-surface-2);
     color: var(--studio-text);
-    border: 1px solid #3b444d;
+    border: 1px solid var(--studio-border);
     font-size: 0.82rem;
     line-height: 1.4;
     outline: none;
@@ -65,7 +65,7 @@
     box-sizing: border-box;
     padding: 4px 6px;
     border-radius: var(--radius-sm);
-    border: 1px solid #3b444d;
+    border: 1px solid var(--studio-border);
     background: var(--studio-surface-2);
     color: var(--studio-text);
     font-size: 0.84rem;
@@ -87,29 +87,11 @@
     box-shadow: 0 0 0 3px rgba(var(--theme-rgb), 0.1);
 }
 
-.about-modal .lrc-utils-controls button {
-    appearance: none;
-    -webkit-appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+.lrc-utils-list .ui-button {
     min-height: 30px;
-    padding: 0 12px;
-    border: 1px solid rgba(var(--theme-rgb), 0.3);
-    border-radius: var(--radius-pill);
-    background: rgba(var(--theme-rgb), 0.08);
-    color: var(--theme-color);
-    font-size: 0.8rem;
-    font-weight: 650;
+    padding: 0 10px;
+    font-size: 0.78rem;
     line-height: 1;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 160ms ease, border-color 160ms ease;
-}
-
-.about-modal .lrc-utils-controls button:hover:not(:disabled) {
-    background: rgba(var(--theme-rgb), 0.16);
-    border-color: rgba(var(--theme-rgb), 0.55);
 }
 
 .transform-expr {

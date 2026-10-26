@@ -42,11 +42,17 @@ node frontend/scripts/test-translation-task.mjs
 node frontend/scripts/test-workspace-audio.mjs
 node frontend/scripts/test-desktop-exit.mjs
 node frontend/scripts/test-workspace-metadata.mjs
+node frontend/scripts/test-project-panels.mjs
+node frontend/scripts/test-workspace-panel-keys.mjs
 node frontend/scripts/test-timing-preview.mjs
 node frontend/scripts/test-preview-presentation.mjs
 node frontend/scripts/test-review-readonly.mjs
 node frontend/scripts/test-runtime-preparation.mjs
+node frontend/scripts/test-batch-panel.mjs
+node frontend/scripts/test-playback-rate.mjs
 node frontend/scripts/test-startup.mjs
+node frontend/scripts/test-confirm-dialog.mjs
+node frontend/scripts/test-ui-consistency.mjs
 node frontend/scripts/test-model-setup.mjs
 node frontend/scripts/test-engine-models.mjs
 node frontend/scripts/test-timing-languages.mjs

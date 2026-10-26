@@ -38,11 +38,15 @@
     min-height: 36px;
     flex: 0 0 auto;
 }
-.translation-editor .translation-language input {
-    width: 100px;
-    padding: 4px 6px;
-    border: 1px solid var(--studio-border);
-    border-radius: var(--radius-sm);
+.translation-language .ui-input {
+    width: 100%;
+    min-width: 0;
+    height: 36px;
+}
+
+.translation-editor > .ui-task-status {
+    flex: 0 0 auto;
+    margin-bottom: 8px;
 }
 .translation-columns {
     display: grid;

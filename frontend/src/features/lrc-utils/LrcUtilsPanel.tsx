@@ -1,10 +1,11 @@
 import React, { useCallback, useContext, useMemo, useState } from "react";
-import { appContext, AppContextBits } from "../../shared/appContext.js";
-import { Modal } from "../../ui/Modal.js";
-import { Message } from "../../ui/Message.js";
-import { ActionRow } from "../../ui/ActionRow.js";
-import { toastPubSub } from "../../ui/Toast.js";
 import { useMessage } from "../../hooks/useMessage.js";
+import { appContext, AppContextBits } from "../../shared/appContext.js";
+import { ActionRow } from "../../ui/ActionRow.js";
+import { Button, Input } from "../../ui/index.js";
+import { Message } from "../../ui/Message.js";
+import { Modal } from "../../ui/Modal.js";
+import { toastPubSub } from "../../ui/Toast.js";
 
 function shiftTimestamps(text: string, offsetMs: number): { text: string; count: number } {
     if (!offsetMs) return { text, count: 0 };
@@ -187,7 +188,7 @@ export const LrcUtilsPanel: React.FC<{
                     <p className="about-kicker">{u.tools}</p>
                     <h2>{u.lrcUtilities}</h2>
                 </div>
-                <button type="button" onClick={onClose} autoFocus>{u.close}</button>
+                <Button type="button" onClick={onClose} autoFocus>{u.close}</Button>
             </div>
 
             <Message message={message} type={messageType} fading={messageFading} messageKey={messageKey} />
@@ -200,7 +201,7 @@ export const LrcUtilsPanel: React.FC<{
                         className="lrc-utils-action-row"
                         key={item.label}
                     >
-                        <button type="button" onClick={() => apply(item.label, item.action)}>{u.apply}</button>
+                        <Button type="button" onClick={() => apply(item.label, item.action)}>{u.apply}</Button>
                     </ActionRow>
                 ))}
 
@@ -210,13 +211,13 @@ export const LrcUtilsPanel: React.FC<{
                         <small>{tu.timeOffsetDesc}</small>
                     </div>
                     <div className="lrc-utils-controls">
-                        <input
+                        <Input
                             type="number"
                             value={offsetMs}
                             onChange={(ev) => setOffsetMs(ev.target.value)}
                             placeholder="0"
                         />
-                        <button
+                        <Button
                             type="button"
                             onClick={() =>
                                 apply(
@@ -225,7 +226,7 @@ export const LrcUtilsPanel: React.FC<{
                                 )}
                         >
                             {u.apply}
-                        </button>
+                        </Button>
                     </div>
                 </div>
 
@@ -237,7 +238,7 @@ export const LrcUtilsPanel: React.FC<{
                     <div className="lrc-utils-controls">
                         <span className="transform-expr">
                             f ={" "}
-                            <input
+                            <Input
                                 type="number"
                                 value={transformA}
                                 onChange={(ev) => setTransformA(ev.target.value)}
@@ -245,14 +246,14 @@ export const LrcUtilsPanel: React.FC<{
                                 step="any"
                             />
                             × t +{" "}
-                            <input
+                            <Input
                                 type="number"
                                 value={transformB}
                                 onChange={(ev) => setTransformB(ev.target.value)}
                                 placeholder="0"
                             />
                         </span>
-                        <button
+                        <Button
                             type="button"
                             onClick={() =>
                                 apply(
@@ -261,7 +262,7 @@ export const LrcUtilsPanel: React.FC<{
                                 )}
                         >
                             {u.apply}
-                        </button>
+                        </Button>
                     </div>
                 </div>
 
@@ -272,7 +273,7 @@ export const LrcUtilsPanel: React.FC<{
                             <small>{tu.overwriteLyricsDesc}</small>
                         </div>
                         <div className="lrc-utils-controls">
-                            <button type="button" onClick={handleOverwrite}>{u.apply}</button>
+                            <Button type="button" onClick={handleOverwrite}>{u.apply}</Button>
                         </div>
                     </div>
                     <div className="lrc-utils-text-controls">

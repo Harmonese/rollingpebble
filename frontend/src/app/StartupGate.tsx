@@ -23,6 +23,8 @@ import { appContext } from "../shared/appContext.js";
 import { formatBytes } from "../shared/format.js";
 import { ActionRow, Button, CheckRow, DialogActionRow, MessageText, Modal, StatusPill } from "../ui/index.js";
 
+import { StartupMark } from "./branding/Illustrations.js";
+
 type Phase = "environment" | "environment_failed" | "checking" | "ask" | "configure" | "issues" | "working" | "failed";
 export function StartupGate({ children, onSettings }: { children: React.ReactNode; onSettings?: () => void }) {
     const { lang, prefState } = useContext(appContext);
@@ -250,7 +252,7 @@ export function StartupGate({ children, onSettings }: { children: React.ReactNod
     return (
         <main className="page-loading startup-gate" aria-busy={active}>
             <div className="startup-content studio-splash-start">
-                <img className="studio-splash-avatar" src="./img/rollingpebble-avatar.webp" alt="" />
+                <StartupMark active={active} />
                 <h1>Rolling Pebble</h1>
                 {active && (
                     <>

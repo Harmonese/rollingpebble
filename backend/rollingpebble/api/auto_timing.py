@@ -1,5 +1,3 @@
-import shutil
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
@@ -24,14 +22,7 @@ def create_auto_timing_router(services):
 
     @router.post("/runs/{run_id}/retry")
     def retry_run(run_id: str, request: RunRequest):
-        def retry():
-            old = service.store.get(run_id)
-            if old["status"] in ACTIVE or old["kind"] != "run" or old["project_id"] != request.project_id:
-                raise ValueError("Run cannot be retried in this workspace")
-            request.options = old["options"]
-            request.options = RunRequest(project_id=request.project_id, options=request.options).options
-            return service.start(request, language=old["language"])
-        return service_call(retry)
+        return service_call(lambda: service.start(request, retry_of=run_id))
 
     @router.get("/runs")
     def history(project_id: str | None = None):
@@ -155,26 +146,10 @@ def create_auto_timing_router(services):
 
     @router.delete("/runs/{run_id}")
     def delete_result(run_id: str):
-        def delete():
-            if not services.jobs.resource_lock.acquire(blocking=False):
-                raise ValueError("Auto Timing resources are busy")
-            try:
-                record = service.store.get(run_id)
-                if record["kind"] != "run":
-                    raise ValueError("Delete individual results")
-                if record["status"] in ACTIVE:
-                    raise ValueError("Run is still active")
-                if record.get("batch_id"):
-                    parent = service.store.get(record["batch_id"])
-                    remaining = [r for r in parent["children"] if r != run_id]
-                    if remaining:
-                        service.store.update(parent["id"], children=remaining)
-                    else:
-                        shutil.rmtree(service.store.folder(parent["id"]))
-                shutil.rmtree(service.store.folder(run_id))
-                return {"deleted": True}
-            finally:
-                services.jobs.resource_lock.release()
-        return service_call(delete)
+        return service_call(lambda: service.delete_results(run_id, kind="run"))
+
+    @router.delete("/batches/{batch_id}")
+    def delete_batch(batch_id: str):
+        return service_call(lambda: service.delete_results(batch_id, kind="batch"))
 
     return router

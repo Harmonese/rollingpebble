@@ -94,7 +94,16 @@ pnpm desktop:build
 
 The macOS arm64 build hook uses `desktop/build.mjs` to select a working Python 3.12+ with SSL (override with `ROLLINGPEBBLE_BUILD_PYTHON`).
 The script downloads the standalone Python runtime and creates
-`build/desktop-venv` from that interpreter for PyInstaller and app dependencies.
+`build/desktop-build-venv` from that interpreter for PyInstaller and app dependencies.
+The complete build interpreter is cached under `build/python-build-runtime`.
+After building the sidecar, a separate distribution is staged into
+`desktop/python-runtime`. Only the real `bin/python3.12` is distributed: verified
+`python`/`python3` aliases are omitted so Tauri resource copying cannot expand them
+into three full executables. Bytecode caches with corresponding Python source are
+excluded; sourceless bytecode, pip/ensurepip, venv, SSL, Tcl/Tk, engine dependencies
+and license/source materials remain. Validation uses `-B` to avoid recreating caches
+in the staged distribution. Runtime execution may create new caches in user app data;
+existing user installations are not pruned.
 The developer's Homebrew/system Python is not used as the sidecar interpreter.
 The sidecar is rebuilt from the current backend and `frontend/dist` on every
 release build; an old `desktop/bin` sidecar is never reused. The build audits
@@ -150,3 +159,10 @@ Before publishing desktop installers, test:
 The standalone FFmpeg build disables GPL/nonfree components, optional external libraries and network protocols. Its LGPL license, complete corresponding source and build configuration are included under `engine/bin`; preserve these in distributions. It decodes local audio and emits PCM/FLAC for the engine. See [release gates](RELEASE.md) and [validation record](AUTO_TIMING_VALIDATION.md).
 
 `desktop/prepare_espeak.py` builds pinned eSpeak NG 1.52.0 and pronunciation data for mul. The engine bundle includes its GPL and data notices, source archive and build flags separately from FFmpeg. The build increases `N_PATH_HOME` to 4096 to support long application/resource paths. It has no Homebrew dynamic-library dependency; packaging validation must exercise phonemization after relocating the components with PATH restricted to system tools.
+
+For non-GUI acceptance of the lean runtime, run
+`build/python-build-runtime/bin/python3.12 -B desktop/validate_runtime_distribution.py`.
+It uses temporary home/cache/venv directories, checks relocated SSL and pip, installs
+the hashed wheelhouse offline including Vocals, and checks English/Mandarin/multilingual
+components and relocated pronunciation without downloading models or running inference.
+The Tauri/Rust configuration and symbol settings are unchanged by this optimization.
