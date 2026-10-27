@@ -6,8 +6,8 @@ The desktop shell does not replace the backend. It starts a local Rolling Pebble
 
 ## Supported targets
 
-The shared build entry supports **macOS Apple Silicon** and **Linux x86_64**.
-Linux is built and validated on Ubuntu 24.04; `.deb` and AppImage outputs do not establish support for every Linux distribution or older glibc baseline. Windows and other architectures still need their own resource recipe and native validation.
+The shared build entry supports **macOS Apple Silicon**, **Linux x86_64** and **Windows x86_64**.
+Linux is built and validated on Ubuntu 24.04; `.deb` and AppImage outputs do not establish support for every Linux distribution or older glibc baseline. Windows targets Windows 10 version 1903+ / Windows 11 x64 with WebView2. Other architectures require separate resource recipes and native validation.
 
 `desktop/platforms.json` selects the checksum-pinned standalone Python and Torch variant. Each platform has its own engine lock; shared scripts build the backend and native components. Build on the target OS/architecture rather than cross-compiling the Python/audio stack.
 
@@ -42,7 +42,7 @@ Release build:
 - Python environment with Rolling Pebble installed
 - Tauri system dependencies for the target platform
 
-The release hook selects macOS arm64 or Linux x86_64 from the host. Windows and Intel macOS packaging are not provided yet.
+The release hook selects macOS arm64, Linux x86_64 or Windows x86_64 from the host. Intel macOS and other architectures are not configured.
 
 ## Development Run
 
@@ -159,7 +159,7 @@ Before publishing desktop installers, test:
 - model download paths
 - macOS signing and notarization
 
-The standalone FFmpeg build disables GPL/nonfree components, optional external libraries and network protocols. Its LGPL license, complete corresponding source and build configuration are included under `engine/bin`; preserve these in distributions. It decodes local audio and emits PCM/FLAC for the engine. See [release gates](RELEASE.md) and [validation record](AUTO_TIMING_VALIDATION.md).
+The standalone FFmpeg build disables GPL/nonfree components, optional external libraries and network protocols. Its LGPL license, complete corresponding source and build configuration are included under `engine/bin`; preserve these in distributions. It decodes local audio and emits PCM/FLAC for the engine. See [release gates](RELEASE.md).
 
 `desktop/prepare_espeak.py` builds pinned eSpeak NG 1.52.0 and pronunciation data for mul. The engine bundle includes its GPL and data notices, source archive and build flags separately from FFmpeg. The build increases `N_PATH_HOME` to 4096 to support long application/resource paths. It has no Homebrew dynamic-library dependency; packaging validation must exercise phonemization after relocating the components with PATH restricted to system tools.
 
@@ -172,7 +172,7 @@ The Tauri/Rust configuration and symbol settings are unchanged by this optimizat
 
 ## Linux x86_64
 
-See [Linux setup and validation](LINUX_X86_64.md) for the Ubuntu dependency list and this checkout's results.
+See [Linux setup and validation](LINUX_X86_64.md) for the Ubuntu dependency list and validation commands.
 The same `pnpm desktop:build` command selects Linux resources, builds the PyInstaller sidecar with standalone Python 3.12.15, and packages the Tauri app.
 
 The Linux engine lock uses Torch/Torchaudio 2.8.0+cpu. FFmpeg and eSpeak are built from the same checksum-pinned sources as macOS using Linux compiler flags. ELF architecture and developer library paths are audited in place of Mach-O deployment targets. Model weights are not included and require an explicit download in the app.

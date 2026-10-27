@@ -19,6 +19,12 @@ dependencies = [
   "pylrclib-cli>=0.4.6",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Harmonese/rollingpebble"
+Repository = "https://github.com/Harmonese/rollingpebble"
+Issues = "https://github.com/Harmonese/rollingpebble/issues"
+Changelog = "https://github.com/Harmonese/rollingpebble/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
 roller = []
 full = []

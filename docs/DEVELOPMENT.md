@@ -64,7 +64,7 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 The Chinese i18n gate is required. Other locales still contain historical English fallback text. Run dprint on changed frontend files; avoid unrelated whole-repository formatting churn.
 
-Auto Timing uses the separate Protocol v2 engine described in [migration](AUTO_TIMING_V2.md). Source installations need the prepared platform wheelhouse in `desktop/engine`; the desktop bundles it. For automatic preparation from source, set
+Auto Timing uses the separate Protocol v2 engine described in [Architecture](ARCHITECTURE.md#protocol-v2). Source installations need the prepared platform wheelhouse in `desktop/engine`; the desktop bundles it. For automatic preparation from source, set
 `ROLLINGPEBBLE_APP_RESOURCES` to the absolute `desktop` directory after preparing
 both its engine resources and standalone Python. There is no system-Python fallback.
 For native multilingual component checks without model downloads or inference, run `python desktop/validate_pronunciation.py --python <managed-venv-python> --components <app-resources>/engine/espeak`; it checks long, relocated Unicode paths with no Homebrew PATH.

@@ -8,12 +8,12 @@ commit/tag alone does not publish a GitHub Release or upload the DMG.
 
 ## Current Preparation
 
-Version 0.9.1 adds shared macOS arm64/Linux x86_64 desktop packaging, a checksum-pinned Linux standalone Python, offline CPU engine resources and native package smoke checks. It also includes the workspace, recovery and UI refinements recorded in CHANGELOG. Build fresh 0.9.1 artifacts for release; earlier local 0.9.0 package validation remains historical evidence. Commit/tag pushes do not publish packages.
+Version 0.9.1 adds shared macOS arm64/Linux x86_64/Windows x86_64 desktop packaging, a checksum-pinned Linux standalone Python, offline CPU engine resources and native package smoke checks. It also includes the workspace, recovery and UI refinements recorded in CHANGELOG. Build fresh 0.9.1 artifacts for release; checks against older installers do not validate the new release. Commit/tag pushes do not publish packages.
 
 ## Version and Checks
 
-Keep `pyproject.toml`, `src-tauri/Cargo.toml`, `src-tauri/Cargo.lock`, and
-`src-tauri/tauri.conf.json` in sync. Update `CHANGELOG.md` and the user setup notes.
+Keep `pyproject.toml`, root and frontend `package.json`, `src-tauri/Cargo.toml`,
+`src-tauri/Cargo.lock`, and `src-tauri/tauri.conf.json` in sync. Update `CHANGELOG.md` and the user setup notes.
 
 ```bash
 pnpm -C frontend check:i18n:zh
@@ -90,9 +90,13 @@ git tag -a v0.9.1 -m "Release v0.9.1"
 git push --atomic origin main v0.9.1
 ```
 
-Manually publish the GitHub Release for `v0.9.1`, attach
-`Rolling Pebble_0.9.1_aarch64.dmg` and its SHA-256 checksum, and use the v0.9.1
-changelog as release notes after maintainer acceptance. Mention that Python, FFmpeg and binary dependencies are bundled, model weights are prepared separately in Settings, and Vocals needs Demucs. Then verify the PyPI
+After maintainer acceptance, manually publish the GitHub Release for `v0.9.1`
+using the v0.9.1 changelog as release notes. Attach freshly built installers from
+each platform's `dist/desktop/<platform>` directory: macOS arm64 DMG, Linux x86_64
+`.deb` and AppImage, and Windows x64 NSIS `setup.exe`. Upload installation notes
+under platform-specific names and combine the per-platform `SHA256SUMS` into one
+release-level file (preserving the exact installer filenames) to avoid asset-name
+collisions. Check every hash against the uploaded installer. Mention that Python, FFmpeg and binary dependencies are bundled, model weights are prepared separately in Settings, and Vocals needs Demucs. Then verify the PyPI
 publishing workflow completes. Do not publish a Release merely to test CI.
 
 ## Remaining Public Distribution Gates

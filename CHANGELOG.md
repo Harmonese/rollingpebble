@@ -6,41 +6,30 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-27
+
 ### Added
 
 - Windows x86_64 per-user NSIS packaging with standalone Python 3.12.15, a separate offline CPU engine lock, FFmpeg/eSpeak source builds, PE architecture audits and an installed-app smoke check.
 - Windows PowerShell environment setup and process-local UTF-8 runtime manifests for Unicode pronunciation resource paths.
-
-### Fixed
-
-- Normalized Windows verbatim resource paths before passing eSpeak library/data paths to native C APIs, restoring multilingual pronunciation in installed Tauri apps.
-
-- Windows bundled-interpreter discovery and copying, backend process-tree cleanup on desktop exit, and source archive extraction without symlink privileges.
-- Retained Windows user-profile and AppData paths in isolated worker environments so packaged first-run setup can determine the home directory.
-- Rebased legacy artifact paths using native path separators and preserved supplied lyric newline bytes on Windows.
-
-## [0.9.1] - 2026-10-26
-
-### Added
-
 - Linux x86_64 `.deb` and AppImage packaging on Ubuntu 24.04, including standalone Python 3.12.15, offline CPU engine wheels, FFmpeg and eSpeak components.
-- Shared desktop build entry and platform recipes for macOS arm64 and Linux x86_64, with installer exports and SHA-256 checksums under `dist/desktop/<platform>`.
+- Shared desktop build entry and platform recipes for macOS arm64, Linux x86_64 and Windows x86_64, with installer exports and SHA-256 checksums under `dist/desktop/<platform>`.
 - Linux ELF auditing and isolated native package validation covering first-run offline preparation, packaged WebUI assets and backend cleanup on window close.
 
 ### Fixed
 
+- Normalized Windows verbatim resource paths before passing eSpeak library/data paths to native C APIs, restoring multilingual pronunciation in installed Tauri apps.
+- Windows bundled-interpreter discovery and copying, backend process-tree cleanup on desktop exit, and source archive extraction without symlink privileges.
+- Retained Windows user-profile and AppData paths in isolated worker environments so packaged first-run setup can determine the home directory.
+- Rebased legacy artifact paths using native path separators and preserved supplied lyric newline bytes on Windows.
 - Namespaced workspace panel keys so repeated new/open project transitions cannot leave duplicate Import Audio panels behind.
-
 - Scoped import/search/publishing panel state to the editing session; automatic search fields follow new metadata while manual edits and explicit empty fields are retained within the same project. Late responses cannot populate another workspace, and publication previews expire when their inputs change.
 - Unified Auto Timing Start/Retry eligibility across button labels and submission, retaining active-task monitoring across workspace changes. Backend retry rejects changed audio, lyrics or options before reusing a historical resolved language.
-
 - Unified environment preparation, translation and connection-test feedback with shared task cards, messages and recoverable failure actions; translation toolbars retain their layout during work.
 - Standardized LRC tool and settings-reset buttons, protected dangerous actions from settings hover overrides, and aligned custom translation-language inputs and timing diagnostics with shared controls.
 - Made native control color schemes, checkbox glyphs, tool borders and shared muted surfaces follow light/dark and custom accent themes.
-
 - Removed the ambiguous Cancel action from unfinished-workspace recovery. Restore and Discard Changes explicitly initialize the workspace; recovery errors and interrupted decisions show usable recovery actions.
 - Replaced the startup background illustration with the packaged application icon, unified the HTML and React loading screens, and added layered orbit, halo and waveform animation with reduced-motion support.
-
 - Added New Batch panel reset, individual batch-result deletion and confirmed whole-batch result cleanup while retaining source projects and applied lyrics. Deleting the final child now clears its batch from history and the current panel; project-list changes remove stale selections.
 - Unified Auto Timing environment checks, preparation and submission with the execution progress-card presentation, including failure recovery and batch completion counts.
 - Changed audio playback limits to 1/3–3× with logarithmic slider and keyboard controls sharing exact endpoints.
@@ -48,6 +37,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 ### Changed
 
 - Separated the complete desktop build Python from its staged distribution; omitted duplicate interpreter aliases and source-backed bytecode caches while retaining offline installation components and third-party notices.
+
+### Distribution Notes
+
+- Desktop packages target macOS 14+ Apple Silicon, Ubuntu 24.04 x86_64 and Windows 10 version 1903+ / Windows 11 x64. Other OS versions and architectures require separate validation.
+- macOS builds are ad-hoc signed and not Apple-notarized; Windows installers are unsigned. Windows requires WebView2, which the installer can download when missing.
+- Desktop packages include offline runtime components; model weights remain separate explicit downloads. Python/PyPI packages include the backend and WebUI, but not the desktop engine resources.
 
 ## [0.9.0] - 2026-10-20
 

@@ -8,9 +8,9 @@ Start from the [project README](../README.md).
 | [Storage](STORAGE.md) | Single data root, explicit cleanup and whole-directory migration |
 | [Development](DEVELOPMENT.md) | Source setup, commands, checks, and repository layout |
 | [Architecture](ARCHITECTURE.md) | Frontend workspace, backend services, jobs, and desktop composition |
-| [Auto Timing v2 migration](AUTO_TIMING_V2.md) | Engine, model, settings and result workflow changes |
-| [Auto Timing validation](AUTO_TIMING_VALIDATION.md) | Automated/native evidence and remaining acceptance gates |
 | [Desktop packaging](DESKTOP.md) | Supported desktop targets, resource preparation, and native validation |
+| [Linux packaging](LINUX_X86_64.md) | Ubuntu 24.04 x86_64 build prerequisites and validation |
+| [Windows packaging](WINDOWS_X86_64.md) | Windows x64 build prerequisites and validation |
 | [Release checklist](RELEASE.md) | Versioning, acceptance checks, desktop artifacts, and PyPI publication |
 | [Changelog](../CHANGELOG.md) | Historical changes, including unreleased work |
 

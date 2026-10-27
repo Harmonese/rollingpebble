@@ -42,8 +42,13 @@ export async function exportArtifacts(args = []) {
         ? "Ubuntu 24.04 x86_64 is the validated Linux baseline.\nInstall the .deb with: sudo apt install ./<package>.deb\nOr chmod +x the AppImage and run it. If FUSE is unavailable, use --appimage-extract-and-run."
         : platform.startsWith("windows")
         ? "Run the x64 setup.exe to install for the current user. Windows 10 version 1903 or newer / Windows 11 x64 and Microsoft Edge WebView2 are required. The installer can download WebView2 when missing. This local build is unsigned.\nVerify hashes with PowerShell: Get-FileHash *.exe -Algorithm SHA256"
-        : "Open the DMG and copy Rolling Pebble.app into Applications. See docs/DESKTOP.md for supported macOS versions.";
-    await writeFile(join(destination, "README.txt"), `Rolling Pebble ${config.version} — ${platform}\n\n${instructions}\nPython 3.12, platform engine wheels, FFmpeg and eSpeak are bundled.\nModel weights are downloaded separately through the app.\nVerify integrity with: sha256sum -c SHA256SUMS\n`);
+        : "Requires macOS 14 or newer on Apple Silicon. Open the DMG and copy Rolling Pebble.app into Applications. This build is ad-hoc signed and is not Apple-notarized.";
+    const verification = platform.startsWith("windows")
+        ? "Get-FileHash *.exe -Algorithm SHA256 (compare with SHA256SUMS)"
+        : platform.startsWith("macos")
+        ? "shasum -a 256 -c SHA256SUMS"
+        : "sha256sum -c SHA256SUMS";
+    await writeFile(join(destination, "README.txt"), `Rolling Pebble ${config.version} — ${platform}\n\n${instructions}\nPython 3.12, platform engine wheels, FFmpeg and eSpeak are bundled.\nModel weights are downloaded separately through the app.\nVerify integrity with: ${verification}\n`);
     console.log(`Installers and SHA256SUMS: ${resolve(destination)}`);
     return destination;
 }

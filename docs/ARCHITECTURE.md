@@ -267,7 +267,7 @@ old owned data after runtime verification; ordinary reads have no cleanup side e
 resolves target dependencies into a hashed wheelhouse, extracts FFmpeg and
 audits native binaries. `build_resources.py` builds a fresh PyInstaller sidecar
 using standalone Python. No end-user source compilation is permitted.
-See [desktop packaging](DESKTOP.md) and [validation](AUTO_TIMING_VALIDATION.md).
+See [desktop packaging](DESKTOP.md) and [release checks](RELEASE.md).
 
 ## Multilingual models and native components
 

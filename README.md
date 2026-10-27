@@ -9,7 +9,7 @@
 
 Rolling Pebble is a local lyrics workstation for searching, editing, timing, translating, organizing, and publishing LRC lyrics.
 
-It provides a Tauri desktop app for macOS Apple Silicon and Linux x86_64 and a browser interface backed by a local Python server. Your projects, audio, lyrics, runtime environments, and model caches stay on your machine. Auto Timing is powered by `py-roller` in an isolated runtime so large audio dependencies do not pollute the main app environment.
+It provides a Tauri desktop app for macOS Apple Silicon, Linux x86_64 and Windows x64 and a browser interface backed by a local Python server. Your projects, audio, lyrics, runtime environments, and model caches stay on your machine. Auto Timing is powered by `py-roller` in an isolated runtime so large audio dependencies do not pollute the main app environment.
 
 ## What It Does
 
@@ -24,7 +24,7 @@ It provides a Tauri desktop app for macOS Apple Silicon and Linux x86_64 and a b
 - **Publish** prepared lyrics through LRCLIB workflows.
 - **Use multiple languages** through the built-in i18n layer.
 
-Version 0.9.1 adds shared desktop packaging for Linux x86_64 and macOS arm64, with platform-specific resources and checksummed installer exports. Auto Timing supports Mandarin and multilingual alignment through py-roller 0.10.3, with separate CTC downloads and bundled offline pronunciation components. Existing users can keep their English models and add languages in Settings. NetEase lyric results now include an Open button for the song page.
+Version 0.9.1 adds Linux and Windows desktop installers alongside macOS, with platform-specific offline components and SHA-256 checksums. It also fixes project-switching state, Auto Timing Start/Retry behavior and duplicate import panels; adds batch-result cleanup; unifies progress displays; and expands playback speed to 1/3–3×.
 
 ## Typical Workflow
 
@@ -40,7 +40,7 @@ The Project panel shows **Unsaved**, **Saving**, **Saved**, or **Save failed**. 
 
 ### macOS Desktop (Apple Silicon)
 
-Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**. This checkout prepares version **0.9.1**.
+Download an arm64 DMG from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases), open it, and drag **Rolling Pebble.app** into **Applications**.
 
 1. Open the app; the unified startup screen prepares or checks bundled components.
 2. On first use, choose English, Mandarin and/or multilingual models; Whisper large-v3 and Demucs are shared. ModelScope is the default source; official downloads and HTTP(S) proxy settings are also available.
@@ -52,7 +52,36 @@ The app bundles Python 3.12.15, FFmpeg and hashed binary wheels for py-roller 0.
 
 ### Linux Desktop (x86_64)
 
-This source checkout can build `.deb` and AppImage installers on Ubuntu 24.04 using `pnpm desktop:build`. The shared build includes standalone Python, CPU engine wheels, FFmpeg and eSpeak; model downloads remain explicit. Installers and checksums are exported to `dist/desktop/linux-x86_64/`. See [Linux setup](docs/LINUX_X86_64.md) for prerequisites and validation limits. These local artifacts are not automatically published to GitHub Releases.
+Download the `.deb` or `.AppImage` and its `SHA256SUMS` from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases). Ubuntu 24.04 x86_64 is the supported baseline; other distributions and older systems require separate validation.
+
+- **Debian package:** install with `sudo apt install ./<package>.deb` so system dependencies are resolved.
+- **AppImage:** make it executable and run it. If FUSE is unavailable, use `./<package>.AppImage --appimage-extract-and-run`.
+
+### Windows Desktop (x64)
+
+Download the x64 `setup.exe` and its `SHA256SUMS` from [GitHub Releases](https://github.com/Harmonese/rollingpebble/releases). Run the installer to install for the current user; administrator rights are not required for the app installation.
+
+Requires Windows 10 version 1903 or newer, or Windows 11, and Microsoft Edge WebView2. The installer can download WebView2 if it is missing, which requires network access. The installer is unsigned, so Windows may show an unrecognized-app warning. Windows ARM64 is not a supported native target.
+
+All three desktop packages include Python, offline engine dependencies, FFmpeg and eSpeak. Models are downloaded separately in the app. Linux and Windows engine packages use CPU dependencies; CUDA is not included.
+
+### Verify Downloads
+
+Compare the installer's SHA-256 with the accompanying `SHA256SUMS` before installing:
+
+```bash
+# macOS
+shasum -a 256 "<installer>.dmg"
+# Linux
+sha256sum -c SHA256SUMS
+```
+
+```powershell
+# Windows PowerShell
+Get-FileHash '.\<installer>.exe' -Algorithm SHA256
+```
+
+Checksums verify file integrity; they are separate from platform code signing.
 
 ### Command Line
 
@@ -128,7 +157,8 @@ Rolling Pebble contacts external services for LRCLIB lookup/publishing, online i
 
 - [User guide / 使用指南](docs/USER_GUIDE.md): temporary workspaces, saving, timing, shortcuts, export and deletion.
 - [Storage and cleanup](docs/STORAGE.md): storage roots and the exact automatic-deletion behavior.
-- [Development](docs/DEVELOPMENT.md) and [architecture](docs/ARCHITECTURE.md).
-- [Desktop packaging](docs/DESKTOP.md) and [release checklist](docs/RELEASE.md).
-- [Protocol v2 migration](docs/AUTO_TIMING_V2.md) and [validation record](docs/AUTO_TIMING_VALIDATION.md).
 - [Documentation index](docs/README.md) and [changelog](CHANGELOG.md).
+
+For contributors: [development](docs/DEVELOPMENT.md), [architecture](docs/ARCHITECTURE.md), [desktop packaging](docs/DESKTOP.md) and [release checklist](docs/RELEASE.md).
+
+The editor originated from [LRC Maker](https://github.com/magic-akari/lrc-maker); its [MIT copyright notice](frontend/LICENSE) is preserved.
