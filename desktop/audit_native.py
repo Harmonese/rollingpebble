@@ -11,6 +11,21 @@ import tempfile
 
 
 def audit_binary(path: Path, minimum=(14, 0, 0)) -> None:
+    if sys.platform == "win32":
+        import pefile
+
+        try:
+            pe = pefile.PE(str(path), fast_load=True)
+            if pe.FILE_HEADER.Machine != 0x8664:
+                raise RuntimeError(f"Expected Windows x86_64 PE: {path}")
+            pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_IMPORT"]])
+            for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []):
+                if any(char in entry.dll for char in (b"/", b"\\", b":")):
+                    raise RuntimeError(f"Absolute DLL dependency in {path}: {entry.dll!r}")
+            pe.close()
+        except pefile.PEFormatError as exc:
+            raise RuntimeError(f"Expected Windows x86_64 PE: {path}") from exc
+        return
     if sys.platform == "darwin":
         from audit_macos import audit_binary as audit_macos
 
@@ -47,15 +62,18 @@ def audit(sidecar: Path, runtime: Path) -> None:
                 continue
             binary = Path(temporary) / "binary"
             binary.write_bytes(archive.extract(name))
+            if sys.platform == "win32" and binary.read_bytes()[:2] != b"MZ":
+                continue
             audit_binary(binary)
             count += 1
     for path in sorted({p.resolve() for p in runtime.rglob("*") if p.is_file()}):
         with path.open("rb") as stream:
-            if stream.read(4) != b"\x7fELF":
+            magic = stream.read(4)
+            if not (magic[:2] == b"MZ" if sys.platform == "win32" else magic == b"\x7fELF"):
                 continue
         audit_binary(path)
         count += 1
-    print(f"Audited {count} Linux x86_64 ELF binaries")
+    print(f"Audited {count} {'Windows x86_64 PE' if sys.platform == 'win32' else 'Linux x86_64 ELF'} binaries")
 
 
 if __name__ == "__main__":

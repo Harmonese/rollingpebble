@@ -13,6 +13,10 @@ PREFERRED_RUNTIME_PYTHONS = ("python3.12",)
 BUNDLED_RUNTIME_DIR_NAME = "python-runtime"
 
 
+def _runtime_relative_python() -> Path:
+    return Path("python.exe" if sys.platform == "win32" else "bin/python3.12")
+
+
 def target_runtime_python_tag() -> str:
     return f"py{RUNTIME_PYTHON_VERSION[0]}{RUNTIME_PYTHON_VERSION[1]}"
 
@@ -36,13 +40,14 @@ def _bundled_python_candidates() -> list[Path]:
 
     resources_override = os.environ.get("ROLLINGPEBBLE_APP_RESOURCES", "").strip()
     if resources_override:
-        candidates.append(Path(resources_override).expanduser() / BUNDLED_RUNTIME_DIR_NAME / "bin" / "python3.12")
+        candidates.append(Path(resources_override).expanduser() / BUNDLED_RUNTIME_DIR_NAME / _runtime_relative_python())
 
     if getattr(sys, "frozen", False):
         executable_dir = Path(sys.executable).resolve().parent
         # PyInstaller's sidecar is in Contents/Resources/bin; a direct frozen
         # executable may instead be in Contents/MacOS.
         resources_dir = executable_dir.parent
+        candidates.append(resources_dir / BUNDLED_RUNTIME_DIR_NAME / _runtime_relative_python())
         candidates.append(resources_dir / BUNDLED_RUNTIME_DIR_NAME / "bin" / "python3.12")
         candidates.append(resources_dir / "Resources" / BUNDLED_RUNTIME_DIR_NAME / "bin" / "python3.12")
         candidates.append(resources_dir.parent / "Resources" / BUNDLED_RUNTIME_DIR_NAME / "bin" / "python3.12")
@@ -58,7 +63,7 @@ def bundled_runtime_python() -> Path | None:
 
 
 def _bundled_runtime_root(python: Path) -> Path:
-    return python.parent.parent
+    return python.parent if python.name.lower() == "python.exe" else python.parent.parent
 
 
 def prepare_bundled_runtime(data_dir: Path) -> Path | None:
@@ -67,7 +72,7 @@ def prepare_bundled_runtime(data_dir: Path) -> Path | None:
         return None
 
     target_root = data_dir.expanduser() / "runtime" / "python"
-    target_python = target_root / "bin" / "python3.12"
+    target_python = target_root / _runtime_relative_python()
     if target_python.is_file() and _version_for(str(target_python)) == RUNTIME_PYTHON_VERSION:
         return target_python
 
@@ -76,7 +81,7 @@ def prepare_bundled_runtime(data_dir: Path) -> Path | None:
     if staging_root.exists():
         shutil.rmtree(staging_root)
     shutil.copytree(_bundled_runtime_root(source_python), staging_root, symlinks=True)
-    if _version_for(str(staging_root / "bin" / "python3.12")) != RUNTIME_PYTHON_VERSION:
+    if _version_for(str(staging_root / _runtime_relative_python())) != RUNTIME_PYTHON_VERSION:
         raise RuntimeError("Copied bundled Python failed validation")
     if target_root.exists():
         shutil.rmtree(target_root)

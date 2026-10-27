@@ -216,7 +216,7 @@ def test_origin_and_structured_project_roundtrip(tmp_path, newline):
         # Reading an inconsistent project must not destroy the stored document.
         stored = json.loads((Path(loaded["audio_path"]).parent / "project.json").read_text())
         assert stored["lyric_document"] == doc
-        (Path(loaded["audio_path"]).parent / SYNCED_NAME).write_text(source, encoding="utf-8")
+        (Path(loaded["audio_path"]).parent / SYNCED_NAME).write_text(source, encoding="utf-8", newline="")
     # A fresh application session restores the same IDs and translations.
     with TestClient(create_app(Settings(data_dir=tmp_path)), base_url="http://127.0.0.1") as reopened:
         assert reopened.get(f"/api/projects/{ident}").json()["lyric_document"] == doc

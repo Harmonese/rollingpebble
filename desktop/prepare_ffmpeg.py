@@ -1,6 +1,7 @@
 """Build a standalone LGPL FFmpeg on the build machine, with corresponding source."""
 from __future__ import annotations
 
+from contextlib import nullcontext
 import hashlib
 import json
 import os
@@ -28,6 +29,12 @@ if sys.platform == "linux":
     FLAGS = [flag for flag in FLAGS if not flag.startswith(("--cc=", "--arch=", "--target-os=", "--extra-cflags=", "--extra-ldflags="))]
     FLAGS += ["--cc=gcc", "--arch=x86_64", "--target-os=linux", "--disable-x86asm"]
 
+if sys.platform == "win32":
+    FLAGS = [flag for flag in FLAGS if not flag.startswith(("--cc=", "--arch=", "--target-os=", "--extra-cflags=", "--extra-ldflags="))]
+    # FFmpeg 7.1's MSVC VVC object references AVX2 assembly even with x86asm off.
+    # The workstation decodes audio, so exclude this unrelated video decoder.
+    FLAGS += ["--toolchain=msvc", "--arch=x86_64", "--target-os=win64", "--disable-x86asm", "--disable-decoder=vvc"]
+
 
 def prepare():
     manifest = DEST / "manifest.json"
@@ -38,7 +45,11 @@ def prepare():
             for name, digest in record["files"].items()
         ):
             return DEST
-    with tempfile.TemporaryDirectory(prefix="rollingpebble-ffmpeg-") as temporary:
+    build_cache = ROOT / "build" / "ffmpeg-windows-x86_64"
+    if sys.platform == "win32":
+        build_cache.mkdir(parents=True, exist_ok=True)
+    context = nullcontext(str(build_cache)) if sys.platform == "win32" else tempfile.TemporaryDirectory(prefix="rollingpebble-ffmpeg-")
+    with context as temporary:
         stage = Path(temporary)
         archive = stage / "ffmpeg-7.1.tar.xz"
         cached = Path(tempfile.gettempdir()) / "rollingpebble-ffmpeg-7.1.tar.xz"
@@ -48,19 +59,27 @@ def prepare():
             urllib.request.urlretrieve(SOURCE_URL, archive)
         if hashlib.sha256(archive.read_bytes()).hexdigest() != SOURCE_SHA256:
             raise RuntimeError("FFmpeg source checksum mismatch")
-        with tarfile.open(archive) as source:
-            source.extractall(stage, filter="data")
         source = stage / "ffmpeg-7.1"
+        if not source.exists():
+            with tarfile.open(archive) as package:
+                from extract_source import extract_source
+                extract_source(package, stage)
         env = {**os.environ, "MACOSX_DEPLOYMENT_TARGET": "14.0", "SOURCE_DATE_EPOCH": "1727654400"}
-        subprocess.run([str(source / "configure"), *FLAGS], cwd=source, env=env, check=True)
-        subprocess.run(["/usr/bin/make", "-j", str(min(os.cpu_count() or 4, 8)), "ffmpeg"], cwd=source, env=env, check=True)
+        configure = ["sh", "./configure"] if sys.platform == "win32" else [str(source / "configure")]
+        configured = stage / "configured.json"
+        if not (source / "ffbuild/config.mak").exists() or not configured.exists() or json.loads(configured.read_text()) != FLAGS:
+            subprocess.run([*configure, *FLAGS], cwd=source, env=env, check=True)
+            configured.write_text(json.dumps(FLAGS))
+        shell = ["SHELL=sh"] if sys.platform == "win32" else []
+        subprocess.run(["make" if sys.platform == "win32" else "/usr/bin/make", *shell, "-j", str(min(os.cpu_count() or 4, 8)), "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"], cwd=source, env=env, check=True)
+        binary = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
         from audit_native import audit_binary
-        audit_binary(source / "ffmpeg", (14, 0, 0))
-        result = subprocess.run([str(source / "ffmpeg"), "-L"], capture_output=True, text=True, check=True)
+        audit_binary(source / binary, (14, 0, 0))
+        result = subprocess.run([str(source / binary), "-L"], capture_output=True, text=True, check=True)
         if "Lesser General Public License" not in result.stdout:
             raise RuntimeError("FFmpeg license audit failed")
         DEST.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source / "ffmpeg", DEST / "ffmpeg")
+        shutil.copy2(source / binary, DEST / binary)
         shutil.copy2(archive, DEST / archive.name)
         shutil.copy2(source / "COPYING.LGPLv2.1", DEST / "FFmpeg-LGPL-2.1.txt")
         (DEST / "FFmpeg-BUILD.txt").write_text(result.stderr + result.stdout + "\n" + json.dumps(FLAGS, indent=2))

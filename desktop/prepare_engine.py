@@ -52,14 +52,15 @@ def prepare(python, *, update_lock=False):
                                               if not line.startswith("imageio-ffmpeg==")) + "\n")
             add_notices(DEST)
             manifest["recipe"] = 6
-            manifest["files"] = {str(p.relative_to(DEST)): hashlib.sha256(p.read_bytes()).hexdigest()
+            manifest["files"] = {p.relative_to(DEST).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                                  for p in DEST.rglob("*") if p.is_file() and p != DEST / "manifest.json"}
             (DEST / "manifest.json").write_text(json.dumps(manifest, indent=2))
             return
     with tempfile.TemporaryDirectory(prefix="rollingpebble-engine-") as temp:
         stage = Path(temp)
-        wheels = stage / "wheels"
-        wheels.mkdir()
+        wheel_cache = ROOT / "build" / f"engine-wheels-{TARGET['key']}"
+        wheels = wheel_cache
+        wheels.mkdir(parents=True, exist_ok=True)
         previous = json.loads((DEST / "manifest.json").read_text()) if (DEST / "manifest.json").exists() else {}
         if previous.get("platform") == TARGET["key"]:
             for cached in (DEST / "wheels").glob("*.whl"):
@@ -74,7 +75,7 @@ def prepare(python, *, update_lock=False):
         env = {**os.environ, "SOURCE_DATE_EPOCH": "1791504000"}
         if TARGET["system"] == "darwin":
             env["MACOSX_DEPLOYMENT_TARGET"] = "14.0"
-        else:
+        elif TARGET["system"] == "linux":
             env.setdefault("CC", "gcc")
             env.setdefault("CXX", "g++")
         subprocess.run([str(python), "-m", "pip", "wheel", "--no-deps", "--wheel-dir", str(wheels),
@@ -98,6 +99,8 @@ def prepare(python, *, update_lock=False):
                             str(engine) + "[vocals,mul]", "demucs==4.1.0", "dora-search==0.1.12", "julius==0.2.7", "treetable==0.2.5", "antlr4-python3-runtime==4.9.3",
                             f"torch=={TARGET['torch']}", f"torchaudio=={TARGET['torch']}", "numpy==2.2.6", "PySocks==1.7.1",
                             "av==16.1.0"], check=True)
+        shutil.copytree(wheels, stage / "wheels")
+        wheels = stage / "wheels"
         requirements = []
         names = {}
         for wheel in sorted(wheels.glob("*.whl")):
@@ -107,7 +110,7 @@ def prepare(python, *, update_lock=False):
                 names[meta["Name"].lower().replace("_", "-")] = requirements[-1]
                 from audit_native import audit_binary
                 for member in package.namelist():
-                    if member.endswith((".so", ".dylib")):
+                    if member.endswith((".so", ".dylib", ".pyd", ".dll")):
                         binary = stage / "audit-binary"
                         binary.write_bytes(package.read(member))
                         audit_binary(binary, (14, 0, 0))
@@ -127,10 +130,11 @@ def prepare(python, *, update_lock=False):
         # every installation still verifies its exact build-specific manifest hash.
         third_party = "\n".join(line for line in requirements if not line.startswith("py-roller==")) + "\n"
         from audit_native import audit_binary
+        # Preserve resolved downloads if a later native build needs repair/retry.
         add_notices(stage)
-        audit_binary(stage / "bin" / "ffmpeg", (14, 0, 0))
+        audit_binary(stage / "bin" / ("ffmpeg.exe" if TARGET["system"] == "win32" else "ffmpeg"), (14, 0, 0))
         shutil.rmtree(stage / "source")
-        files = {str(p.relative_to(stage)): hashlib.sha256(p.read_bytes()).hexdigest() for p in stage.rglob('*') if p.is_file()}
+        files = {p.relative_to(stage).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest() for p in stage.rglob('*') if p.is_file()}
         (stage / "manifest.json").write_text(json.dumps({"source": COMMIT, "platform": TARGET["key"], "recipe": 6, "files": files}, indent=2))
         if DEST.exists():
             shutil.rmtree(DEST)

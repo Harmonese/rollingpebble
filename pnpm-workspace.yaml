@@ -1,2 +1,7 @@
 packages:
   - frontend
+onlyBuiltDependencies:
+  - '@swc/core'
+  - core-js
+  - dprint
+  - esbuild

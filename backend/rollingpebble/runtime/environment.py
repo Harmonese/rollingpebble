@@ -8,6 +8,11 @@ from rollingpebble.paths import StorageLayout
 
 _BASE_ENV_KEYS = {
     "HOME",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
     "PATH",
     "LANG",
     "LC_ALL",
@@ -46,6 +51,17 @@ def runtime_python_path(venv: Path) -> Path:
     return venv / "bin" / "python"
 
 
+def _native_component_path(path: Path) -> str:
+    """eSpeak's C file APIs do not understand Windows verbatim path prefixes."""
+    value = str(path)
+    if platform.system() == "Windows":
+        if value[:8].upper() == "\\\\?\\UNC\\":
+            return "\\\\" + value[8:]
+        if value.startswith("\\\\?\\"):
+            return value[4:]
+    return value
+
+
 def build_runtime_env(venv: Path, data_dir: Path | StorageLayout, *, include_dev: bool = False) -> dict[str, str]:
     layout = data_dir if isinstance(data_dir, StorageLayout) else StorageLayout.from_data_dir(data_dir)
     env = build_base_subprocess_env(include_dev=include_dev)
@@ -53,8 +69,8 @@ def build_runtime_env(venv: Path, data_dir: Path | StorageLayout, *, include_dev
     from rollingpebble.runtime.installer import engine_resources
     resources = engine_resources()
     if resources:
-        env["PHONEMIZER_ESPEAK_LIBRARY"] = str(resources / "espeak" / ("libespeak-ng.1.dylib" if platform.system() == "Darwin" else "libespeak-ng.dll" if platform.system() == "Windows" else "libespeak-ng.so.1"))
-        env["ESPEAK_DATA_PATH"] = str(resources / "espeak")
+        env["PHONEMIZER_ESPEAK_LIBRARY"] = _native_component_path(resources / "espeak" / ("libespeak-ng.1.dylib" if platform.system() == "Darwin" else "libespeak-ng.dll" if platform.system() == "Windows" else "libespeak-ng.so.1"))
+        env["ESPEAK_DATA_PATH"] = _native_component_path(resources / "espeak")
     ffmpeg = str(resources / "bin") + os.pathsep if resources else ""
     env.update(
         {

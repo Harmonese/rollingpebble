@@ -16,6 +16,15 @@ def write(path, value="data"):
     path.write_text(value)
 
 
+def symlink(link, target, *, target_is_directory=False):
+    try:
+        link.symlink_to(target, target_is_directory=target_is_directory)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows account lacks symlink privilege (Developer Mode is disabled)")
+        raise
+
+
 def service(root):
     return StorageService(layout=StorageLayout.from_data_dir(root).ensure(), jobs=SimpleNamespace(resource_lock=threading.Lock()))
 
@@ -56,7 +65,7 @@ def test_cache_symlink_cannot_delete_external_files(tmp_path):
     svc = service(root)
     external = tmp_path / "external"
     write(external / "weight")
-    (root / "cache/pip").symlink_to(external, target_is_directory=True)
+    symlink(root / "cache/pip", external, target_is_directory=True)
     with pytest.raises(ValueError):
         svc.clear_cache()
     assert (external / "weight").exists()
@@ -126,7 +135,7 @@ def test_transfer_rejects_conflicts_and_external_links(tmp_path):
     write(tmp_path / "b/file", "second")
     with pytest.raises(ValueError, match="different"):
         transfer(tmp_path / "a", tmp_path / "b")
-    (tmp_path / "a/link").symlink_to(tmp_path / "b/file")
+    symlink(tmp_path / "a/link", tmp_path / "b/file")
     with pytest.raises(ValueError, match="External"):
         tree_digest(tmp_path / "a")
 
@@ -134,7 +143,7 @@ def test_transfer_rejects_conflicts_and_external_links(tmp_path):
 def test_transfer_rebases_internal_absolute_model_links(tmp_path):
     import shutil
     write(tmp_path / "source/blobs/weight", "model")
-    (tmp_path / "source/current").symlink_to(tmp_path / "source/blobs/weight")
+    symlink(tmp_path / "source/current", tmp_path / "source/blobs/weight")
     transfer(tmp_path / "source", tmp_path / "target")
     shutil.rmtree(tmp_path / "source")
     assert (tmp_path / "target/current").read_text() == "model"

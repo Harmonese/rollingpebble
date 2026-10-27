@@ -10,6 +10,7 @@ import sys
 import tarfile
 import tempfile
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -18,6 +19,8 @@ RELEASE = "20261003"
 def target_spec(system=None, machine=None):
     system = system or sys.platform
     machine = machine or platform.machine().lower()
+    if machine == "amd64":
+        machine = "x86_64"
     targets = json.loads(Path(__file__).with_name("platforms.json").read_text())
     for key, spec in targets.items():
         if (system, machine) == (spec["system"], spec["machine"]):
@@ -37,6 +40,10 @@ FULL_RUNTIME_ROOT = PROJECT_ROOT / "build" / "python-build-runtime"
 TARGET_ROOT = PROJECT_ROOT / "desktop" / "python-runtime"
 
 
+def runtime_executable(root: Path) -> Path:
+    return root / ("python.exe" if TARGET["system"] == "win32" else "bin/python3.12")
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -46,7 +53,7 @@ def _sha256(path: Path) -> str:
 
 
 def _is_ready(root: Path) -> bool:
-    python = root / "bin" / "python3.12"
+    python = runtime_executable(root)
     if not python.is_file():
         return False
     result = subprocess.run([str(python), "-I", "-B", "-c", "import platform; print(platform.python_version())"],
@@ -98,11 +105,31 @@ def cached_source(path: Path) -> Path | None:
     return source if source.is_file() else None
 
 
+def configure_windows_runtime(root: Path) -> None:
+    """Use UTF-8 for native libraries without changing the user's system locale."""
+    for name in ("python.exe", "pythonw.exe"):
+        executable = root / name
+        manifest = root / f".{name}.manifest"
+        subprocess.run(["mt.exe", f"-inputresource:{executable};#1", f"-out:{manifest}"], check=True)
+        tree = ET.parse(manifest)
+        settings = tree.find(".//{urn:schemas-microsoft-com:asm.v3}windowsSettings")
+        if settings is None:
+            raise RuntimeError("Standalone Python manifest lacks Windows settings")
+        codepage = "{http://schemas.microsoft.com/SMI/2019/WindowsSettings}activeCodePage"
+        node = settings.find(codepage)
+        if node is None:
+            node = ET.SubElement(settings, codepage)
+        node.text = "UTF-8"
+        tree.write(manifest, encoding="utf-8", xml_declaration=True)
+        subprocess.run(["mt.exe", "-manifest", str(manifest), f"-outputresource:{executable};#1"], check=True)
+        manifest.unlink()
+
+
 def prepare_distribution(source: Path = FULL_RUNTIME_ROOT, target: Path = TARGET_ROOT) -> None:
     source_root, target_root = source.resolve(), target.resolve()
     if source_root == target_root or source_root in target_root.parents or target_root in source_root.parents or target.is_symlink():
         raise RuntimeError("Build cache and distribution must be separate directories")
-    canonical = source / "bin" / "python3.12"
+    canonical = runtime_executable(source)
     if not canonical.is_file() or canonical.is_symlink():
         raise RuntimeError("Distribution requires a real python3.12 executable")
     excluded = set()
@@ -113,11 +140,18 @@ def prepare_distribution(source: Path = FULL_RUNTIME_ROOT, target: Path = TARGET
                 raise RuntimeError(f"Unexpected Python alias: {alias}")
             excluded.add(alias)
     def ignore(folder, names):
-        return [name for name in names if Path(folder) / name in excluded or cached_source(Path(folder) / name)]
+        return [name for name in names if Path(folder) / name in excluded
+                or cached_source(Path(folder) / name)
+                or (TARGET["system"] == "win32" and (name.endswith(".pdb")
+                    or (Path(folder).name == "distlib" and name in {"t32.exe", "w32.exe", "t64-arm.exe", "w64-arm.exe"})))]
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".python-dist-", dir=target.parent) as temporary:
         staged = Path(temporary) / "runtime"
         shutil.copytree(source, staged, symlinks=True, ignore=ignore)
+        if TARGET["system"] == "win32" and canonical.name == "python.exe":
+            from prepare_windows_redist import prepare as prepare_redist
+            prepare_redist(staged)
+            configure_windows_runtime(staged)
         if not _is_ready(staged):
             raise RuntimeError("Pruned Python failed validation")
         if target.exists():

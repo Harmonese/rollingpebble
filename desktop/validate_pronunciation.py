@@ -12,11 +12,17 @@ import tempfile
 
 def validate(python: Path, components: Path):
     with tempfile.TemporaryDirectory(prefix="rollingpebble-pronunciation-") as temporary:
-        moved = Path(temporary) / ("relocated components " * 7) / "发音组件"
+        label = "relocated components"
+        moved = Path(temporary) / label / "发音组件"
+        while len(str(moved)) <= 175:
+            label += " relocated components"
+            moved = Path(temporary) / label / "发音组件"
         shutil.copytree(components, moved)
         assert len(str(moved)) > 160
-        env = {k: v for k, v in os.environ.items() if k in {"HOME", "TMPDIR", "LANG"}}
-        env.update(PATH="/usr/bin:/bin", PHONEMIZER_ESPEAK_LIBRARY=str(moved / ("libespeak-ng.1.dylib" if sys.platform == "darwin" else "libespeak-ng.so.1")),
+        env = {k: v for k, v in os.environ.items() if k.upper() in {"HOME", "TMPDIR", "LANG", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "USERPROFILE"}}
+        system_path = str(Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32") if sys.platform == "win32" else "/usr/bin:/bin"
+        library = "libespeak-ng.dll" if sys.platform == "win32" else "libespeak-ng.1.dylib" if sys.platform == "darwin" else "libespeak-ng.so.1"
+        env.update(PATH=system_path, PHONEMIZER_ESPEAK_LIBRARY=str(moved / library),
                    ESPEAK_DATA_PATH=str(moved), HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
         script = """
 import os

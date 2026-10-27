@@ -6,6 +6,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Added
+
+- Windows x86_64 per-user NSIS packaging with standalone Python 3.12.15, a separate offline CPU engine lock, FFmpeg/eSpeak source builds, PE architecture audits and an installed-app smoke check.
+- Windows PowerShell environment setup and process-local UTF-8 runtime manifests for Unicode pronunciation resource paths.
+
+### Fixed
+
+- Normalized Windows verbatim resource paths before passing eSpeak library/data paths to native C APIs, restoring multilingual pronunciation in installed Tauri apps.
+
+- Windows bundled-interpreter discovery and copying, backend process-tree cleanup on desktop exit, and source archive extraction without symlink privileges.
+- Retained Windows user-profile and AppData paths in isolated worker environments so packaged first-run setup can determine the home directory.
+- Rebased legacy artifact paths using native path separators and preserved supplied lyric newline bytes on Windows.
+
 ## [0.9.1] - 2026-10-26
 
 ### Added

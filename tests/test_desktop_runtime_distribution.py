@@ -12,7 +12,10 @@ spec.loader.exec_module(module)
 def runtime_fixture(root):
     (root / "bin").mkdir(parents=True)
     (root / "bin" / "python3.12").write_bytes(b"python executable")
-    (root / "bin" / "python").symlink_to("python3.12")
+    try:
+        (root / "bin" / "python").symlink_to("python3.12")
+    except OSError:  # Windows accounts without the symlink privilege.
+        (root / "bin" / "python").write_bytes(b"python executable")
     (root / "bin" / "python3").write_bytes(b"python executable")
     lib = root / "lib"
     (lib / "__pycache__").mkdir(parents=True)
@@ -29,6 +32,7 @@ def runtime_fixture(root):
 def test_prune_aliases_and_only_redundant_bytecode(tmp_path, monkeypatch):
     source, target = tmp_path / "full", tmp_path / "dist"
     runtime_fixture(source)
+    monkeypatch.setattr(module, "runtime_executable", lambda root: root / "bin/python3.12")
     monkeypatch.setattr(module, "_is_ready", lambda root: True)
     module.prepare_distribution(source, target)
     assert (target / "bin" / "python3.12").is_file()
@@ -38,7 +42,7 @@ def test_prune_aliases_and_only_redundant_bytecode(tmp_path, monkeypatch):
     assert not (target / "lib" / "__pycache__" / "module.cpython-312.pyc").exists()
     assert not (target / "lib" / "__pycache__" / "module.cpython-312.opt-1.pyc").exists()
     assert (target / "lib" / "__pycache__" / "sourceless.cpython-312.pyc").read_bytes() == b"keep"
-    assert (source / "bin" / "python").is_symlink()
+    assert (source / "bin" / "python").read_bytes() == b"python executable"
     assert (source / "lib" / "legacy.pyc").exists()
     for name in ("venv", "ensurepip", "pip", "tkinter", "ssl", "LICENSE"):
         assert (target / "lib" / name).read_bytes() == b"keep"
@@ -49,6 +53,7 @@ def test_prune_aliases_and_only_redundant_bytecode(tmp_path, monkeypatch):
 def test_unexpected_alias_and_failed_validation_preserve_existing_distribution(tmp_path, monkeypatch):
     source, target = tmp_path / "full", tmp_path / "dist"
     runtime_fixture(source)
+    monkeypatch.setattr(module, "runtime_executable", lambda root: root / "bin/python3.12")
     target.mkdir()
     (target / "sentinel").write_text("old")
     (source / "bin" / "python3").write_text("different binary")

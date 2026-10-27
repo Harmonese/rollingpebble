@@ -1,3 +1,5 @@
+#![cfg_attr(all(not(debug_assertions), windows), windows_subsystem = "windows")]
+
 mod external_links;
 
 use std::{
@@ -17,6 +19,8 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 
 struct BackendState(Mutex<Option<Child>>);
 #[derive(Default)]
@@ -214,6 +218,8 @@ fn start_backend(port: u16, app: &tauri::AppHandle) -> Result<Child, Box<dyn std
 
     #[cfg(unix)]
     command.process_group(0);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000); // CREATE_NO_WINDOW
 
     Ok(command.spawn()?)
 }
@@ -343,6 +349,17 @@ fn stop_backend(state: &BackendState) {
         }
     }
 
+    #[cfg(windows)]
+    {
+        // PyInstaller onefile has a parent bootloader and a backend child.
+        // Reap the whole application-owned tree, including runtime workers.
+        let _ = Command::new("taskkill.exe")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .creation_flags(0x08000000)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
     let _ = child.kill();
     let _ = child.wait();
 }

@@ -100,7 +100,7 @@ def write_project(projects_root: Path, project: ProjectModel) -> None:
 
 def write_text(projects_root: Path, project_id: str, filename: str, text: str) -> Path:
     path = project_dir(projects_root, project_id) / filename
-    path.write_text(text or "", encoding="utf-8")
+    path.write_text(text or "", encoding="utf-8", newline="")
     return path
 
 

@@ -24,6 +24,10 @@ FLAGS = ["-DBUILD_SHARED_LIBS=ON", "-DBUILD_TESTING=OFF", "-DUSE_MBROLA=OFF",
 if sys.platform == "linux":
     FLAGS = [flag for flag in FLAGS if not flag.startswith(("-DCMAKE_OSX_", "-DCMAKE_C_COMPILER=", "-DCMAKE_CXX_COMPILER="))]
 
+if sys.platform == "win32":
+    FLAGS = [flag for flag in FLAGS if not flag.startswith(("-DCMAKE_OSX_", "-DCMAKE_C_COMPILER=", "-DCMAKE_CXX_COMPILER=", "-DCMAKE_C_FLAGS="))]
+    FLAGS += ["-G", "Ninja", "-DCMAKE_C_FLAGS=/DN_PATH_HOME=4096 /utf-8", "-DCMAKE_CXX_FLAGS=/utf-8"]
+
 
 def prepare():
     manifest = DEST / "manifest.json"
@@ -45,7 +49,8 @@ def prepare():
         if hashlib.sha256(archive.read_bytes()).hexdigest() != SOURCE_SHA256:
             raise RuntimeError("eSpeak source checksum mismatch")
         with tarfile.open(archive) as source:
-            source.extractall(stage, filter="data")
+            from extract_source import extract_source
+            extract_source(source, stage)
         source = stage / "espeak-ng-1.52.0"
         build = stage / "build"
         env = {**os.environ, "MACOSX_DEPLOYMENT_TARGET": "14.0"}
@@ -59,6 +64,9 @@ def prepare():
             shutil.copy2(next(build.rglob("libespeak-ng.1.52.0.dylib")), library)
             subprocess.run(["install_name_tool", "-id", "@rpath/libespeak-ng.1.dylib", str(library)], check=True)
             subprocess.run(["codesign", "--force", "--sign", "-", str(library)], check=True)
+        elif sys.platform == "win32":
+            library = DEST / "libespeak-ng.dll"
+            shutil.copy2(next(build.rglob("espeak-ng.dll")), library)
         else:
             library = DEST / "libespeak-ng.so.1"
             shutil.copy2(next(build.rglob("libespeak-ng.so.1.52.0")), library)

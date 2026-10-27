@@ -187,3 +187,11 @@ Before sharing an installer, extract it and exercise its actual native window wi
 ```
 
 The test needs Xvfb (`--xvfb /path/to/Xvfb`), xwininfo and dbus-run-session. It verifies startup-triggered offline preparation, HTTP assets, a real native window and backend cleanup on window close. It does not download models or substitute for real-song alignment and interactive editing/playback acceptance.
+
+## Windows x86_64
+
+See [Windows setup and validation](WINDOWS_X86_64.md). The shared
+`pnpm desktop:build` entry selects Windows resources and exports a per-user NSIS
+installer. Windows has its own Python checksum and CPU engine lock. Native PE
+audits, offline relocated component checks and an installed-app smoke test cover
+the platform-specific runtime layout and backend process cleanup.

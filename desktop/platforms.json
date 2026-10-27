@@ -8,6 +8,15 @@
     "extra_index": null,
     "espeak_library": "libespeak-ng.1.dylib"
   },
+  "windows-x86_64": {
+    "system": "win32",
+    "machine": "x86_64",
+    "python_triple": "x86_64-pc-windows-msvc",
+    "python_sha256": "4b6f0beebbb695a0f3ea237b8c3eaa5bd424f47a7bc25b2fbe3a43390c770f08",
+    "torch": "2.8.0+cpu",
+    "extra_index": "https://download.pytorch.org/whl/cpu",
+    "espeak_library": "libespeak-ng.dll"
+  },
   "linux-x86_64": {
     "system": "linux",
     "machine": "x86_64",

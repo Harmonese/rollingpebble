@@ -108,3 +108,13 @@ publishing workflow completes. Do not publish a Release merely to test CI.
 ## Linux x86_64 local installers
 
 Build on Ubuntu 24.04 with `pnpm desktop:build`. Check both exported installers in `dist/desktop/linux-x86_64` with `desktop/validate_linux_bundle.py`, inspect `.deb` dependencies, and verify `SHA256SUMS` before sharing. Preserve bundled third-party notices and sources. Native startup/offline component checks are separate from real model inference and interactive playback/editing acceptance. No upload or publication is triggered by this local build.
+
+## Windows x86_64 local installer
+
+Follow [Windows setup and validation](WINDOWS_X86_64.md), then run the shared
+`pnpm desktop:build`. Validate the exported NSIS installer in
+`dist/desktop/windows-x86_64` by installing it to a dedicated test location and
+running `desktop/validate_windows_bundle.py` against that installed executable.
+Preserve the hashed offline wheelhouse, third-party sources and notices. Verify
+the exported SHA-256 checksum. The local build is unsigned; model inference,
+interactive playback/editing and signing remain separate acceptance gates.

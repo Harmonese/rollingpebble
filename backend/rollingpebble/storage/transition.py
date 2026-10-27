@@ -56,8 +56,10 @@ def rewrite_artifacts(results: Path, old: Path, new: Path):
             return {key: replace(item) for key, item in value.items()}
         if isinstance(value, list):
             return [replace(item) for item in value]
-        if isinstance(value, str) and value.startswith(str(old) + "/"):
-            return str(new) + value[len(str(old)):]
+        if isinstance(value, str):
+            path = Path(value)
+            if path.is_absolute() and path.is_relative_to(old):
+                return str(new / path.relative_to(old))
         return value
     for file in results.glob("*/*/record.json"):
         record = json.loads(file.read_text())

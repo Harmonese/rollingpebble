@@ -140,6 +140,7 @@ def test_frozen_app_uses_python_from_contents_resources(
 
 def test_app_resources_override_selects_bundled_python(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from rollingpebble.runtime import python as runtime_python
+    monkeypatch.setattr(runtime_python, "_runtime_relative_python", lambda: Path("bin/python3.12"))
 
     bundled = tmp_path / "Resources" / "python-runtime" / "bin" / "python3.12"
     bundled.parent.mkdir(parents=True)
@@ -153,6 +154,7 @@ def test_app_resources_override_selects_bundled_python(tmp_path: Path, monkeypat
 
 def test_bundled_runtime_is_copied_to_user_data_before_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from rollingpebble.runtime import python as runtime_python
+    monkeypatch.setattr(runtime_python, "_runtime_relative_python", lambda: Path("bin/python3.12"))
 
     source_root = tmp_path / "bundle" / "python"
     source_python = source_root / "bin" / "python3.12"
