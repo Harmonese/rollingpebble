@@ -24,7 +24,7 @@ It provides a Tauri desktop app for macOS Apple Silicon, Linux x86_64 and Window
 - **Publish** prepared lyrics through LRCLIB workflows.
 - **Use multiple languages** through the built-in i18n layer.
 
-Version 0.9.1 adds Linux and Windows desktop installers alongside macOS, with platform-specific offline components and SHA-256 checksums. It also fixes project-switching state, Auto Timing Start/Retry behavior and duplicate import panels; adds batch-result cleanup; unifies progress displays; and expands playback speed to 1/3–3×.
+Version 0.9.2 fixes project-arrow navigation so opening or saving a project no longer traps navigation between two projects. It also updates the default literary translation prompt. Existing saved prompts are preserved; use Reset Prompt and save the connection to adopt the new default. Desktop installers are available for macOS Apple Silicon, Linux x86_64 and Windows x64.
 
 ## Typical Workflow
 

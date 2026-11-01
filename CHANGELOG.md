@@ -6,9 +6,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-01
+
 ### Changed
 
-- Replaced the default translation instructions with the supplied literary translation prompt; saved custom prompts remain unchanged.
+- Replaced the default translation instructions with a literary translation prompt emphasizing whole-song context, natural phrasing and faithful imagery; saved custom prompts remain unchanged.
 
 ### Fixed
 

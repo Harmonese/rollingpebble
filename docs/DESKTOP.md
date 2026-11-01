@@ -183,8 +183,8 @@ Tauri's resource directory resolves installed Linux paths and extracted AppImage
 Before sharing an installer, extract it and exercise its actual native window with a fresh data directory and PATH restricted to system tools:
 
 ```bash
-.venv/bin/python desktop/validate_linux_bundle.py --deb "dist/desktop/linux-x86_64/Rolling Pebble_0.9.1_amd64.deb" --log-dir output/linux-x86_64/deb-smoke
-.venv/bin/python desktop/validate_linux_bundle.py --appimage "dist/desktop/linux-x86_64/Rolling Pebble_0.9.1_amd64.AppImage" --log-dir output/linux-x86_64/appimage-smoke
+.venv/bin/python desktop/validate_linux_bundle.py --deb "dist/desktop/linux-x86_64/Rolling Pebble_0.9.2_amd64.deb" --log-dir output/linux-x86_64/deb-smoke
+.venv/bin/python desktop/validate_linux_bundle.py --appimage "dist/desktop/linux-x86_64/Rolling Pebble_0.9.2_amd64.AppImage" --log-dir output/linux-x86_64/appimage-smoke
 ```
 
 The test needs Xvfb (`--xvfb /path/to/Xvfb`), xwininfo and dbus-run-session. It verifies startup-triggered offline preparation, HTTP assets, a real native window and backend cleanup on window close. It does not download models or substitute for real-song alignment and interactive editing/playback acceptance.

@@ -1,6 +1,6 @@
 # Release Checklist
 
-Read the release version from `pyproject.toml`; current examples use `0.9.1`. Run commands from the repository root.
+Read the release version from `pyproject.toml`; current examples use `0.9.2`. Run commands from the repository root.
 
 Publishing a GitHub Release triggers `.github/workflows/python-publish.yml` and
 publishes Python distributions to PyPI through trusted publishing. Pushing the
@@ -8,7 +8,7 @@ commit/tag alone does not publish a GitHub Release or upload the DMG.
 
 ## Current Preparation
 
-Version 0.9.1 adds shared macOS arm64/Linux x86_64/Windows x86_64 desktop packaging, a checksum-pinned Linux standalone Python, offline CPU engine resources and native package smoke checks. It also includes the workspace, recovery and UI refinements recorded in CHANGELOG. Build fresh 0.9.1 artifacts for release; checks against older installers do not validate the new release. Commit/tag pushes do not publish packages.
+Version 0.9.2 fixes project-arrow navigation across list refreshes and updates the default literary translation instructions. Saved custom prompts remain unchanged; Reset Prompt plus saving the connection adopts the new default. Build fresh 0.9.2 artifacts for release; checks against older installers do not validate the new release. Commit/tag pushes do not publish packages.
 
 ## Version and Checks
 
@@ -37,8 +37,8 @@ Build on Apple Silicon with the tools described in [DESKTOP.md](DESKTOP.md):
 ```bash
 pnpm desktop:build
 codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Rolling Pebble.app"
-hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.1_aarch64.dmg"
-shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.1_aarch64.dmg"
+hdiutil verify "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.2_aarch64.dmg"
+shasum -a 256 "src-tauri/target/release/bundle/dmg/Rolling Pebble_0.9.2_aarch64.dmg"
 ```
 
 The build hook rebuilds the sidecar with standalone Python, includes app version
@@ -74,8 +74,8 @@ cp -R frontend/dist/. backend/rollingpebble/frontend_dist/
 
 Expected files:
 
-- `dist/rollingpebble-0.9.1-py3-none-any.whl`
-- `dist/rollingpebble-0.9.1.tar.gz`
+- `dist/rollingpebble-0.9.2-py3-none-any.whl`
+- `dist/rollingpebble-0.9.2.tar.gz`
 
 Verify these include the WebUI and current metadata, but not standalone Python,
 virtual environments, or models. CLI/PyPI users need the bundled Python 3.12 and matching engine resources prepared from source for Auto
@@ -86,12 +86,12 @@ Timing; the Python package alone does not include an engine wheelhouse. The work
 After checks and artifact verification:
 
 ```bash
-git tag -a v0.9.1 -m "Release v0.9.1"
-git push --atomic origin main v0.9.1
+git tag -a v0.9.2 -m "Release v0.9.2"
+git push --atomic origin main v0.9.2
 ```
 
-After maintainer acceptance, manually publish the GitHub Release for `v0.9.1`
-using the v0.9.1 changelog as release notes. Attach freshly built installers from
+After maintainer acceptance, manually publish the GitHub Release for `v0.9.2`
+using the v0.9.2 changelog as release notes. Attach freshly built installers from
 each platform's `dist/desktop/<platform>` directory: macOS arm64 DMG, Linux x86_64
 `.deb` and AppImage, and Windows x64 NSIS `setup.exe`. Upload installation notes
 under platform-specific names and combine the per-platform `SHA256SUMS` into one
