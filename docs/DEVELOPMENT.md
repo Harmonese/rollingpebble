@@ -42,6 +42,7 @@ node frontend/scripts/test-translation-task.mjs
 node frontend/scripts/test-workspace-audio.mjs
 node frontend/scripts/test-desktop-exit.mjs
 node frontend/scripts/test-workspace-metadata.mjs
+node frontend/scripts/test-project-navigation.mjs
 node frontend/scripts/test-project-panels.mjs
 node frontend/scripts/test-workspace-panel-keys.mjs
 node frontend/scripts/test-timing-preview.mjs

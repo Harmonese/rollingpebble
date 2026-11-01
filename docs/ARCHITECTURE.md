@@ -23,7 +23,7 @@ creating a persistent project.
 
 `translation.py` owns independent session-only async tasks and versioned default translation instructions.
 Connection preferences persist an editable `prompt`; GET also returns `default_prompt` for reset.
-The version 3 English default adds lyrical phrasing and semantic review instructions; saved prompts are not overwritten on upgrade and are independent of UI locale.
+The version 4 English default uses the supplied literary translation instructions, allowing meaning to shift to an adjacent line only when grammatical coherence requires it; saved prompts are not overwritten on upgrade and are independent of UI locale.
 Each job captures its prompt at creation. Noneditable ID/JSON output rules are appended separately,
 and strict result validation still applies. Legacy settings without a prompt use the default.
 The `/api/translation` router checks application origin and write headers. Connections
@@ -330,3 +330,5 @@ their project title even when their source workspace is no longer displayed; his
 and batch queues survive single-workspace changes. Backend retry revalidates audio,
 normalized lyric hash and options inside the resource lock before reusing the resolved
 language and freezing inputs. Legacy records without these identities require Start.
+
+Project arrows keep a stable traversal order while the backend list refreshes after opens and saves. The recent list continues to follow the backend order unless manually reordered. Drag ordering updates both lists; additions and deletions update membership without reshuffling existing arrow targets. Arrows are disabled during saves and project transitions.

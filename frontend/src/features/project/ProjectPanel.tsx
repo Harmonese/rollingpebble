@@ -79,6 +79,8 @@ export const ProjectPanel: React.FC<{
     const confirm = useConfirmDialog();
     const [projects, setProjects] = useState<ProjectModel[]>([]);
     const [projectOrder, setProjectOrder] = useState<string[]>(() => readProjectOrder());
+    const [navigationOrder, setNavigationOrder] = useState<string[]>([]);
+    const refreshSequence = useRef(0);
     const [recentLimit, setRecentLimit] = useState(DEFAULT_RECENT_PROJECTS_LIMIT);
     const [busy, setBusy] = useState(false);
     const { lang } = useContext(appContext, AppContextBits.lang);
@@ -114,10 +116,16 @@ export const ProjectPanel: React.FC<{
         [orderedProjects, recentLimit],
     );
 
+    // Opening/saving can reorder the backend list; keep arrow traversal stable.
+    const navigationProjects = useMemo(
+        () => applyOrder(projects, navigationOrder),
+        [projects, navigationOrder],
+    );
+
     const currentIndex = useMemo(() => {
         if (!project) return -1;
-        return orderedProjects.findIndex((p) => p.project_id === project.project_id);
-    }, [project, orderedProjects]);
+        return navigationProjects.findIndex((p) => p.project_id === project.project_id);
+    }, [project, navigationProjects]);
 
     const refreshSettings = async () => {
         try {
@@ -132,8 +140,18 @@ export const ProjectPanel: React.FC<{
     };
 
     const refresh = async () => {
+        const sequence = ++refreshSequence.current;
         const list = await listProjects();
+        if (sequence !== refreshSequence.current) return;
         setProjects(list);
+        setNavigationOrder((previous) => {
+            const available = new Set(list.map((item) => item.project_id));
+            const retained = previous.filter((id) => available.has(id));
+            if (!retained.length) return applyOrder(list, readProjectOrder()).map((item) => item.project_id);
+            const known = new Set(retained);
+            const added = list.filter((item) => !known.has(item.project_id)).map((item) => item.project_id);
+            return [...added, ...retained];
+        });
     };
 
     useEffect(() => {
@@ -174,9 +192,9 @@ export const ProjectPanel: React.FC<{
     }, []);
 
     const switchProject = (direction: -1 | 1) => {
-        if (currentIndex < 0 || !orderedProjects.length) return;
-        const next = (currentIndex + direction + orderedProjects.length) % orderedProjects.length;
-        loadProject(orderedProjects[next].project_id);
+        const next = currentIndex + direction;
+        if (currentIndex < 0 || next < 0 || next >= navigationProjects.length) return;
+        void loadProject(navigationProjects[next].project_id);
     };
 
     const loadProject = async (projectId: string) => {
@@ -291,6 +309,7 @@ export const ProjectPanel: React.FC<{
         reordered.splice(to, 0, moved);
         const newOrder = reordered.map((p) => p.project_id);
         setProjectOrder(newOrder);
+        setNavigationOrder(newOrder);
         writeProjectOrder(newOrder);
         clearDragState();
     };
@@ -310,6 +329,7 @@ export const ProjectPanel: React.FC<{
                 currentIndex={currentIndex}
                 total={orderedProjects.length}
                 labels={u}
+                disabled={saving || transitioning || busy}
                 onSwitch={switchProject}
             />
             <RecentProjectList

@@ -94,6 +94,7 @@ The macOS arm64 build hook uses `desktop/build.mjs` to select a working Python 3
 The script downloads the standalone Python runtime and creates
 `build/desktop-build-venv` from that interpreter for PyInstaller and app dependencies.
 The complete build interpreter is cached under `build/python-build-runtime`.
+Engine preparation and native dependency audits run in `build/desktop-build-venv`, where the platform inspection dependencies are installed, rather than in the bootstrap interpreter.
 After building the sidecar, a separate distribution is staged into
 `desktop/python-runtime`. Only the real `bin/python3.12` is distributed: verified
 `python`/`python3` aliases are omitted so Tauri resource copying cannot expand them

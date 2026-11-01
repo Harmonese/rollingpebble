@@ -1,15 +1,16 @@
 export const ProjectSwitcher: React.FC<{
     currentIndex: number;
     total: number;
+    disabled: boolean;
     labels: { previousProject: string; nextProject: string };
     onSwitch: (direction: -1 | 1) => void;
-}> = ({ currentIndex, total, labels, onSwitch }) => (
+}> = ({ currentIndex, total, disabled, labels, onSwitch }) => (
     <div className="project-switcher">
         <button
             type="button"
             className="project-switcher-btn"
             aria-label={labels.previousProject}
-            disabled={currentIndex <= 0}
+            disabled={disabled || currentIndex <= 0}
             onClick={() => onSwitch(-1)}
         >
             ←
@@ -21,7 +22,7 @@ export const ProjectSwitcher: React.FC<{
             type="button"
             className="project-switcher-btn"
             aria-label={labels.nextProject}
-            disabled={currentIndex < 0 || currentIndex >= total - 1}
+            disabled={disabled || currentIndex < 0 || currentIndex >= total - 1}
             onClick={() => onSwitch(1)}
         >
             →

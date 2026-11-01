@@ -141,3 +141,9 @@ def prepare(python, *, update_lock=False):
         shutil.copytree(stage, DEST)
         if not lock.exists() or update_lock:
             lock.write_text(third_party)
+
+
+if __name__ == "__main__":
+    import sys
+
+    prepare(sys.executable)

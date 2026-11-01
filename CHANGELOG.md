@@ -6,6 +6,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced the default translation instructions with the supplied literary translation prompt; saved custom prompts remain unchanged.
+
+### Fixed
+
+- Stabilized project-arrow navigation across list refreshes after opens and saves, preventing repeated jumps between two projects while preserving recent-list refresh and manual drag ordering.
+
 ## [0.9.1] - 2026-10-27
 
 ### Added
@@ -18,6 +26,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Fixed
 
+- Run engine preparation and native dependency audits in the dedicated desktop build environment, which contains the required platform inspection tools.
 - Normalized Windows verbatim resource paths before passing eSpeak library/data paths to native C APIs, restoring multilingual pronunciation in installed Tauri apps.
 - Windows bundled-interpreter discovery and copying, backend process-tree cleanup on desktop exit, and source archive extraction without symlink privileges.
 - Retained Windows user-profile and AppData paths in isolated worker environments so packaged first-run setup can determine the home directory.
